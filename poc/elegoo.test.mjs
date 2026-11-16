@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { setImmediate } from 'node:timers/promises';
 import { EventEmitter } from 'node:events';
 import { test } from 'node:test';
-import { elegooClientId, readElegoo } from './elegoo.mjs';
+import { createElegooMonitor, elegooClientId, readElegoo } from './elegoo.mjs';
 import { readElegooCC1 } from './elegoo-cc1.mjs';
 
 const cc2 = { origin: 'mqtt://192.168.1.51:1883', accessCode: 'Test123' };
@@ -97,4 +98,47 @@ test('CC2 utilise un identifiant MQTT stable pour chaque numéro de série', () 
   assert.match(elegooClientId('CC2TEST01'), /^1_PC_[0-9]{9}$/);
   assert.equal(elegooClientId('CC2TEST01'), elegooClientId('CC2TEST01'));
   assert.notEqual(elegooClientId('CC2TEST01'), elegooClientId('CC2TEST02'));
+});
+
+test('CC2 conserve une session, applique les rapports et attend avant de se réinscrire', async () => {
+  const serial = 'CC2TEST01';
+  const machine = { ...cc2, id: 'test-1', serial };
+  const clients = [];
+  let clock = Date.now();
+  const monitor = createElegooMonitor({
+    now: () => clock,
+    fetcher: identify(serial),
+    connectPrinter(_, options) {
+      const client = new EventEmitter();
+      const root = 'elegoo/' + serial;
+      const reply = root + '/' + options.clientId + '/api_response';
+      client.deliver = (topic, data) => client.emit('message', topic, Buffer.from(JSON.stringify(data)));
+      client.subscribe = (_, done) => done(null, [{ qos: 0 }, { qos: 0 }, { qos: 0 }]);
+      client.publish = (topic) => {
+        if (topic.endsWith('/api_register')) client.deliver(root + '/' + options.clientId + '_req/register_response', { error: 'ok' });
+        else client.deliver(reply, { id: 1, result: { machine_status: { status: 1 }, extruder: { temperature: 21 } } });
+      };
+      client.end = () => { client.ended = true; };
+      clients.push(client);
+      queueMicrotask(() => client.emit('connect'));
+      return client;
+    }
+  });
+  try {
+    assert.equal((await monitor.read(machine)).status, 'connecting');
+    await setImmediate();
+    assert.equal((await monitor.read(machine)).nozzle, 21);
+    clients[0].deliver('elegoo/' + serial + '/api_status', { method: 6000, result: { extruder: { temperature: 22 } } });
+    assert.equal((await monitor.read(machine)).nozzle, 22);
+    assert.equal(clients.length, 1);
+    clients[0].emit('close');
+    assert.equal((await monitor.read(machine)).status, 'offline');
+    assert.equal(clients.length, 1);
+    clock += 16000;
+    await monitor.read(machine);
+    await setImmediate();
+    assert.equal(clients.length, 2);
+    assert.equal((await monitor.read(machine)).status, 'ready');
+  } finally { monitor.close(); }
+  assert.ok(clients.every((client) => client.ended));
 });

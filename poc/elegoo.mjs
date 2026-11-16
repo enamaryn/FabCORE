@@ -116,3 +116,124 @@ export async function readElegoo(machine, { fetcher = fetch, connectPrinter = co
   }
   return { ...await pending, serial };
 }
+
+// The printer keeps registrations after a TCP disconnect. Keep one client per
+// configured machine and use the same identifier when reconnecting.
+export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect, now = Date.now } = {}) {
+  const sessions = new Map();
+  function forget(id) {
+    const entry = sessions.get(id);
+    sessions.delete(id);
+    entry?.close?.();
+  }
+  function open(machine, entry) {
+    const clientId = elegooClientId(machine.serial);
+    const requestId = clientId + '_req';
+    const root = 'elegoo/' + machine.serial;
+    const registration = root + '/' + requestId + '/register_response';
+    const response = root + '/' + clientId + '/api_response';
+    const status = root + '/api_status';
+    const request = root + '/' + clientId + '/api_request';
+    const client = connectPrinter(machine.origin, { clientId, username: 'elegoo', password: machine.accessCode,
+      protocolVersion: 4, connectTimeout: 3000, reconnectPeriod: 0, keepalive: 30 });
+    let registered = false;
+    let lastReport = 0;
+    let lastRequest = 0;
+    let lastPing = 0;
+    let latest = {};
+    const watchdog = setTimeout(() => fail('error', 'elegoo-report'), 8000);
+    watchdog.unref();
+    const tick = setInterval(() => {
+      if (!registered) return;
+      const current = now();
+      if (lastRequest > lastReport && current - lastRequest >= 7000) {
+        fail('offline', 'elegoo-connection');
+        return;
+      }
+      if (current - lastPing >= 30000 && current - lastRequest >= 2500) {
+        lastPing = current;
+        client.publish(request, JSON.stringify({ type: 'PING' }));
+        return;
+      }
+      if (current - lastReport >= 15000 && current - Math.max(lastRequest, lastPing) >= 2500) query();
+    }, 1000);
+    tick.unref();
+    entry.close = () => {
+      clearInterval(tick);
+      clearTimeout(watchdog);
+      entry.close = null;
+      client.end(true);
+    };
+    function fail(result, issue) {
+      if (!entry.close) return;
+      entry.current = empty(result, issue);
+      entry.retry = now() + (issue === 'elegoo-register' ? 60000 : 15000);
+      entry.close();
+    }
+    function query() {
+      lastRequest = now();
+      client.publish(request, JSON.stringify({ id: 1, method: 1002, params: {} }));
+    }
+    client.on('error', (error) => {
+      if ([4, 5].includes(Number(error.code))) fail('error', 'elegoo-access');
+      else fail('offline', 'elegoo-connection');
+    });
+    client.on('close', () => fail('offline', 'elegoo-connection'));
+    client.on('connect', () => {
+      client.subscribe([registration, response, status], (error, grants) => {
+        if (!entry.close) return;
+        if (error || grants?.length !== 3 || grants.some((grant) => grant.qos >= 128)) return fail('error', 'elegoo-access');
+        client.publish(root + '/api_register', JSON.stringify({ client_id: clientId, request_id: requestId }));
+      });
+    });
+    client.on('message', (topic, payload, packet) => {
+      if (!entry.close || packet?.retain || payload.length > 65536) return;
+      let message;
+      try { message = JSON.parse(payload); } catch { return; }
+      if (topic === registration && !registered) {
+        if (message?.error !== 'ok') return fail('error', 'elegoo-register');
+        registered = true;
+        lastPing = now();
+        query();
+        return;
+      }
+      if (!registered || !message?.result || typeof message.result !== 'object') return;
+      const push = (topic === response || topic === status) && [6000, 6008].includes(message.method);
+      const reply = topic === response && message.id === 1 && (message.method === undefined || message.method === 1002);
+      if (!push && !reply) return;
+      for (const field of ['machine_status', 'extruder', 'heater_bed', 'print_status']) {
+        if (message.result[field] && typeof message.result[field] === 'object') {
+          latest[field] = { ...latest[field], ...message.result[field] };
+        }
+      }
+      const report = normalize(latest);
+      if (report.issue === 'elegoo-report') return;
+      clearTimeout(watchdog);
+      lastReport = now();
+      entry.current = { ...report, serial: machine.serial };
+    });
+  }
+  return {
+    async read(machine) {
+      let entry = sessions.get(machine.id);
+      if (!entry) {
+        entry = { current: empty('connecting', null), retry: 0 };
+        sessions.set(machine.id, entry);
+      }
+      if (!entry.close && !entry.pending && now() >= entry.retry) {
+        entry.pending = (async () => {
+          const identity = await identifyElegoo(machine, { fetcher });
+          if (sessions.get(machine.id) !== entry) return;
+          if (identity.serial) open(machine, entry);
+          else { entry.current = identity; entry.retry = now() + 15000; }
+        })().catch(() => {
+          entry.current = empty('offline', 'elegoo-connection');
+          entry.retry = now() + 15000;
+        }).finally(() => { entry.pending = null; });
+      }
+      return entry.current;
+    },
+    forget,
+    close() { for (const id of sessions.keys()) forget(id); }
+  };
+}

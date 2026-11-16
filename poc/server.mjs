@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { commandMoonraker, moonrakerOrigin, privateIPv4, readMoonraker } from './moonraker.mjs';
 import { createBambuMonitor } from './bambu.mjs';
-import { identifyElegoo, readElegoo } from './elegoo.mjs';
+import { createElegooMonitor, identifyElegoo, readElegoo } from './elegoo.mjs';
 import { readElegooCC1 } from './elegoo-cc1.mjs';
 import { discoveryNetworks, scanNetwork } from './discovery.mjs';
 import { cameraURL, streamCamera } from './camera.mjs';
@@ -93,7 +93,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2 = readElegoo, identifyCC2 = identifyElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2, identifyCC2 = identifyElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -105,11 +105,12 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
   const sessions = new Map();
   const attempts = new Map();
-  const elegooReaders = new Map([['elegoo', readCC2], ['elegoo-cc1', readCC1]]);
+  const cc2 = createElegooMonitor();
+  const elegooReaders = new Map([['elegoo', readCC2 ?? readElegoo], ['elegoo-cc1', readCC1]]);
   const snapshot = monitor(async (machine) => {
     const reader = elegooReaders.get(machine.kind);
     if (!reader) return readPrinter(machine);
-    const { serial, ...telemetry } = await reader(machine);
+    const { serial, ...telemetry } = await (machine.kind === 'elegoo' && !readCC2 ? cc2.read(machine) : reader(machine));
     return telemetry;
   });
   const pendingCommands = new Set();
@@ -412,12 +413,17 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         res.once('close', () => abort.abort());
         try {
           if (testing && kind === 'bambu') return answer(res, 200, await bambu.probe(machine, abort.signal));
-          const result = elegooReader ? await elegooReader(machine, { signal: abort.signal }) : await readPrinter(machine);
+          const sameCC2 = kind === 'elegoo' && existing && existing.origin === machine.origin && existing.accessCode === machine.accessCode && !readCC2;
+          let result;
+          if (sameCC2) {
+            result = await identifyCC2(machine, { signal: abort.signal });
+            if (testing && result.serial) result = await cc2.read(machine);
+          } else result = elegooReader ? await elegooReader(machine, { signal: abort.signal }) : await readPrinter(machine);
           if (abort.signal.aborted) return;
           const ok = elegooReader
             ? Boolean(result.serial && (!result.issue || result.issue === 'elegoo-print'))
             : !result.issue || result.issue === 'print';
-          if (testing) return answer(res, 200, { ok, issue: ok ? null : result.issue });
+          if (testing) return answer(res, 200, { ok, issue: ok ? null : result.issue ?? 'elegoo-report' });
           if (!ok) return error(res, 422, result.issue ?? 'elegoo-info');
           machine.serial = result.serial;
           if (existing && !store.state.machines.includes(existing)) return error(res, 409, 'machine-changed');
@@ -436,6 +442,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       if (existing) {
         snapshot.forget(machine.id);
         bambu.forget(machine.id);
+        if (existing.origin !== machine.origin || existing.accessCode !== machine.accessCode) cc2.forget(machine.id);
         for (const [controller, { id }] of cameraStreams) {
           if (id === machine.id) controller.abort();
         }
@@ -486,7 +493,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       else res.end();
     });
   });
-  server.on('close', () => bambu.close());
+  server.on('close', () => { bambu.close(); cc2.close(); });
   return { server, token };
 }
 
