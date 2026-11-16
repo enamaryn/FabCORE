@@ -1,0 +1,10 @@
+{
+  "name": "fabcore",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node poc/server.mjs",
+    "test": "node --test"
+  }
+}
