@@ -119,7 +119,7 @@ export async function readElegoo(machine, { fetcher = fetch, connectPrinter = co
 
 // The printer keeps registrations after a TCP disconnect. Keep one client per
 // configured machine and use the same identifier when reconnecting.
-export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect, now = Date.now } = {}) {
+export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect, now = Date.now, diagnostics } = {}) {
   const sessions = new Map();
   function forget(id) {
     const entry = sessions.get(id);
@@ -134,6 +134,7 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
     const response = root + '/' + clientId + '/api_response';
     const status = root + '/api_status';
     const request = root + '/' + clientId + '/api_request';
+    diagnostics?.record('mqtt', 'connecting-mqtt', machine.id);
     const client = connectPrinter(machine.origin, { clientId, username: 'elegoo', password: machine.accessCode,
       protocolVersion: 4, connectTimeout: 3000, reconnectPeriod: 0, keepalive: 30 });
     let registered = false;
@@ -167,6 +168,7 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
     function fail(result, issue) {
       if (!entry.close) return;
       entry.current = empty(result, issue);
+      diagnostics?.record('mqtt', issue, machine.id);
       entry.retry = now() + (issue === 'elegoo-register' ? 60000 : 15000);
       entry.close();
     }
@@ -193,6 +195,7 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
       if (topic === registration && !registered) {
         if (message?.error !== 'ok') return fail('error', 'elegoo-register');
         registered = true;
+        diagnostics?.record('mqtt', 'registered', machine.id);
         lastPing = now();
         query();
         return;
@@ -210,6 +213,7 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
       if (report.issue === 'elegoo-report') return;
       clearTimeout(watchdog);
       lastReport = now();
+      diagnostics?.report(machine.id);
       entry.current = { ...report, serial: machine.serial };
     });
   }

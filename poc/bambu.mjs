@@ -12,10 +12,10 @@ const request = JSON.stringify({ pushing: { sequence_id: '0', command: 'pushall'
 const empty = (status, issue) => ({ status, issue, nozzle: null, bed: null, progress: 0, file: '' });
 const temperature = (value) => Number.isFinite(value) ? Math.round(value * 10) / 10 : null;
 
-export function createBambuMonitor(connectPrinter = connect) {
+export function createBambuMonitor(connectPrinter = connect, diagnostics) {
   const printers = new Map();
 
-  function open(machine) {
+  function open(machine, tracked = false) {
     const reportTopic = `device/${machine.serial}/report`;
     const requestTopic = `device/${machine.serial}/request`;
     const printer = { current: empty('connecting', null), lastReport: 0 };
@@ -46,6 +46,7 @@ export function createBambuMonitor(connectPrinter = connect) {
     }
 
     client.on('connect', () => {
+      if (tracked) diagnostics?.record('mqtt', 'connected', machine.id);
       report = {};
       printer.lastReport = 0;
       printer.current = empty('connecting', null);
@@ -69,6 +70,7 @@ export function createBambuMonitor(connectPrinter = connect) {
       if (!status) return;
       clearTimeout(timeout);
       printer.lastReport = Date.now();
+      if (tracked) diagnostics?.report(machine.id);
       printer.current = {
         status,
         issue: status === 'error' ? 'bambu-print' : null,
@@ -84,8 +86,10 @@ export function createBambuMonitor(connectPrinter = connect) {
       if (code === '4' || code === '5') printer.current = empty('error', 'bambu-access');
       else if (/CERT|ISSUER|SELF_SIGNED|SIGNATURE|VERIFY|TLS/.test(code)) printer.current = empty('error', 'bambu-tls');
       else printer.current = empty('offline', 'bambu-connection');
+      if (tracked) diagnostics?.record('mqtt', printer.current.issue, machine.id);
     });
     client.on('close', () => {
+      if (tracked) diagnostics?.record('mqtt', 'retry', machine.id);
       clearTimeout(timeout);
       printer.lastReport = 0;
       if (printer.current.status !== 'error') printer.current = empty('offline', 'bambu-connection');
@@ -99,7 +103,7 @@ export function createBambuMonitor(connectPrinter = connect) {
 
   return {
     read(machine) {
-      if (!printers.has(machine.id)) printers.set(machine.id, open(machine));
+      if (!printers.has(machine.id)) printers.set(machine.id, open(machine, true));
       const { current, lastReport } = printers.get(machine.id);
       return { ...current, checkedAt: lastReport ? new Date(lastReport).toISOString() : null };
     },

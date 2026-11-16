@@ -73,6 +73,82 @@ async function api(path, data, cancel) {
   return payload;
 }
 
+function diagnosticMessage(code) {
+  return liveIssue(code) || ({
+    started: t('FabCore a démarré.', 'FabCore started.'),
+    'request-failed': t('Échec interne d’une requête.', 'An internal request failed.'),
+    'connecting-mqtt': t('Tentative de connexion MQTT.', 'Attempting an MQTT connection.'),
+    connected: t('Connexion au serveur MQTT établie.', 'Connected to the MQTT broker.'),
+    registered: t('Session MQTT acceptée par l’imprimante.', 'MQTT session accepted by the printer.'),
+    retry: t('Liaison MQTT fermée. Reconnexion prévue.', 'MQTT connection closed. A retry is scheduled.'),
+    opening: t('Ouverture du flux.', 'Opening the stream.'),
+    streaming: t('Première image reçue.', 'First image received.'),
+    'no-stream': t('Aucune image reçue au démarrage du flux.', 'No image received when starting the stream.'),
+    identity: t('L’identité de la machine n’a pas été confirmée.', 'The machine identity could not be confirmed.'),
+    'invalid-stream': t('La caméra a renvoyé une réponse incompatible.', 'The camera returned an incompatible response.'),
+    interrupted: t('Le flux a été interrompu.', 'The stream was interrupted.'),
+    closed: t('Flux fermé.', 'Stream closed.')
+  })[code] || t(...(statusLabels[code] ?? [code, code]));
+}
+
+function diagnosticsPage() {
+  const data = live.diagnostics;
+  const scope = live.diagnosticScope ?? '';
+  const date = (at) => at ? new Date(at).toLocaleString(state.lang) : '—';
+  const labels = {
+    server: 'FabCore', mqtt: 'MQTT', camera: t('Caméra', 'Camera'), status: t('État', 'Status')
+  };
+  const header = title(t('Diagnostics', 'Diagnostics'), '', btn('diagnostics', t('Actualiser', 'Refresh'), 'activity'));
+  if (!data) return header + '<p role="status">' +
+    (live.diagnosticsError ? t('Journal indisponible.', 'The log is unavailable.') : t('Chargement…', 'Loading…')) + '</p>';
+  const names = new Map(data.fleet.map(({ id, name }) => [id, name]));
+  const selected = data.machines[scope];
+  const events = data.events.filter(({ id }) => !scope || (scope === 'server' ? id === null : id === scope));
+  return header + `<section class="panel stack">
+    <small>${t('Jusqu’à 300 événements depuis le dernier démarrage.', 'Up to 300 events since the last startup.')}</small>
+    <label>${t('Afficher les événements de', 'Show events for')}<select id="diagnostic-scope">
+      <option value="">${t('Tout le parc et FabCore', 'All machines and FabCore')}</option>
+      <option value="server" ${scope === 'server' ? 'selected' : ''}>FabCore</option>
+      ${data.fleet.map(({ id, name }) => `<option value="${esc(id)}" ${id === scope ? 'selected' : ''}>${esc(name)}</option>`).join('')}
+    </select></label>
+    ${names.has(scope) ? `<div class="row wrap">
+      <small>${t('Dernier rapport MQTT', 'Last MQTT report')} · ${esc(date(selected?.reportAt))}</small>
+      <small>${t('Dernière image reçue', 'Last image received')} · ${esc(date(selected?.frameAt))}</small>
+    </div>` : ''}
+    ${events.map(({ at, area, code, id }) => `<div class="activity">
+      <small>${esc(date(at))} · ${esc(names.get(id) ?? 'FabCore')} · ${esc(labels[area])}</small>
+      <p>${esc(diagnosticMessage(code))}</p>
+    </div>`).join('') || `<p>${t('Aucun événement.', 'No events.')}</p>`}
+  </section>`;
+}
+
+async function openDiagnostics() {
+  if (state.role !== 'admin' || live.diagnosticsPending) return;
+  live.page = 'diagnostics';
+  live.diagnosticsPending = true;
+  live.diagnosticsError = false;
+  renderLive();
+  try {
+    live.diagnostics = await api('diagnostics');
+    if (live.diagnosticScope !== 'server' && !live.diagnostics.fleet.some(({ id }) => id === live.diagnosticScope)) {
+      live.diagnosticScope = '';
+    }
+  } catch {
+    live.diagnostics = null;
+    live.diagnosticsError = true;
+  } finally {
+    live.diagnosticsPending = false;
+    if (live.page === 'diagnostics') renderLive();
+  }
+}
+
+app.addEventListener('change', (event) => {
+  if (event.target.id !== 'diagnostic-scope') return;
+  live.diagnosticScope = event.target.value;
+  renderLive();
+  app.querySelector('#diagnostic-scope')?.focus();
+});
+
 function liveNavigation() {
   return [
     ['home', t('Vue d’ensemble', 'Overview'), 'grid'],
@@ -244,13 +320,14 @@ function renderLive() {
   document.documentElement.lang = state.lang;
   document.documentElement.dataset.theme = state.theme === 'system' ? (media.matches ? 'light' : 'dark') : state.theme;
   const signedIn = live.phase === 'workshop';
-  const screens = { notifications: notificationPage, home: dashboard, machines: liveFleet, detail: liveDetail, history: () =>
+  const screens = { diagnostics: diagnosticsPage, notifications: notificationPage, home: dashboard, machines: liveFleet, detail: liveDetail, history: () =>
     title(t('Activité récente','Recent activity')) + `<section class="panel">${listEvents()}</section>` };
   app.innerHTML = `<a class="skip" href="#content">${t('Aller au contenu','Skip to content')}</a><div class="${signedIn?'layout':''}">
     ${signedIn?`<aside class="sidebar">${brand()}<nav aria-label="${t('Navigation principale','Main navigation')}">${liveNavigation()}</nav><div class="sidefoot"><small class="signal">POC${state.role === 'viewer' ? ' · ' + t('Observateur','Observer') : ''}</small></div></aside>`:''}
     <div><header class="top"><div class="crumb">${signedIn?`<span>${esc(live.username)}</span>`:brand()}</div><div class="row wrap">
       ${btn('lang',state.lang==='fr'?'EN':'FR','','ghost',`aria-label="${state.lang==='fr'?'Switch to English':'Passer en français'}"`)}
       ${btn('theme','','sun','ghost',`aria-label="${t('Basculer le thème','Toggle theme')}"`)}
+      ${signedIn && state.role === 'admin' ? btn('diagnostics',t('Diagnostics','Diagnostics'),'activity') : ''}
       ${signedIn && state.role === 'admin' ? btn('notifications',t('Notifications','Notifications')) : ''}
       ${signedIn && state.role === 'admin' ? btn('observer',t('Ajouter un observateur','Add observer')) : ''}
       ${signedIn?btn('logout',t('Déconnexion','Sign out'),'','ghost'):''}
@@ -296,7 +373,7 @@ async function refresh() {
     if (cameraImage?.dataset.streamOpened && !current?.cameraOpen) showCamera(false, true);
     const checkedAt = current?.checkedAt;
     if (timestamp && checkedAt) timestamp.textContent = new Date(checkedAt).toLocaleTimeString(state.lang);
-    if ((changed || hadRefreshError) && !dialog.open && live.page !== 'notifications') {
+    if ((changed || hadRefreshError) && !dialog.open && !['notifications', 'diagnostics'].includes(live.page)) {
       const action = document.activeElement?.dataset.action;
       const telemetry = app.querySelector('[data-live-telemetry]');
       if (!hadRefreshError && telemetry && current && (cameraImage || app.querySelector('[data-camera-status]:not([hidden])'))) {
@@ -472,6 +549,7 @@ document.addEventListener('click', async (event) => {
     renderLive();
     app.querySelector('h1')?.focus();
   }
+  if (action === 'diagnostics') openDiagnostics();
   if (action === 'notifications') openNotifications();
   if (action === 'notify-test' && state.role === 'admin') {
     target.disabled = true;

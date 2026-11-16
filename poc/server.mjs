@@ -10,6 +10,7 @@ import { createBambuMonitor } from './bambu.mjs';
 import { createElegooMonitor, identifyElegoo, readElegoo } from './elegoo.mjs';
 import { readElegooCC1 } from './elegoo-cc1.mjs';
 import { discoveryNetworks, scanNetwork } from './discovery.mjs';
+import { createDiagnostics } from './diagnostics.mjs';
 import { streamBambuCamera } from './bambu-camera.mjs';
 import { cameraURL, streamCamera } from './camera.mjs';
 import { createOidc } from './oidc.mjs';
@@ -96,7 +97,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2, identifyCC2 = identifyElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2, identifyCC2 = identifyElegoo, readCC1 = readElegooCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -108,7 +109,10 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
   const sessions = new Map();
   const attempts = new Map();
-  const cc2 = createElegooMonitor();
+  const diagnostics = createDiagnostics();
+  diagnostics.record('server', 'started');
+  bambu ??= createBambuMonitor(undefined, diagnostics);
+  const cc2 = createElegooMonitor({ diagnostics });
   const elegooReaders = new Map([['elegoo', readCC2 ?? readElegoo], ['elegoo-cc1', readCC1]]);
   const snapshot = monitor(async (machine) => {
     if (machine.kind === 'xtool-m2') {
@@ -221,6 +225,14 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         ...(secure && oidc && store.state.admin ? { oidcEnabled: true } : {})
       });
     }
+    if (req.method === 'GET' && path === '/api/diagnostics') {
+      if (!viewer) return error(res, 401, 'sign-in');
+      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+      return answer(res, 200, {
+        ...diagnostics.view(),
+        fleet: store.state.machines.map(({ id, name }) => ({ id, name }))
+      });
+    }
     const camera = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera$/);
     if (req.method === 'GET' && camera) {
       if (!activeSession) return error(res, 401, 'sign-in');
@@ -241,11 +253,22 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       const expires = setTimeout(stop, Math.max(0, viewer.expires - Date.now()));
       cameraStreams.set(controller, { owner: activeSession, id: machine.id, signal: controller.signal });
       res.once('close', stop);
+      diagnostics.record('camera', 'opening', machine.id);
+      let firstFrame = true;
+      const onFrame = () => {
+        if (firstFrame) diagnostics.record('camera', 'streaming', machine.id);
+        firstFrame = false;
+        diagnostics.frame(machine.id);
+      };
+      const unavailable = (code) => {
+        diagnostics.record('camera', code, machine.id);
+        return error(res, 502, 'camera-unavailable');
+      };
       try {
         if (isBambu) {
-          if (!(await streamBambuCamera(machine, res, controller.signal))) {
+          if (!(await streamBambuCamera(machine, res, controller.signal, onFrame))) {
             if (controller.signal.aborted) return res.destroy();
-            return error(res, 502, 'camera-unavailable');
+            return unavailable('no-stream');
           }
           return;
         }
@@ -253,16 +276,18 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         const identity = await identify(machine, { signal: controller.signal });
         if (controller.signal.aborted) return res.destroy();
         if (identity.serial !== machine.serial || (identity.issue && identity.issue !== 'elegoo-print')) {
-          return error(res, 502, 'camera-unavailable');
+          return unavailable('identity');
         }
-        if (!(await streamCamera(url, res, controller.signal, openCamera))) return error(res, 502, 'camera-unavailable');
+        if (!(await streamCamera(url, res, controller.signal, openCamera, onFrame))) return unavailable('invalid-stream');
       } catch {
+        if (!controller.signal.aborted) diagnostics.record('camera', 'interrupted', machine.id);
         if (controller.signal.aborted || res.headersSent) res.destroy();
         else error(res, 502, 'camera-unavailable');
       } finally {
         clearTimeout(expires);
         res.off('close', stop);
         cameraStreams.delete(controller);
+        if (!firstFrame) diagnostics.record('camera', 'closed', machine.id);
       }
       return;
     }
@@ -328,11 +353,16 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
     }
     if (req.method === 'GET' && path === '/api/machines') {
       if (!activeSession) return error(res, 401, 'sign-in');
-      return answer(res, 200, { machines: store.state.machines.map((machine) => ({
-        id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial, model: machineModels[machine.kind] ?? machineModels.klipper,
-        cameraOpen: [...cameraStreams.values()].some(({ owner, id }) => owner === activeSession && id === machine.id),
-        ...(machine.kind === 'bambu' ? bambu.read(machine) : snapshot(machine))
-      })) });
+      return answer(res, 200, { machines: store.state.machines.map((machine) => {
+        const telemetry = machine.kind === 'bambu' ? bambu.read(machine) : snapshot(machine);
+        diagnostics.status(machine.id, telemetry);
+        return {
+          id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial,
+          model: machineModels[machine.kind] ?? machineModels.klipper,
+          cameraOpen: [...cameraStreams.values()].some(({ owner, id }) => owner === activeSession && id === machine.id),
+          ...telemetry
+        };
+      }) });
     }
     const command = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/command$/);
     if (req.method === 'POST' && command) {
@@ -508,6 +538,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
   }
   const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => {
     route(req, res).catch(() => {
+      diagnostics.record('server', 'request-failed');
       if (!res.headersSent) error(res, 500, 'internal');
       else res.end();
     });
