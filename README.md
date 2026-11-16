@@ -1,31 +1,43 @@
-# FabCore
+<h1 align="center">FabCore</h1>
 
-FabCore est un tableau de bord auto-hébergeable pour gérer un parc d’imprimantes 3D multimarque sur le réseau local.
+<p align="center"><strong>Suivez vos imprimantes 3D depuis un seul tableau de bord.</strong></p>
 
-**Machines prises en charge** · Klipper/Moonraker, Bambu Lab P2S, Elegoo Centauri Carbon et Centauri Carbon 2, xTool M2 (supervision).
+<p align="center">
+Gardez un œil sur vos fabrications, ouvrez les caméras en direct et voyez quelles bobines sont chargées. FabCore s’installe sur votre serveur et se connecte aux machines de votre atelier.
+</p>
 
-## Fonctionnalités
+<p align="center">
+<a href="#installation"><strong>Installer FabCore</strong></a> ·
+<a href="#machines-compatibles">Voir les machines compatibles</a> ·
+<a href="poc/README.md">Lire le guide de configuration</a>
+</p>
 
-**Disponibles**
+![Tableau de bord FabCore avec le parc et l’activité récente](docs/screenshots/vue-ensemble.webp)
 
-- Découvrir les imprimantes sur le réseau local, tester leur connexion et gérer leurs fiches.
-- Suivre l’état, les températures et la progression des impressions.
-- Ouvrir les caméras en direct sur les Bambu Lab P2S et Elegoo Centauri Carbon et Centauri Carbon 2 compatibles.
-- Administrer le parc avec un compte local et créer des comptes Observateur en lecture seule.
-- Se connecter via [Pocket ID avec OIDC](poc/README.md#connexion-oidc-avec-pocket-id), avec un rôle attribué par groupe.
-- Configurer [ntfy interne ou externe et SMTP](poc/README.md#notifications-ntfy-et-smtp), et envoyer une notification de test.
-- Mettre en pause et reprendre une impression Klipper via Moonraker avec un compte administrateur.
+## Ce que vous pouvez faire
 
-**Prévues**
+- **Suivre vos fabrications.** Retrouvez l’état des machines, les températures et l’avancement sur une même page. Mettez en pause ou reprenez une impression Klipper depuis la fiche de la machine.
+- **Voir la pièce en cours.** Ouvrez la caméra d’une Bambu Lab P2S ou d’une Elegoo Centauri Carbon compatible depuis sa fiche.
+- **Repérer la bonne bobine.** Consultez les emplacements AMS et CANVAS, leur occupation, la matière, la couleur et l’emplacement actif selon les données fournies par l’imprimante.
+- **Gérer les accès.** Créez des comptes Observateur en lecture seule ou connectez votre fournisseur OIDC, comme [Pocket ID](poc/README.md#connexion-oidc-avec-pocket-id).
+- **Diagnostiquer une coupure.** Filtrez le journal par machine et vérifiez l’heure du dernier rapport MQTT et de la dernière image reçue.
+- **Préparer les notifications.** Configurez [ntfy interne ou externe et SMTP](poc/README.md#notifications-ntfy-et-smtp), puis envoyez une notification de test.
 
-- **Accès et utilisateurs** · Gestion avancée des comptes et permissions.
-- **Notifications** · Alertes de fin d’impression, d’erreur ou de perte de connexion par e-mail via SMTP, via ntfy ou via Web Push.
-- **Fichiers d’impression** · Bibliothèque de fichiers, import et transfert vers les imprimantes compatibles.
-- **Suivi et pilotage** · Historique des impressions, ouverture des caméras d’autres modèles et commandes de pilotage sur d’autres modèles, selon les capacités de l’imprimante.
+## Machines compatibles
+
+| Machine | État | Caméra | Filaments | Commandes |
+| --- | --- | --- | --- | --- |
+| Klipper avec Moonraker | Oui | — | — | Pause et reprise |
+| Bambu Lab P2S | Oui | Oui | AMS | — |
+| Elegoo Centauri Carbon (CC1) | Oui | Oui | — | — |
+| Elegoo Centauri Carbon 2 (CC2) | Oui | Oui | CANVAS | — |
+| xTool M2 | Supervision expérimentale | — | — | — |
+
+La connexion et les fonctions locales dépendent du modèle, du micrologiciel et des réglages réseau de la machine.
 
 ## Installation
 
-Sur Debian ou Ubuntu, y compris dans un LXC Proxmox, l’installateur prépare Node.js 24, npm et FFmpeg si nécessaire, installe les dépendances et démarre FabCore. Pour démarrer sur un serveur personnel, prévoir **1 vCPU, 512 Mo de RAM et 1 Go d’espace disque libre** en plus du système. Ces ressources sont indicatives pour un petit parc. Chaque flux caméra ouvert utilise de la bande passante. Le serveur doit pouvoir joindre les imprimantes sur le réseau local.
+**Debian ou Ubuntu**, sur un serveur personnel ou dans un **LXC Proxmox**. Pour démarrer avec un petit parc, prévoir **1 vCPU, 512 Mo de RAM et 1 Go d’espace libre** en plus du système. Le serveur doit pouvoir joindre les machines sur le réseau local. Un usage régulier des caméras peut demander davantage de ressources.
 
 ```bash
 sudo apt-get update && sudo apt-get install -y git ca-certificates
@@ -34,14 +46,12 @@ cd FabCORE
 bash scripts/install.sh
 ```
 
-Dans une console LXC déjà ouverte en root, retirer `sudo` de la première ligne. Garder le terminal ouvert et ouvrir <http://127.0.0.1:3000> pour créer le compte administrateur avec le jeton affiché dans le terminal. Pour un serveur distant ou un LXC, utiliser un [tunnel SSH ou un reverse proxy HTTPS](poc/README.md#4-ouvrir-linterface). Les données sont conservées dans `.fabcore/` par défaut.
+Dans une console LXC ouverte en root, retirer `sudo` de la première ligne. Le script installe les dépendances manquantes, dont Node.js 24 et FFmpeg, puis lance FabCore dans le terminal. Ouvrez <http://127.0.0.1:3000> et utilisez le jeton affiché pour créer votre compte administrateur. Pour un serveur distant, suivre le [guide d’accès par tunnel SSH ou reverse proxy HTTPS](poc/README.md#4-ouvrir-linterface).
 
-## Aperçu
+## Ajoutez votre première machine
 
-**Vue d’ensemble** · L’état du parc et les impressions en cours.
+Lancez la **découverte réseau** depuis **Ajouter une machine**. FabCore préremplit les informations trouvées. Renseignez le code d’accès si la machine en demande un, puis testez la connexion. Vous pouvez aussi saisir son adresse IP manuellement.
 
-![Vue d’ensemble de FabCore](docs/screenshots/vue-ensemble.webp)
+![Ajout d’une Bambu Lab P2S après découverte réseau avec des données d’exemple](docs/screenshots/ajout-machine.webp)
 
-**Ajouter une machine** · La découverte réseau peut préremplir le modèle, l’adresse et le numéro de série. Saisir le code LAN si nécessaire, puis tester la connexion.
-
-![Formulaire d’ajout d’une Bambu Lab P2S après découverte réseau, avec des valeurs d’exemple](docs/screenshots/ajout-machine.webp)
+La bibliothèque de fichiers, le transfert vers les imprimantes compatibles et les alertes automatiques de fabrication sont prévus. [Consulter la licence](LICENSE).
