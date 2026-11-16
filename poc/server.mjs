@@ -11,6 +11,7 @@ import { readElegoo } from './elegoo.mjs';
 import { readElegooCC1 } from './elegoo-cc1.mjs';
 import { discoveryNetworks, scanNetwork } from './discovery.mjs';
 import { cameraURL, streamCamera } from './camera.mjs';
+import { createOidc } from './oidc.mjs';
 import { openStore } from './store.mjs';
 
 const machineModels = {
@@ -91,7 +92,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2 = readElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera } = {}) {
+export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2 = readElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -130,7 +131,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
     sessions.delete(key);
     return null;
   }
-  function signIn(res, username, role) {
+  function newSession(username, role) {
     const id = randomBytes(32).toString('base64url');
     for (const [key, entry] of sessions) if (entry.expires <= Date.now()) sessions.delete(key);
     if (sessions.size >= 32) {
@@ -139,7 +140,10 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       stopCameraStreams(oldest);
     }
     sessions.set(digest(id).toString('hex'), { expires: Date.now() + sessionAge, username, role });
-    answer(res, 200, { authenticated: true, username, role }, { 'Set-Cookie': cookie(id, sessionAge / 1000) });
+    return cookie(id, sessionAge / 1000);
+  }
+  function signIn(res, username, role) {
+    answer(res, 200, { authenticated: true, username, role }, { 'Set-Cookie': newSession(username, role) });
   }
   function withinLimit(route) {
     const now = Date.now();
@@ -168,17 +172,43 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
     res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     if (req.headers.host !== allowedHost) return error(res, 421, 'host');
     const path = req.url;
-    if (req.method === 'GET' && assets.has(path)) {
-      const [type, body] = assets.get(path);
+    const asset = path === '/?auth=oidc-failed' ? '/' : path;
+    if (req.method === 'GET' && assets.has(asset)) {
+      const [type, body] = assets.get(asset);
       res.writeHead(200, { 'Content-Type': type });
       return res.end(body);
     }
     const activeSession = session(req);
     const viewer = sessions.get(activeSession);
+    if (req.method === 'GET' && (path === '/api/oidc/start' || path.split('?')[0] === '/api/oidc/callback')) {
+      if (!secure || !oidc || !store.state.admin) return error(res, 404, 'missing');
+      const redirect = (destination, cookies) => {
+        res.writeHead(303, { Location: destination, 'Set-Cookie': cookies });
+        res.end();
+      };
+      try {
+        if (path === '/api/oidc/start') {
+          if (!withinLimit(path)) return error(res, 429, 'rate');
+          const flow = await oidc.begin();
+          return redirect(flow.url, flow.cookie);
+        }
+        const query = new URLSearchParams(path.split('?').slice(1).join('?'));
+        const account = await oidc.complete(query, req.headers.cookie);
+        if (account) {
+          if (activeSession) {
+            sessions.delete(activeSession);
+            stopCameraStreams(activeSession);
+          }
+          return redirect('/', [oidc.clearCookie, newSession(account.username, account.role)]);
+        }
+      } catch { /* The local login page remains available when OIDC fails. */ }
+      return redirect('/?auth=oidc-failed', oidc.clearCookie);
+    }
     if (req.method === 'GET' && path === '/api/session') {
       return answer(res, 200, {
         installed: Boolean(store.state.admin), authenticated: Boolean(activeSession),
-        username: viewer?.username ?? null, ...(viewer ? { role: viewer.role } : {})
+        username: viewer?.username ?? null, ...(viewer ? { role: viewer.role } : {}),
+        ...(secure && oidc && store.state.admin ? { oidcEnabled: true } : {})
       });
     }
     const camera = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera$/);
@@ -431,7 +461,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   if (origin.protocol !== 'https:' && (
     !['127.0.0.1', '::1'].includes(host) || !['127.0.0.1', '[::1]', 'localhost'].includes(origin.hostname)
   )) throw new Error('Une écoute réseau requiert FABCORE_ORIGIN en HTTPS et un reverse proxy.');
-  const { server, token } = createFabCore({ directory: resolve(process.env.FABCORE_DATA || '.fabcore'), origin });
+  const { server, token } = createFabCore({ directory: resolve(process.env.FABCORE_DATA || '.fabcore'), origin, oidc: createOidc(origin) });
   server.listen(port, host, () => {
     console.log(`FabCore · ${origin.origin}`);
     if (token) console.log(`Jeton d’activation (15 min, usage unique) : ${token}`);

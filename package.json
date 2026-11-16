@@ -10,6 +10,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "mqtt": "^5.16.1"
+    "mqtt": "^5.16.1",
+    "openid-client": "^6.9.0"
   }
 }
