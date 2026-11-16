@@ -9,6 +9,7 @@ const problem = (code) => ({
   credentials: t('Vérifiez vos identifiants. À l’installation, le mot de passe doit contenir au moins 12 caractères.', 'Check your credentials. Setup requires a password of at least 12 characters.'),
   rate: t('Trop de tentatives. Réessayez dans une minute.', 'Too many attempts. Try again in a minute.'),
   installed: t('FabCore est déjà activé. Connectez-vous.', 'FabCore is already activated. Sign in.'),
+  'machine-changed': t('La fiche a changé pendant le test. Rouvrez-la et réessayez.', 'The record changed during the test. Reopen it and try again.'),
   'probe-busy': t('Un test est déjà en cours. Réessayez dans quelques secondes.', 'A test is already running. Try again in a few seconds.'),
   'machine-invalid': t('Vérifiez le nom, l’adresse IPv4 privée et les identifiants de la machine.', 'Check the machine name, private IPv4 address and credentials.'),
   'machine-duplicate': t('Cette machine est déjà enregistrée.', 'This machine is already registered.'),
@@ -18,6 +19,16 @@ const problem = (code) => ({
 
 function liveIssue(issue) {
   return ({
+    'cc1-discovery': t('CC1 introuvable par découverte locale. Vérifiez l’IP ou renseignez le MainboardID.', 'CC1 discovery failed. Check the IP or enter the MainboardID.'),
+    'cc1-connection': t('FabCore ne peut pas joindre la CC1 sur le port 3030.', 'FabCore cannot reach the CC1 on port 3030.'),
+    'cc1-report': t('Aucun état SDCP ne correspond à cette CC1. Vérifiez le MainboardID.', 'No SDCP status matches this CC1. Check the MainboardID.'),
+    'elegoo-access': t('Accès CC2 refusé. Vérifiez le code LAN.', 'CC2 access denied. Check the LAN access code.'),
+    'elegoo-info': t('Identité CC2 indisponible. Vérifiez l’adresse et le mode LAN uniquement.', 'CC2 identity unavailable. Check the address and LAN Only mode.'),
+    'elegoo-identity': t('Cette adresse appartient à une autre imprimante.', 'This address belongs to another printer.'),
+    'elegoo-register': t('La CC2 a refusé la session MQTT.', 'The CC2 rejected the MQTT session.'),
+    'elegoo-report': t('Aucun état CC2 exploitable n’a été reçu.', 'No usable CC2 status was received.'),
+    'elegoo-print': t('La CC2 signale une erreur de fabrication.', 'The CC2 reports a print error.'),
+    'elegoo-connection': t('FabCore ne peut pas joindre la CC2. Vérifiez les ports locaux 80 et 1883 et le mode LAN uniquement.', 'FabCore cannot reach the CC2. Check local ports 80 and 1883 and LAN Only mode.'),
     'bambu-access': t('Accès MQTT refusé. Vérifiez le code d’accès LAN.', 'MQTT access denied. Check the LAN access code.'),
     'bambu-tls': t('Le certificat de la P2S ne correspond pas au numéro de série ou à l’autorité attendue.', 'The P2S certificate does not match the serial number or expected authority.'),
     'bambu-report': t('La P2S est connectée, mais aucun état exploitable n’a été reçu. Vérifiez le numéro de série et les réglages LAN.', 'The P2S connected but sent no usable status. Check its serial number and LAN settings.'),
@@ -34,7 +45,7 @@ function liveIssue(issue) {
 
 async function api(path, data) {
   const response = await fetch('/api/' + path, data === undefined ? { signal: AbortSignal.timeout(5000) } : {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(path === 'machines/test' ? 18000 : 5000)
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(path.startsWith('machines') ? 18000 : 5000)
   });
   const payload = await response.json();
   if (!response.ok) throw Object.assign(new Error(payload.error), { code: payload.error });
@@ -191,22 +202,25 @@ async function loadSession() {
 
 function openMachineForm(kind = 'klipper', name = '', existing = null) {
   const isBambu = kind === 'bambu';
+  const isElegoo = kind === 'elegoo';
+  const isCC1 = kind === 'elegoo-cc1';
   dialog.innerHTML = `<form id="add-machine" class="stack" autocomplete="off">
     <h2>${existing ? t('Modifier une machine','Edit a machine') : t('Ajouter une machine','Add a machine')}</h2>
     ${existing ? `<input type="hidden" name="id" value="${esc(existing.id)}"><input type="hidden" name="kind" value="${kind}">` : ''}
     <div class="fields">
-      ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind"><option value="klipper" ${isBambu ? '' : 'selected'}>Klipper · Moonraker</option><option value="bambu" ${isBambu ? 'selected' : ''}>Bambu Lab · P2S</option></select></label>`}
+      ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind"><option value="klipper" ${kind === 'klipper' ? 'selected' : ''}>Klipper · Moonraker</option><option value="bambu" ${isBambu ? 'selected' : ''}>Bambu Lab · P2S</option><option value="elegoo" ${isElegoo ? 'selected' : ''}>Elegoo · Centauri Carbon 2</option><option value="elegoo-cc1" ${isCC1 ? 'selected' : ''}>Elegoo · Centauri Carbon</option></select></label>`}
       <label>${t('Nom de la machine','Machine name')}<input name="name" required maxlength="80" value="${esc(name)}"></label>
-      ${isBambu ? `
-      <label>${t('Adresse IPv4 de la P2S','P2S IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : ''}"></label>
-      <label>${t('Numéro de série','Serial number')}<input name="serial" required maxlength="32" value="${esc(existing?.serial ?? '')}"></label>
-      <label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="8" maxlength="8" autocomplete="new-password"></label>
+      ${isBambu || isElegoo || isCC1 ? `
+      <label>${t('Adresse IPv4 locale','Local IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : ''}"></label>
+      ${isBambu ? `<label>${t('Numéro de série','Serial number')}<input name="serial" required maxlength="32" value="${esc(existing?.serial ?? '')}"></label>` : ''}
+      ${isCC1 && !existing ? `<label>${t('MainboardID (facultatif)', 'MainboardID (optional)')}<input name="serial" maxlength="64"></label>` : ''}
+      ${isCC1 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
       ` : `
       <label>${t('Adresse Moonraker','Moonraker address')}<input name="origin" type="url" placeholder="http://192.168.1.50:7125" required maxlength="200" value="${esc(existing?.origin ?? '')}"></label>
       <label>${t('Clé API Moonraker (facultative)','Moonraker API key (optional)')}<input name="apiKey" type="password" maxlength="256" autocomplete="new-password"></label>
       `}
     </div>
-    ${existing ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
+    ${existing && !isCC1 ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
     <p class="error" role="alert"></p>
     <p role="status" hidden></p>
     <div class="row wrap">${btn('close',t('Annuler','Cancel'))}<button type="submit" value="test">${t('Tester la connexion','Test connection')}</button><button class="primary" type="submit" value="save">${existing ? t('Enregistrer','Save') : t('Ajouter','Add')}</button></div>
@@ -330,7 +344,7 @@ document.addEventListener('submit', async (event) => {
     } else {
       const status = form.querySelector('[role="status"]');
       if (status) status.hidden = true;
-      errorText.textContent = problem(error.code);
+      errorText.textContent = liveIssue(error.code) || problem(error.code);
     }
   } finally {
     controls.forEach((element) => { element.disabled = false; });

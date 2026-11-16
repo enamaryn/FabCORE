@@ -28,8 +28,8 @@ function unavailable(status, issue) {
   return { status, issue, nozzle: null, bed: null, progress: 0, file: '' };
 }
 
-async function readResponse(response) {
-  if (!response.body) throw new SyntaxError('Réponse Moonraker vide.');
+export async function readResponse(response) {
+  if (!response.body) throw new SyntaxError('Réponse JSON vide.');
   const reader = response.body.getReader();
   const chunks = [];
   let bytes = 0;
@@ -40,7 +40,7 @@ async function readResponse(response) {
       bytes += value.byteLength;
       if (bytes > 64 * 1024) {
         await reader.cancel();
-        throw new SyntaxError('Réponse Moonraker trop volumineuse.');
+        throw new SyntaxError('Réponse JSON trop volumineuse.');
       }
       chunks.push(value);
     }

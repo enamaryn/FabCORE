@@ -6,7 +6,16 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { moonrakerOrigin, privateIPv4, readMoonraker } from './moonraker.mjs';
 import { createBambuMonitor } from './bambu.mjs';
+import { readElegoo } from './elegoo.mjs';
+import { readElegooCC1 } from './elegoo-cc1.mjs';
 import { openStore } from './store.mjs';
+
+const machineModels = {
+  klipper: 'Klipper · Moonraker',
+  bambu: 'Bambu Lab · P2S',
+  elegoo: 'Elegoo · Centauri Carbon 2',
+  'elegoo-cc1': 'Elegoo · Centauri Carbon'
+};
 
 const derive = promisify(scrypt);
 const digest = (secret) => createHash('sha256').update(secret).digest();
@@ -69,7 +78,7 @@ function monitor(readPrinter) {
         () => { entry.current = { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' }; }
       ).finally(() => {
         entry.checkedAt = new Date().toISOString();
-        entry.next = Date.now() + 1000;
+        entry.next = Date.now() + (machine.kind?.startsWith('elegoo') ? 7000 : 1000);
         entry.pending = null;
       });
     }
@@ -79,7 +88,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter = readMoonraker, bambu = createBambuMonitor(), activationToken } = {}) {
+export function createFabCore({ directory, origin, readPrinter = readMoonraker, readCC2 = readElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -91,7 +100,13 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
   const sessions = new Map();
   const attempts = new Map();
-  const snapshot = monitor(readPrinter);
+  const elegooReaders = new Map([['elegoo', readCC2], ['elegoo-cc1', readCC1]]);
+  const snapshot = monitor(async (machine) => {
+    const reader = elegooReaders.get(machine.kind);
+    if (!reader) return readPrinter(machine);
+    const { serial, ...telemetry } = await reader(machine);
+    return telemetry;
+  });
   let probes = 0;
   function cookie(value, age) {
     return `fabcore_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${secure ? '; Secure' : ''}`;
@@ -154,7 +169,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
     if (req.method === 'GET' && path === '/api/machines') {
       if (!activeSession) return error(res, 401, 'sign-in');
       return answer(res, 200, { machines: store.state.machines.map((machine) => ({
-        id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial, model: machine.kind === 'bambu' ? 'Bambu Lab · P2S' : 'Klipper · Moonraker',
+        id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial, model: machineModels[machine.kind] ?? machineModels.klipper,
         ...(machine.kind === 'bambu' ? bambu.read(machine) : snapshot(machine))
       })) });
     }
@@ -185,30 +200,50 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         if (privateIPv4(host) && /^[A-Z0-9]{8,32}$/.test(serial) && /^[A-Za-z0-9]{8}$/.test(accessCode)) {
           connection = { origin: `mqtts://${host}:8883`, serial, accessCode };
         }
+      } else if (kind === 'elegoo') {
+        const host = value(data, 'host', 15).trim();
+        const accessCode = value(data, 'accessCode', 64).trim() || (data.accessCode === '' ? existing?.accessCode ?? '' : '');
+        if (privateIPv4(host) && /^[!-~]{1,64}$/.test(accessCode)) {
+          connection = { origin: `mqtt://${host}:1883`, serial: existing?.serial, accessCode };
+        }
+      } else if (kind === 'elegoo-cc1') {
+        const host = value(data, 'host', 15).trim();
+        const serial = existing?.serial ?? value(data, 'serial', 64).trim();
+        if (privateIPv4(host) && (!serial || /^[a-zA-Z0-9_-]{6,64}$/.test(serial))) {
+          connection = { origin: `ws://${host}:3030`, serial: serial || undefined };
+        }
       } else if (kind === 'klipper') {
         const origin = moonrakerOrigin(value(data, 'origin', 200).trim());
         const apiKey = value(data, 'apiKey', 256).trim() || (data.apiKey === '' ? existing?.apiKey ?? '' : '');
         if (origin && (!data.apiKey || /^[!-~]+$/.test(apiKey))) connection = { origin, apiKey };
       }
       if (!name || !connection) return error(res, 400, 'machine-invalid');
-      if (store.state.machines.some((machine) => machine.id !== existing?.id &&
-          (machine.origin === connection.origin || (connection.serial && machine.serial === connection.serial)))) {
-        return error(res, 409, 'machine-duplicate');
-      }
       const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
-      if (path === '/api/machines/test') {
+      const testing = path === '/api/machines/test';
+      const elegooReader = elegooReaders.get(kind);
+      if (testing || elegooReader) {
         if (probes >= 2) return error(res, 429, 'probe-busy');
         probes++;
         const abort = new AbortController();
         res.once('close', () => abort.abort());
         try {
-          if (kind === 'bambu') return answer(res, 200, await bambu.probe(machine, abort.signal));
-          const result = await readPrinter(machine);
-          const ok = !result.issue || result.issue === 'print';
-          return answer(res, 200, { ok, issue: ok ? null : result.issue });
+          if (testing && kind === 'bambu') return answer(res, 200, await bambu.probe(machine, abort.signal));
+          const result = elegooReader ? await elegooReader(machine, { signal: abort.signal }) : await readPrinter(machine);
+          if (abort.signal.aborted) return;
+          const ok = elegooReader
+            ? Boolean(result.serial && (!result.issue || result.issue === 'elegoo-print'))
+            : !result.issue || result.issue === 'print';
+          if (testing) return answer(res, 200, { ok, issue: ok ? null : result.issue });
+          if (!ok) return error(res, 422, result.issue ?? 'elegoo-info');
+          machine.serial = result.serial;
+          if (existing && !store.state.machines.includes(existing)) return error(res, 409, 'machine-changed');
         } finally {
           probes--;
         }
+      }
+      if (store.state.machines.some((entry) => entry.id !== existing?.id &&
+          (entry.origin === machine.origin || (machine.serial && entry.kind === kind && entry.serial === machine.serial)))) {
+        return error(res, 409, 'machine-duplicate');
       }
       if (!existing && store.state.machines.length >= 8) return error(res, 409, 'machine-limit');
       const machines = existing ? store.state.machines.map((entry) => entry.id === machine.id ? machine : entry)

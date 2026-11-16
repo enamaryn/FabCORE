@@ -32,10 +32,10 @@ npm --version
 
 ### 3. Télécharger et démarrer FabCore
 
-Le POC Bambu est disponible sur la branche `poc/02-bambu`. Si le dépôt demande une authentification GitHub, utiliser un compte autorisé à lire le dépôt.
+Le POC Elegoo est disponible sur la branche `poc/03-elegoo`. Si le dépôt demande une authentification GitHub, utiliser un compte autorisé à lire le dépôt.
 
 ```bash
-git clone --branch poc/02-bambu --single-branch https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
+git clone --branch poc/03-elegoo --single-branch https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
 cd "$HOME/FabCORE"
 npm ci
 npm test
@@ -81,13 +81,20 @@ Comparer l’état et les températures avec Bambu Studio. Pendant une impressio
 
 Si MQTT ne répond pas ou ne renvoie aucun rapport, vérifier la version du micrologiciel et les paramètres LAN de la P2S. Le [manuel P2S](https://csm.bblcdn.cn/hub/79f028a6cf6f429b9f09ef91f41a85c3.pdf) décrit le mode LAN uniquement, qui coupe l’accès via Bambu Handy, et le réglage du mode développeur.
 
+## POC-03 · Essai sur les Elegoo Centauri Carbon
+
+- **Centauri Carbon (CC1).** Choisir le modèle et saisir son IPv4. FabCore recherche le MainboardID sur le réseau local en UDP 3000 et lit l’état via SDCP sur le port 3030. Si la découverte ne traverse pas le réseau, saisir le MainboardID manuellement.
+- **Centauri Carbon 2 (CC2).** Choisir le modèle, saisir son IPv4 et le code LAN de l’imprimante. FabCore récupère son numéro de série sur le port 80, puis vérifie l’état via MQTT sur le port 1883. Selon le firmware, activer **LAN uniquement** pour accéder à ces interfaces. Le transport local CC2 est en clair, code LAN compris. Utiliser un réseau local de confiance.
+- Cliquer sur **Tester la connexion**, puis ajouter les machines avec des noms distincts. Comparer état, températures et progression avec l’interface de l’imprimante. Hors impression, éteindre puis rallumer une seule CC2 et vérifier que l’autre fiche conserve sa télémétrie.
+- Le POC interroge uniquement l’état. Références de protocole [elegoo-link](https://github.com/ELEGOO-3D/elegoo-link) et [pycentauri](https://github.com/bjan/pycentauri/blob/main/docs/PROTOCOL.md).
+
 ## Fonctionnement et limites
 
 - L’adaptateur interroge exclusivement `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.
 - Le navigateur actualise la télémétrie toutes les deux secondes pendant une session de supervision. Les requêtes concurrentes partagent un résultat par machine et les erreurs de transport sont visibles.
-- Le POC prend en charge un administrateur local et jusqu’à huit machines Klipper ou Bambu P2S. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
+- Le POC prend en charge un administrateur local et jusqu’à huit machines Klipper, Bambu P2S ou Elegoo CC1/CC2. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
 - Le fichier `.fabcore/state.json` est créé avec les droits `0600`. Il contient les clés API Moonraker et les codes d’accès LAN nécessaires à la reconnexion. Protéger le répertoire et ses sauvegardes comme des secrets. Exécuter une seule instance par répertoire de données.
-- Le POC couvre l’ajout et la supervision Klipper et Bambu P2S. Les commandes de fabrication, les caméras, Pocket ID, SMTP et les autres constructeurs restent pour les jalons suivants.
+- Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes de fabrication, les caméras, Pocket ID, SMTP et les autres constructeurs restent pour les jalons suivants.
 
 ## Paramètres d’exécution
 
