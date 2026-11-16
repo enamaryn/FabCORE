@@ -1,5 +1,6 @@
 import { get } from 'node:http';
 import { pipeline } from 'node:stream/promises';
+import { observeImages } from './diagnostics.mjs';
 import { privateIPv4 } from './moonraker.mjs';
 
 const ports = new Map([['elegoo-cc1', 3031], ['elegoo', 8080]]);
@@ -25,7 +26,7 @@ function openCamera(url, signal) {
   });
 }
 
-export async function streamCamera(url, res, signal, open = openCamera) {
+export async function streamCamera(url, res, signal, open = openCamera, onFrame = () => {}) {
   const upstream = await open(url, signal);
   const type = upstream.headers['content-type'] ?? '';
   if (upstream.statusCode !== 200 || !/^multipart\/x-mixed-replace\s*;\s*boundary\s*=\s*(?:"[-A-Za-z0-9_.]{1,70}"|[-A-Za-z0-9_.]{1,70})\s*$/i.test(type)) {
@@ -37,6 +38,6 @@ export async function streamCamera(url, res, signal, open = openCamera) {
     'X-Accel-Buffering': 'no',
     'Cross-Origin-Resource-Policy': 'same-origin'
   });
-  await pipeline(upstream, res, { signal });
+  await pipeline(upstream, (stream) => observeImages(stream, onFrame), res, { signal });
   return true;
 }

@@ -196,6 +196,14 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   const watchLogin = await call('/api/login', { body: observer });
   assert.deepEqual(await watchLogin.json(), { authenticated: true, username: observer.username, role: 'observer' });
   const watchCookie = session(watchLogin);
+  const diagnosticsPath = '/api/diagnostics';
+  assert.equal((await call(diagnosticsPath)).status, 401);
+  assert.equal((await call(diagnosticsPath, { cookie: watchCookie })).status, 403);
+  const diagnostics = await (await call(diagnosticsPath, { cookie })).json();
+  assert.deepEqual(diagnostics.fleet, [{ id, name: changed.name }]);
+  assert.ok(diagnostics.events.some((event) => event.area === 'server' && event.code === 'started'));
+  assert.ok(diagnostics.events.some((event) => event.id === id && event.code === 'printing'));
+  assert.ok(!JSON.stringify(diagnostics).includes(changed.origin));
   const notificationsPath = '/api/notifications';
   const notificationForm = { ntfy: { mode: 'external', url: 'https://ntfy.example.test', topic: 'fabcore', auth: 'bearer', secret: 'sample-token' }, smtp: { enabled: false } };
   assert.equal((await call(notificationsPath)).status, 401);
@@ -280,6 +288,14 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
     const nextFrame = once(second, 'data');
     cameraInputs.get('192.168.1.54').write('another frame');
     assert.equal((await nextFrame)[0].toString(), 'another frame');
+    for (const chunk of [[0xff], [0xd8, 0xff], [0xd9]]) {
+      const received = once(second, 'data');
+      cameraInputs.get('192.168.1.54').write(Buffer.from(chunk));
+      await received;
+    }
+    const cameraDiagnostics = await (await call(diagnosticsPath, { cookie })).json();
+    assert.ok(cameraDiagnostics.machines[secondCC2Id].frameAt);
+    assert.ok(cameraDiagnostics.events.some((event) => event.id === secondCC2Id && event.code === 'streaming'));
     const secondClosed = new Promise((resolve) => cameraInputs.get('192.168.1.54').once('close', resolve));
     assert.equal((await call('/api/logout', { body: {}, cookie: session(await call('/api/login', { body: credentials })) })).status, 200);
     assert.equal(cameraInputs.get('192.168.1.54').destroyed, false);

@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { checkServerIdentity, connect, createServer } from 'node:tls';
 import { promisify } from 'node:util';
+import { observeImages } from './diagnostics.mjs';
 import { privateIPv4 } from './moonraker.mjs';
 
 const ca = readFileSync(new URL('./certs/bambu-p2s.pem', import.meta.url));
@@ -35,7 +36,7 @@ async function createRelayCredentials() {
   }
 }
 
-export async function streamBambuCamera(machine, response, signal) {
+export async function streamBambuCamera(machine, response, signal, onFrame = () => {}) {
   const host = new URL(machine.origin).hostname;
   if (!privateIPv4(host) || !/^[A-Za-z0-9]{8,32}$/.test(machine.serial) ||
       !/^[A-Za-z0-9]{8}$/.test(machine.accessCode) || signal.aborted) return false;
@@ -95,7 +96,7 @@ export async function streamBambuCamera(machine, response, signal) {
       yield first.value;
       yield* { [Symbol.asyncIterator]: () => frames };
     }
-    await pipeline(Readable.from(parts()), response, { signal });
+    await pipeline(Readable.from(observeImages(parts(), onFrame)), response, { signal });
     return true;
   } finally {
     clearTimeout(startup);
