@@ -40,14 +40,15 @@ La connexion et les fonctions locales dépendent du modèle, du micrologiciel et
 
 **Debian ou Ubuntu**, sur un serveur personnel ou dans un **LXC Proxmox**. Pour démarrer avec un petit parc, prévoir **1 vCPU, 512 Mo de RAM et 1 Go d’espace libre** en plus du système. Le serveur doit pouvoir joindre les machines sur le réseau local. Un usage régulier des caméras peut demander davantage de ressources.
 
+Avec `curl` installé, lancez cette commande depuis le dossier dans lequel vous voulez créer `FabCORE/`.
+
 ```bash
-sudo apt-get update && sudo apt-get install -y git ca-certificates
-git clone https://github.com/enamaryn/FabCORE.git
-cd FabCORE
-bash scripts/install.sh
+installer=$(curl -fsSL https://raw.githubusercontent.com/enamaryn/FabCORE/main/scripts/install.sh) && bash -c "$installer"
 ```
 
-Dans une console LXC ouverte en root, retirer `sudo` de la première ligne. Le script installe les dépendances manquantes, dont Node.js 24 et FFmpeg, puis lance FabCore dans le terminal. Ouvrez <http://127.0.0.1:3000> et utilisez le jeton affiché pour créer votre compte administrateur. Pour un serveur distant, suivre le [guide d’accès par tunnel SSH ou reverse proxy HTTPS](poc/README.md#4-ouvrir-linterface).
+Le script télécharge le projet, installe les dépendances manquantes, dont Node.js 24 et FFmpeg, puis lance FabCore dans le terminal. Il utilise `sudo` pour les paquets système si nécessaire. Dans un LXC Debian minimal, installez d’abord `curl` en root avec `apt-get update && apt-get install -y curl`. Si vous avez déjà cloné le dépôt, lancez `bash scripts/install.sh` depuis sa racine.
+
+Ouvrez <http://127.0.0.1:3000> et utilisez le jeton affiché pour créer votre compte administrateur. Pour un serveur distant, suivre le [guide d’accès par tunnel SSH ou reverse proxy HTTPS](poc/README.md#4-ouvrir-linterface).
 
 ## Ajoutez votre première machine
 

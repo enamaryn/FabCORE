@@ -1,15 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+bootstrap=false
+if [[ -n ${BASH_SOURCE[0]:-} ]]; then
+  cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+else
+  bootstrap=true
+  if [[ -e FabCORE || -L FabCORE ]]; then
+    echo 'FabCORE existe déjà. Pour relancer cette installation, exécutez bash FabCORE/scripts/install.sh.' >&2
+    exit 1
+  fi
+fi
 
 if ! command -v apt-get >/dev/null || ! command -v dpkg >/dev/null; then
   echo 'Cet installateur nécessite Debian ou Ubuntu.' >&2
   exit 1
 fi
 
+required=(ca-certificates curl ffmpeg)
+if "$bootstrap"; then
+  required+=(git)
+fi
 packages=()
-for package in ca-certificates curl ffmpeg; do
+for package in "${required[@]}"; do
   if [[ $(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true) != 'install ok installed' ]]; then
     packages+=("$package")
   fi
@@ -19,13 +32,18 @@ if (( ${#packages[@]} )); then
   apt=(apt-get)
   if (( EUID != 0 )); then
     if ! command -v sudo >/dev/null; then
-      echo 'Installez ca-certificates, curl et ffmpeg depuis un compte administrateur, puis relancez cette commande.' >&2
+      printf 'Installez ces paquets depuis un compte administrateur, puis relancez le script : %s\n' "${packages[*]}" >&2
       exit 1
     fi
     apt=(sudo apt-get)
   fi
   "${apt[@]}" update
   "${apt[@]}" install -y --no-install-recommends "${packages[@]}"
+fi
+
+if "$bootstrap"; then
+  git clone -- https://github.com/enamaryn/FabCORE.git FabCORE
+  cd -- FabCORE
 fi
 
 if ! command -v node >/dev/null || ! command -v npm >/dev/null ||
