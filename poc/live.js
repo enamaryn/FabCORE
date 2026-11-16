@@ -7,6 +7,9 @@ state.users = [];
 const problem = (code) => ({
   'oidc-failed': t('Connexion Pocket ID indisponible ou accès refusé. Vous pouvez utiliser un compte local.',
     'Pocket ID sign-in is unavailable or access was denied. You can use a local account.'),
+  'notifications-invalid': t('Vérifiez les informations de connexion et les secrets.', 'Check connection settings and secrets.'),
+  'ntfy-install-required': t('Installez d’abord le serveur ntfy interne.', 'Install the internal ntfy server first.'),
+  'notifications-failed': t('Le serveur a refusé la notification ou ne répond pas.', 'The server rejected the notification or is unreachable.'),
   token: t('Jeton incorrect.', 'Invalid activation token.'),
   expired: t('Jeton expiré. Redémarrez FabCore pour en obtenir un nouveau.', 'Token expired. Restart FabCore for a new one.'),
   credentials: t('Vérifiez vos identifiants. À l’installation, le mot de passe doit contenir au moins 12 caractères.', 'Check your credentials. Setup requires a password of at least 12 characters.'),
@@ -56,7 +59,7 @@ function liveIssue(issue) {
 }
 
 async function api(path, data, cancel) {
-  const timeout = AbortSignal.timeout(path === 'discovery' || path.startsWith('machines') ? 18000 : 5000);
+  const timeout = AbortSignal.timeout(path === 'discovery' || path.startsWith('machines') || path.startsWith('notifications') ? 18000 : 5000);
   const signal = cancel ? AbortSignal.any([timeout, cancel]) : timeout;
   const response = await fetch('/api/' + path, data === undefined ? { signal } : {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal
@@ -167,18 +170,83 @@ function showCamera(open, failed = false) {
   stop.focus();
 }
 
+function notificationPage() {
+  const settings = live.notifications;
+  if (!settings) return title(t('Notifications', 'Notifications')) +
+    `<p role="status">${esc(live.notificationError || t('Chargement…', 'Loading…'))}</p>`;
+  const { ntfy, smtp, internal } = settings;
+  const opt = (value, label, selected) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`;
+  const input = (name, label, value = '', type = 'text') => `<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${type === 'password' ? 'autocomplete="new-password"' : ''}></label>`;
+  return title(t('Notifications','Notifications'), t('Configurez les canaux, enregistrez puis envoyez un test.', 'Configure the channels, save, then send a test.')) +
+    `<style>#notifications-settings [hidden]{display:none!important}</style><form id="notifications-settings" class="stack" novalidate>
+      <section class="panel stack"><h2>ntfy</h2>
+        <label>${t('Serveur ntfy','ntfy server')}<select name="ntfyMode">
+          ${opt('off',t('Configurer plus tard','Configure later'),ntfy.mode)}
+          ${opt('internal',t('Serveur interne (sur cet hôte)','Internal server (this host)'),ntfy.mode)}
+          ${opt('external',t('Serveur existant','Existing server'),ntfy.mode)}
+        </select></label>
+        <div data-ntfy-internal ${ntfy.mode !== 'internal' ? 'hidden' : ''}>
+          ${internal ? `<p>${t('Sujet','Topic')} · ${esc(internal.topic)}</p>` :
+            `<p class="notice">${t('Depuis le serveur FabCore, lancez','On the FabCore host, run')} <code>sudo bash scripts/install-ntfy.sh</code> ${t('puis rouvrez cette page.', 'then reopen this page.')}</p>`}
+        </div>
+        <fieldset class="fields" data-ntfy-external ${ntfy.mode !== 'external' ? 'hidden' : ''}>
+          ${input('ntfyUrl',t('URL HTTPS du serveur','Server HTTPS URL'),ntfy.url,'url')}
+          ${input('ntfyTopic',t('Sujet','Topic'),ntfy.topic)}
+          <label>${t('Authentification','Authentication')}<select name="ntfyAuth">
+            ${opt('none',t('Aucune','None'),ntfy.auth ?? 'none')}
+            ${opt('bearer',t('Jeton d’accès','Access token'),ntfy.auth)}
+            ${opt('basic',t('Identifiant et mot de passe','Username and password'),ntfy.auth)}
+          </select></label>
+          ${input('ntfyUsername',t('Identifiant (mode mot de passe)','Username (password mode)'),ntfy.username)}
+          ${input('ntfySecret',t('Jeton ou mot de passe','Token or password'),'','password')}
+        </fieldset>
+        <div>${btn('notify-test:ntfy', t('Envoyer un test ntfy','Send ntfy test'), '', '', ntfy.mode === 'off' ? 'disabled' : '')}</div>
+      </section>
+      <section class="panel stack"><h2>SMTP</h2>
+        <label class="check"><input type="checkbox" name="smtpEnabled" ${smtp.enabled ? 'checked' : ''}> ${t('Activer les e-mails','Enable email')}</label>
+        <fieldset class="fields" data-smtp-config ${!smtp.enabled ? 'hidden' : ''}>
+          ${input('smtpHost',t('Serveur SMTP','SMTP server'),smtp.host)}
+          ${input('smtpPort',t('Port','Port'),smtp.port ?? '587','number')}
+          <label>${t('Chiffrement','Encryption')}<select name="smtpTls">${opt('starttls','STARTTLS',smtp.tls ?? 'starttls')}${opt('tls','TLS',smtp.tls)}</select></label>
+          ${input('smtpFrom',t('Adresse d’expédition','Sender address'),smtp.from,'email')}
+          ${input('smtpTo',t('Adresse de réception','Recipient address'),smtp.to,'email')}
+          <label class="check"><input type="checkbox" name="smtpAuth" ${smtp.auth ? 'checked' : ''}> ${t('Authentification SMTP','SMTP authentication')}</label>
+          ${input('smtpUsername',t('Identifiant','Username'),smtp.username)}
+          ${input('smtpSecret',t('Mot de passe','Password'),'','password')}
+        </fieldset>
+        <div>${btn('notify-test:smtp', t('Envoyer un e-mail de test','Send test email'), '', '', smtp.enabled ? '' : 'disabled')}</div>
+      </section>
+      <small>${t('Laissez un secret vide pour le conserver lorsque les paramètres de connexion restent identiques.', 'Leave a secret blank to keep it when connection settings stay the same.')}</small>
+      <p class="error" role="alert"></p>
+      <div class="row wrap"><button type="submit" class="primary">${t('Enregistrer','Save')}</button>
+      ${btn('nav:home',t('Retour à la vue d’ensemble','Back to overview'))}</div>
+    </form>`;
+}
+
+async function openNotifications() {
+  if (state.role !== 'admin') return;
+  live.page = 'notifications';
+  live.notifications = null;
+  live.notificationError = '';
+  renderLive();
+  try { live.notifications = await api('notifications'); }
+  catch (error) { live.notificationError = problem(error.code); }
+  if (live.page === 'notifications') renderLive();
+}
+
 function renderLive() {
   app.querySelector('[data-live-camera] img')?.removeAttribute('src');
   document.documentElement.lang = state.lang;
   document.documentElement.dataset.theme = state.theme === 'system' ? (media.matches ? 'light' : 'dark') : state.theme;
   const signedIn = live.phase === 'workshop';
-  const screens = { home: dashboard, machines: liveFleet, detail: liveDetail, history: () =>
+  const screens = { notifications: notificationPage, home: dashboard, machines: liveFleet, detail: liveDetail, history: () =>
     title(t('Activité récente','Recent activity')) + `<section class="panel">${listEvents()}</section>` };
   app.innerHTML = `<a class="skip" href="#content">${t('Aller au contenu','Skip to content')}</a><div class="${signedIn?'layout':''}">
     ${signedIn?`<aside class="sidebar">${brand()}<nav aria-label="${t('Navigation principale','Main navigation')}">${liveNavigation()}</nav><div class="sidefoot"><small class="signal">POC${state.role === 'viewer' ? ' · ' + t('Observateur','Observer') : ''}</small></div></aside>`:''}
     <div><header class="top"><div class="crumb">${signedIn?`<span>${esc(live.username)}</span>`:brand()}</div><div class="row wrap">
       ${btn('lang',state.lang==='fr'?'EN':'FR','','ghost',`aria-label="${state.lang==='fr'?'Switch to English':'Passer en français'}"`)}
       ${btn('theme','','sun','ghost',`aria-label="${t('Basculer le thème','Toggle theme')}"`)}
+      ${signedIn && state.role === 'admin' ? btn('notifications',t('Notifications','Notifications')) : ''}
       ${signedIn && state.role === 'admin' ? btn('observer',t('Ajouter un observateur','Add observer')) : ''}
       ${signedIn?btn('logout',t('Déconnexion','Sign out'),'','ghost'):''}
     </div></header><main id="content" class="area" tabindex="-1">
@@ -223,7 +291,7 @@ async function refresh() {
     if (cameraImage?.dataset.streamOpened && !current?.cameraOpen) showCamera(false, true);
     const checkedAt = current?.checkedAt;
     if (timestamp && checkedAt) timestamp.textContent = new Date(checkedAt).toLocaleTimeString(state.lang);
-    if ((changed || hadRefreshError) && !dialog.open) {
+    if ((changed || hadRefreshError) && !dialog.open && live.page !== 'notifications') {
       const action = document.activeElement?.dataset.action;
       const telemetry = app.querySelector('[data-live-telemetry]');
       if (!hadRefreshError && telemetry && current && (cameraImage || app.querySelector('[data-camera-status]:not([hidden])'))) {
@@ -241,7 +309,7 @@ async function refresh() {
       renderLive();
     } else if (!live.refreshError) {
       live.refreshError = true;
-      if (!dialog.open) renderLive();
+      if (!dialog.open && live.page !== 'notifications') renderLive();
     }
   } finally {
     live.pending = false;
@@ -398,6 +466,15 @@ document.addEventListener('click', async (event) => {
     renderLive();
     app.querySelector('h1')?.focus();
   }
+  if (action === 'notifications') openNotifications();
+  if (action === 'notify-test' && state.role === 'admin') {
+    target.disabled = true;
+    try {
+      await api('notifications/test', { channel: value });
+      toast(t('Notification de test acceptée par le serveur.', 'Test notification accepted by the server.'));
+    } catch (error) { toast(problem(error.code)); }
+    finally { target.disabled = false; }
+  }
   if (action === 'observer' && state.role === 'admin') {
     dialog.innerHTML = `<form id="add-observer" class="stack">
       <h2>${t('Ajouter un observateur','Add observer')}</h2>
@@ -470,8 +547,37 @@ dialog.addEventListener('change', (event) => {
   dialog.querySelector('select[name="kind"]').focus();
 });
 
+document.addEventListener('input', (event) => {
+  const form = event.target.form;
+  if (form?.id !== 'notifications-settings') return;
+  const { ntfyMode, smtpEnabled } = form.elements;
+  form.querySelector('[data-ntfy-internal]').hidden = ntfyMode.value !== 'internal';
+  form.querySelector('[data-ntfy-external]').hidden = ntfyMode.value !== 'external';
+  form.querySelector('[data-smtp-config]').hidden = !smtpEnabled.checked;
+  for (const button of form.querySelectorAll('[data-action^="notify-test:"]')) button.disabled = true;
+});
+
 document.addEventListener('submit', async (event) => {
   const form = event.target;
+  if (form.id === 'notifications-settings') {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(form));
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit.disabled) return;
+    submit.disabled = true;
+    try {
+      live.notifications = await api('notifications', {
+        ntfy: { mode: data.ntfyMode, url: data.ntfyUrl, topic: data.ntfyTopic, auth: data.ntfyAuth,
+          username: data.ntfyUsername, secret: data.ntfySecret },
+        smtp: { enabled: Boolean(data.smtpEnabled), host: data.smtpHost, port: data.smtpPort, tls: data.smtpTls,
+          from: data.smtpFrom, to: data.smtpTo, auth: Boolean(data.smtpAuth), username: data.smtpUsername, secret: data.smtpSecret }
+      });
+      if (live.page === 'notifications') renderLive();
+      toast(t('Réglages enregistrés.', 'Settings saved.'));
+    } catch (error) { form.querySelector('.error').textContent = problem(error.code); }
+    finally { submit.disabled = false; }
+    return;
+  }
   if (form.id === 'discover-machines') {
     event.preventDefault();
     if (!form.querySelector('button[type="submit"]').disabled) await scanFromForm(form);
@@ -517,8 +623,10 @@ document.addEventListener('submit', async (event) => {
       }
       toast(t('Machine enregistrée.','Machine registered.'));
     } else {
-      const result = await api(live.phase === 'setup' ? 'setup' : 'login', data);
+      const setup = live.phase === 'setup';
+      const result = await api(setup ? 'setup' : 'login', data);
       openWorkshop(result.username, result.role);
+      if (setup) await openNotifications();
     }
   } catch (error) {
     if (error.code === 'installed') {

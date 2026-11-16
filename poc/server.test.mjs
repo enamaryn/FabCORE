@@ -68,11 +68,16 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   let reads = 0;
   let printState = 'printing';
   const commands = [];
+  const notices = [];
   let ambiguousCommand = false;
   const origin = 'http://fabcore.test';
   const cameraInputs = new Map();
   let cameraContentType = 'multipart/x-mixed-replace; boundary=frame';
   const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token',
+    notify: async (channel, config, internal) => {
+      notices.push([channel, config.ntfy.topic, internal]);
+      return true;
+    },
     sendCommand: async (machine, action) => {
       commands.push([machine.id, machine.origin, action]);
       if (ambiguousCommand) throw new Error('Connection lost after sending');
@@ -190,6 +195,20 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   const watchLogin = await call('/api/login', { body: observer });
   assert.deepEqual(await watchLogin.json(), { authenticated: true, username: observer.username, role: 'observer' });
   const watchCookie = session(watchLogin);
+  const notificationsPath = '/api/notifications';
+  const notificationForm = { ntfy: { mode: 'external', url: 'https://ntfy.example.test', topic: 'fabcore', auth: 'bearer', secret: 'sample-token' }, smtp: { enabled: false } };
+  assert.equal((await call(notificationsPath)).status, 401);
+  assert.equal((await call(notificationsPath, { cookie: watchCookie })).status, 403);
+  assert.equal((await call(notificationsPath + '/test', { body: { channel: 'ntfy' }, cookie: watchCookie })).status, 403);
+  assert.equal((await call(notificationsPath, { body: notificationForm, cookie, requestOrigin: 'http://other.test' })).status, 403);
+  const savedNotifications = await call(notificationsPath, { body: notificationForm, cookie });
+  assert.equal(savedNotifications.status, 200);
+  assert.ok(!(await savedNotifications.text()).includes(notificationForm.ntfy.secret));
+  const readNotifications = await (await call(notificationsPath, { cookie })).json();
+  assert.equal(readNotifications.ntfy.mode, 'external');
+  assert.equal(readNotifications.ntfy.secret, undefined);
+  assert.deepEqual(await (await call(notificationsPath + '/test', { body: { channel: 'ntfy' }, cookie })).json(), { accepted: true });
+  assert.deepEqual(notices, [['ntfy', 'fabcore', null]]);
   assert.equal((await call('/api/machines', { cookie: watchCookie })).status, 200);
   assert.equal((await call(commandPath, { body: { action: 'pause' } })).status, 401);
   assert.equal((await call(commandPath, { body: { action: 'pause' }, cookie: watchCookie })).status, 403);

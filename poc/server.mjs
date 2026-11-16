@@ -12,6 +12,7 @@ import { readElegooCC1 } from './elegoo-cc1.mjs';
 import { discoveryNetworks, scanNetwork } from './discovery.mjs';
 import { cameraURL, streamCamera } from './camera.mjs';
 import { createOidc } from './oidc.mjs';
+import { internalNtfy, notificationSettings, publicNotifications, sendNotification } from './notifications.mjs';
 import { openStore } from './store.mjs';
 
 const machineModels = {
@@ -92,7 +93,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2 = readElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc } = {}) {
+export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2 = readElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -114,6 +115,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
   const pendingCommands = new Set();
   let probes = 0;
   let discoveryActive = false;
+  const notificationTests = new Set();
   const cameraStreams = new Map();
   const stopCameraStreams = (sessionId) => {
     for (const [controller, { owner }] of cameraStreams) {
@@ -241,6 +243,35 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         cameraStreams.delete(controller);
       }
       return;
+    }
+    if (path === '/api/notifications' || path === '/api/notifications/test') {
+      if (!viewer) return error(res, 401, 'sign-in');
+      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+      const internal = internalNtfy(directory);
+      const current = store.state.notifications ?? {};
+      if (req.method === 'GET' && path === '/api/notifications') {
+        return answer(res, 200, publicNotifications(current, internal));
+      }
+      if (req.method !== 'POST') return error(res, 405, 'missing');
+      if (!requireJson(req, res)) return;
+      let data;
+      try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+      if (path === '/api/notifications') {
+        let settings;
+        try { settings = notificationSettings(data, store.state.notifications, internal); }
+        catch (failure) { return error(res, 400, failure.message === 'ntfy-install-required' ? failure.message : 'notifications-invalid'); }
+        store.save({ ...store.state, notifications: settings });
+        return answer(res, 200, publicNotifications(settings, internal));
+      }
+      const channel = data.channel;
+      if (channel !== 'ntfy' && channel !== 'smtp') return error(res, 400, 'invalid');
+      if (notificationTests.has(channel) || !withinLimit(path + '/' + channel)) return error(res, 429, 'rate');
+      notificationTests.add(channel);
+      try {
+        if (await notify(channel, store.state.notifications ?? {}, internal)) return answer(res, 200, { accepted: true });
+      } catch { /* Avoid returning provider responses that may contain secrets. */ }
+      finally { notificationTests.delete(channel); }
+      return error(res, 502, 'notifications-failed');
     }
     if (path === '/api/discovery') {
       if (!viewer) return error(res, 401, 'sign-in');
