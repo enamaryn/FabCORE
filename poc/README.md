@@ -154,9 +154,15 @@ FabCore relaie la vidéo RTSPS de la P2S au navigateur sous forme de MJPEG. Vér
 
 - Pour la télémétrie, l’adaptateur interroge `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.
 - Le navigateur actualise la télémétrie toutes les deux secondes pendant une session de supervision. Les requêtes concurrentes partagent un résultat par machine et les erreurs de transport sont visibles.
-- Le POC prend en charge un administrateur local, jusqu’à seize observateurs et jusqu’à huit machines Klipper, Bambu P2S ou Elegoo CC1/CC2. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
+- Le POC prend en charge un administrateur local, jusqu’à seize observateurs et jusqu’à huit machines Klipper, Bambu P2S, Elegoo CC1/CC2 ou xTool M2. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
 - Le fichier `.fabcore/state.json` est créé avec les droits `0600`. Il contient les clés API Moonraker et les codes d’accès LAN nécessaires à la reconnexion. Protéger le répertoire et ses sauvegardes comme des secrets. Exécuter une seule instance par répertoire de données.
 - Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes sur les autres modèles, les alertes automatiques et les autres constructeurs restent pour les jalons suivants.
+
+## Ajouter une xTool M2
+
+Relier la M2 au réseau local et relever son adresse IPv4 dans les paramètres Wi-Fi de xTool Studio. Dans FabCore, choisir **Ajouter une machine** → **xTool · M2**, saisir l’adresse, puis cliquer sur **Tester la connexion** et **Ajouter**. Le serveur FabCore doit pouvoir joindre le port TCP 28900 de la machine.
+
+FabCore lit le numéro de série et l’état de la M2. À l’ajout, il mémorise l’empreinte du certificat présenté par la machine et la vérifie aux connexions suivantes. L’intégration couvre la supervision de l’état. Référence de protocole LAN : [ha-xtool](https://github.com/thecodingdad/ha-xtool).
 
 ## Paramètres d’exécution
 
