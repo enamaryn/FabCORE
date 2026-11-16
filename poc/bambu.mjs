@@ -63,7 +63,9 @@ export function createBambuMonitor(connectPrinter = connect) {
       try { delta = JSON.parse(payload)?.print; } catch { return; }
       if (delta?.command !== 'push_status') return;
       report = { ...report, ...delta };
-      const status = states.get(report.gcode_state);
+      // The printer can retain a failed job after its print error was cleared.
+      const clearedFailure = report.gcode_state === 'FAILED' && report.print_error === 0;
+      const status = clearedFailure ? 'ready' : states.get(report.gcode_state);
       if (!status) return;
       clearTimeout(timeout);
       printer.lastReport = Date.now();
@@ -72,9 +74,9 @@ export function createBambuMonitor(connectPrinter = connect) {
         issue: status === 'error' ? 'bambu-print' : null,
         nozzle: temperature(report.nozzle_temper),
         bed: temperature(report.bed_temper),
-        progress: status === 'done' ? 100 : Number.isFinite(report.mc_percent)
+        progress: status === 'done' ? 100 : !clearedFailure && Number.isFinite(report.mc_percent)
           ? Math.round(Math.max(0, Math.min(100, report.mc_percent))) : 0,
-        file: typeof report.subtask_name === 'string' ? report.subtask_name.trim().slice(0, 200) : ''
+        file: !clearedFailure && typeof report.subtask_name === 'string' ? report.subtask_name.trim().slice(0, 200) : ''
       };
     });
     client.on('error', (error) => {

@@ -91,7 +91,7 @@ function card(m){
  return `<article class="machine"><div class="row between"><div class="row"><span class="machine-mark">${icon('machine')}</span><div><h3>${esc(m.name)}</h3><small>${esc(m.model)}</small></div></div>${badge(m.status)}</div>
  <div class="row between job"><span>${esc(m.file)||t('Aucune fabrication','No job')}</span><strong>${isActive?m.progress+' %':(m.status==='done'?'100 %':'')}</strong></div>
  <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>
- <div class="row between"><small>${m.eta?esc(m.eta)+' · ':''}${m.status==='offline'?t('Dernière liaison perdue','Connection lost'):[m.nozzle,m.bed].map(v=>v===null?'—':v+' °C').join(' · ')}</small><small>${esc(m.id)}</small></div>
+ <div class="row between"><small>${m.eta?esc(m.eta)+' · ':''}${m.status==='offline'?t('Dernière liaison perdue','Connection lost'):[m.nozzle,m.bed].map(v=>v===null?'—':v+' °C').join(' · ')}</small>${liveMode?'':`<small>${esc(m.id)}</small>`}</div>
  ${btn('machine:'+m.id,t('Ouvrir','Open')+' '+esc(m.name),'arrow','ghost')}</article>`;
 }
 function dashboard(){
@@ -104,7 +104,7 @@ function dashboard(){
 }
 function fleetList(items){
  return `<div class="panel table"><table><thead><tr><th>${t('Machine','Machine')}</th><th>${t('État','Status')}</th><th class="hide-mobile">${t('Progression','Progress')}</th><th>${t('Ouvrir','Open')}</th></tr></thead>
- <tbody>${items.map(m=>`<tr><td><strong>${esc(m.name)}</strong><br><small>${esc(m.id)} · ${esc(m.model)}</small></td><td>${badge(m.status)}</td><td class="hide-mobile">${m.progress} %<progress class="fixture-progress" value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress></td><td>${btn('machine:'+m.id,'','arrow','ghost',`aria-label="${esc(m.name)}"`)}</td></tr>`).join('')}</tbody></table></div>`;
+ <tbody>${items.map(m=>`<tr><td><strong>${esc(m.name)}</strong><br><small>${liveMode?'':esc(m.id)+' · '}${esc(m.model)}</small></td><td>${badge(m.status)}</td><td class="hide-mobile">${m.progress} %<progress class="fixture-progress" value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress></td><td>${btn('machine:'+m.id,'','arrow','ghost',`aria-label="${esc(m.name)}"`)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function machines(){
  if(state.reviewStatus)return title(t('Machines','Machines'))+`<section class="panel stack" role="status"><h2>${state.reviewStatus==='error'?t('Impossible de charger le parc','Could not load the fleet'):t('Chargement du parc…','Loading fleet…')}</h2>${state.reviewStatus==='error'?btn('fleet-retry',t('Réessayer','Try again'),'activity','primary'):'<progress aria-label="Loading"></progress>'}</section>`;
