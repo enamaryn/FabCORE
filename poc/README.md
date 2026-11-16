@@ -32,10 +32,10 @@ npm --version
 
 ### 3. Télécharger et démarrer FabCore
 
-Le POC caméra est disponible sur la branche `poc/05-cameras`. Si le dépôt demande une authentification GitHub, utiliser un compte autorisé à lire le dépôt.
+Cloner la branche principale depuis GitHub.
 
 ```bash
-git clone --branch poc/05-cameras --single-branch https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
+git clone https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
 cd "$HOME/FabCORE"
 npm ci
 npm test
