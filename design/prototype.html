@@ -139,7 +139,10 @@ function fields(kind){
  const list={
  auth:`<label>${t('Mode de connexion','Sign-in mode')}<select name="auth">${options({local:t('Compte local','Local account'),oidc:'OIDC · Pocket ID',hybrid:t('Hybride · local + OIDC','Hybrid · local + OIDC')},state.setup.auth||'local')}</select></label>${state.setup.auth&&state.setup.auth!=='local'?`<label>${t('URL de l’émetteur OIDC','OIDC issuer URL')}<input name="issuer" type="url" placeholder="https://id.example.test" value="${esc(state.setup.issuer)}" required></label><label>Client ID<input name="client" value="${esc(state.setup.client)}" required></label><label>${t('Secret client (fictif)','Client secret (demo)')}<input type="password" name="secret" autocomplete="off" required></label>`:''}`,
  alerts:`<label class="check"><input name="push" type="checkbox" ${state.setup.push?'checked':''}> Web Push</label><label>ntfy<select name="ntfy">${options({off:t('Désactivé','Off'),internal:t('Serveur intégré','Built-in server'),external:t('Serveur existant','Existing server')},state.setup.ntfy||'off')}</select></label>${state.setup.ntfy==='external'?`<label>${t('URL du serveur ntfy','ntfy server URL')}<input name="ntfyUrl" type="url" placeholder="https://ntfy.example.test" value="${esc(state.setup.ntfyUrl)}" required></label><label>${t('Canal','Topic')}<input name="topic" value="${esc(state.setup.topic)}" required></label>`:''}`,
- smtp:`<label class="check"><input name="smtp" type="checkbox" ${state.setup.smtp?'checked':''}> ${t('Configurer SMTP','Configure SMTP')}</label>${state.setup.smtp?`<label>${t('Hôte','Host')}<input name="host" placeholder="smtp.example.test" value="${esc(state.setup.host)}" required></label><label>Port<input name="port" type="number" min="1" max="65535" value="${esc(state.setup.port||587)}" required></label><label>${t('Expéditeur','Sender')}<input name="sender" type="email" placeholder="atelier@example.test" value="${esc(state.setup.sender)}" required></label>`:''}`};
+ smtp:`<label class="check"><input name="smtp" type="checkbox" ${state.setup.smtp?'checked':''}> ${t('Configurer SMTP','Configure SMTP')}</label>${state.setup.smtp?`<label>${t('Hôte','Host')}<input name="host" placeholder="smtp.example.test" value="${esc(state.setup.host)}" required></label><label>Port<input name="port" type="number" min="1" max="65535" value="${esc(state.setup.port||587)}" required></label><label>${t('Expéditeur','Sender')}<input name="sender" type="email" placeholder="atelier@example.test" value="${esc(state.setup.sender)}" required></label>
+ <label class="check"><input name="smtpAuth" type="checkbox" ${state.setup.smtpAuth?'checked':''}> ${t('Authentification SMTP','SMTP authentication')}</label>
+ ${state.setup.smtpAuth?`<label>${t('Identifiant SMTP','SMTP username')}<input name="smtpUsername" placeholder="atelier@example.test" value="${esc(state.setup.smtpUsername)}" autocomplete="off" required></label>
+ <label>${t('Mot de passe SMTP (fictif)','SMTP password (demo)')}<input name="smtpPassword" type="password" autocomplete="new-password" required></label>`:''}`:''}`};
  return `<div class="fields" data-fields="${kind}">${list[kind]}</div>`;
 }
 function settings(){return title(t('Paramètres','Settings'),t('Préférences et accès à la démonstration.','Preferences and demo access.'))+`<div class="cards"><section class="panel stack"><h2>${t('Apparence et langue','Appearance and language')}</h2><div class="fields"><label>${t('Thème','Theme')}<select id="theme">${options({dark:t('Sombre','Dark'),light:t('Clair','Light'),system:t('Système','System')},state.theme)}</select></label><label>${t('Langue','Language')}<select id="language">${options({fr:'Français',en:'English'},state.lang)}</select></label><label>${t('Rôle de démonstration','Demo role')}<select id="role">${options(roles(),state.role)}</select></label></div></section><section class="panel stack"><h2>${t('Accès et installation','Access and setup')}</h2>${btn('nav:setup',t('Assistant de première installation','First setup wizard'),'plug','ghost')}${btn('nav:services',t('Services et intégrations','Services and integrations'),'plug','ghost')}${btn('nav:review',t('Revue des écrans','Screen review'),'list','ghost')}${btn('nav:login',t('Se déconnecter','Sign out'),'arrow','ghost')}</section></div>`}
@@ -156,7 +159,7 @@ function setup(){
   fields('auth'),fields('alerts'),fields('smtp'),
   `<p>${t('Le scan fictif cherche des machines FDM. Les deux Centauri Carbon 2 ont des identifiants distincts.','The simulated scan finds FDM printers. Both Centauri Carbon 2 units have different identifiers.')}</p><div class="fields">${btn('scan',values.scanning?t('Recherche…','Searching…'):t('Simuler un scan réseau','Simulate discovery'),'activity','ghost',values.scanning?'disabled':'')}${values.found&&values.none?`<p class="notice">${t('Aucune machine détectée. Réessayez ou choisissez l’ajout manuel à l’étape suivante.','No devices found. Try again or choose manual add on the next step.')}</p>`:values.found?demo.map(m=>`<label class="check"><input name="discovered" value="${m.id}" type="checkbox" ${(values.selected||[]).includes(m.id)?'checked':''}> ${m.name} · ${m.id} · ${m.address}</label>`).join('')+(values.selected?.length?'':`<small>${t('Aucun équipement sélectionné.','No devices selected.')}</small>`):''}</div>`,
   `<p>${t('Nommez les équipements sélectionnés ou ajoutez une adresse manuellement.','Name selected devices or add an address manually.')}</p><div class="fields">${(values.selected||[]).map(id=>{const m=demo.find(item=>item.id===id);return `<label>${m.id} · ${m.model}<input name="alias-${id}" value="${esc(values['alias-'+id]||m.name)}" required></label>`}).join('')}<label class="check"><input name="manual" type="checkbox" ${values.manual?'checked':''}> ${t('Ajouter une machine manuellement','Add a machine manually')}</label>${values.manual?input('manualName',t('Nom de la machine','Machine name'))+input('address',t('Adresse fictive','Sample address')):''}${btn('setup-test',t('Tester les connexions simulées','Test simulated connections'),'activity')}</div>`,
-  `<div class="fields"><p>${t('Administrateur','Administrator')} <strong>${esc(values.admin)}</strong></p><p>${t('Authentification','Authentication')} <strong>${esc(values.auth||'local')}</strong></p><p>Web Push <strong>${values.push?t('Activé','On'):t('Désactivé','Off')}</strong> · ntfy <strong>${optionsText(values.ntfy)}</strong> · SMTP <strong>${values.smtp?t('Activé','On'):t('Désactivé','Off')}</strong></p><p>${t('Machines sélectionnées','Selected machines')} <strong>${(values.selected||[]).length+Number(Boolean(values.manual))}</strong></p><p class="notice">${t('La finalisation marque le bootstrap comme verrouillé dans la simulation.','Finishing marks bootstrap as locked in the simulation.')}</p></div>`
+  `<div class="fields"><p>${t('Administrateur','Administrator')} <strong>${esc(values.admin)}</strong></p><p>${t('Authentification','Authentication')} <strong>${esc(values.auth||'local')}</strong></p><p>Web Push <strong>${values.push?t('Activé','On'):t('Désactivé','Off')}</strong> · ntfy <strong>${optionsText(values.ntfy)}</strong> · SMTP <strong>${values.smtp?(values.smtpAuth?t('Avec authentification','With authentication'):t('Sans authentification','Without authentication')):t('Désactivé','Off')}</strong></p><p>${t('Machines sélectionnées','Selected machines')} <strong>${(values.selected||[]).length+Number(Boolean(values.manual))}</strong></p><p class="notice">${t('La finalisation marque le bootstrap comme verrouillé dans la simulation.','Finishing marks bootstrap as locked in the simulation.')}</p></div>`
  ];
  return `<section class="setup">${title(t('Première installation','First setup'),t('Assistant de démonstration · utilisez uniquement des données fictives.','Demo wizard · use fictitious values only.'),btn('nav:home',t('Atelier démo','Demo workshop'),'arrow','ghost'))}
  <ol class="steps">${steps.map((n,i)=>`<li data-number="${i+1}" ${i===state.step?'aria-current="step" class="current"':i<state.step?'class="done"':''}>${n}</li>`).join('')}</ol>
@@ -212,7 +215,7 @@ function transfer(index){
 }
 function cacheSetup(form){
  if(!form)return;
- for(const [key,value] of new FormData(form)){if(!['password','confirm','secret','discovered','push','smtp','manual'].includes(key))state.setup[key]=value}
+ for(const [key,value] of new FormData(form)){if(!['password','confirm','secret','smtpPassword','discovered','push','smtp','smtpAuth','manual'].includes(key))state.setup[key]=value}
  if(state.step===5)state.setup.selected=new FormData(form).getAll('discovered');
 }
 function submitSetup(form){
@@ -282,9 +285,9 @@ document.addEventListener('change',e=>{
  if(el.dataset.roleIndex&&state.role==='admin'){state.users[el.dataset.roleIndex].role=el.value;toast(t('Rôle modifié.','Role updated.'))}
  if(el.closest('[data-fields]')||el.closest('#setup-form')){
   if(el.name==='discovered'){cacheSetup(el.form);return}
-  if(el.name&&!['password','confirm','secret'].includes(el.name)){
+  if(el.name&&!['password','confirm','secret','smtpPassword'].includes(el.name)){
    state.setup[el.name]=el.type==='checkbox'?el.checked:el.value;
-   if(['auth','ntfy','smtp','manual'].includes(el.name)){render();app.querySelector('[name="'+el.name+'"]').focus()}
+   if(['auth','ntfy','smtp','smtpAuth','manual'].includes(el.name)){render();app.querySelector('[name="'+el.name+'"]').focus()}
   }
  }
 });
@@ -306,7 +309,7 @@ const reviewGroups=()=>[
   ['setup-oidc',t('Configuration Pocket ID / OIDC','Pocket ID / OIDC settings'),'setup',()=>presetSetup(2,{auth:'hybrid',issuer:'https://id.example.test',client:'fabcore'})],
   ['setup-ntfy',t('ntfy intégré','Built-in ntfy'),'setup',()=>presetSetup(3,{ntfy:'internal',push:true})],
   ['setup-ntfy-external',t('ntfy externe','External ntfy'),'setup',()=>presetSetup(3,{ntfy:'external',push:true})],
-  ['setup-smtp',t('SMTP configuré','SMTP enabled'),'setup',()=>presetSetup(4,{smtp:true,host:'smtp.example.test',sender:'atelier@example.test'})],
+  ['setup-smtp',t('SMTP avec authentification','SMTP with authentication'),'setup',()=>presetSetup(4,{smtp:true,smtpAuth:true,host:'smtp.example.test',sender:'atelier@example.test',smtpUsername:'atelier@example.test'})],
   ['setup-scanning',t('Scan en cours','Scan in progress'),'setup',()=>presetSetup(5,{scanning:true,found:false})],
   ['setup-no-result',t('Scan sans résultat','No devices discovered'),'setup',()=>presetSetup(5,{found:true,none:true,selected:[]})],
   ['setup-manual',t('Ajout manuel','Manual add'),'setup',()=>presetSetup(6,{manual:true})],
@@ -347,7 +350,7 @@ const reviewGroups=()=>[
   ['permissions',t('Rôles et permissions','Roles and permissions'),'permissions'],
   ['users-viewer',t('Utilisateurs en lecture seule','Read-only user list'),'users',()=>{state.role='viewer'}],
   ['settings',t('Paramètres généraux','General settings'),'settings'],
-  ['services',t('Paramètres des services','Service settings'),'services',()=>{state.setup.auth='hybrid';state.setup.ntfy='external';state.setup.smtp=true}],
+  ['services',t('Paramètres des services','Service settings'),'services',()=>{state.setup.auth='hybrid';state.setup.ntfy='external';state.setup.smtp=true;state.setup.smtpAuth=true}],
   ['connectors',t('Catalogue de connecteurs','Connector catalog'),'connectors'],
   ['connector',t('Associer un connecteur','Assign a connector'),'connectors',null,()=>clickDemo('connector:0')],
   ['more',t('Navigation mobile « Plus »','Mobile More navigation'),'more']
