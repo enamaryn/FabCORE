@@ -124,13 +124,35 @@ Définir ces variables dans l’environnement de FabCore, puis redémarrer le se
 
 [Documentation des clients Pocket ID](https://pocket-id.org/docs/setup/connect-an-app)
 
+## Notifications ntfy et SMTP
+
+La page **Notifications** s’ouvre après la création du premier administrateur et reste accessible depuis la barre supérieure. Choisir **Serveur interne**, **Serveur existant** ou **Configurer plus tard**. SMTP peut être activé indépendamment.
+
+Pour un **serveur interne**, lancer l’installateur sur le même serveur Debian ou Ubuntu que FabCore. Il installe le binaire depuis le dépôt APT signé de ntfy et démarre un service systemd dédié sur `127.0.0.1:8086`.
+
+```bash
+sudo bash scripts/install-ntfy.sh
+```
+
+Si FabCore s’exécute avec un autre compte ou un autre répertoire de données, préciser les deux valeurs. Exemple pour un LXC avec le service FabCore.
+
+```bash
+sudo bash scripts/install-ntfy.sh fabcore /var/lib/fabcore
+```
+
+Revenir dans **Notifications**, choisir **Serveur interne** puis enregistrer et envoyer un test. Le sujet est `fabcore`. Le compte de lecture et son mot de passe se trouvent dans `/etc/fabcore-ntfy/subscriber.txt` sur le serveur, accessible à root. Pour recevoir la notification sur un autre appareil, utiliser un tunnel vers le port 8086 ou configurer un reverse proxy HTTPS vers le service local. La publication est réservée au compte FabCore et la lecture au compte abonné.
+
+Pour un **serveur existant**, indiquer l’URL HTTPS, le sujet et le mode d’authentification. En mode SMTP, indiquer l’hôte, le port, STARTTLS ou TLS, l’expéditeur, le destinataire et les identifiants si le relais les exige. Enregistrer puis cliquer sur **Envoyer un test**. L’interface confirme l’acceptation par le serveur. Vérifier la réception sur l’appareil ou dans la boîte mail.
+
+[Dépôt APT ntfy](https://docs.ntfy.sh/install/) · [Accès aux sujets ntfy](https://docs.ntfy.sh/config/#access-control)
+
 ## Fonctionnement et limites
 
 - Pour la télémétrie, l’adaptateur interroge `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.
 - Le navigateur actualise la télémétrie toutes les deux secondes pendant une session de supervision. Les requêtes concurrentes partagent un résultat par machine et les erreurs de transport sont visibles.
 - Le POC prend en charge un administrateur local, jusqu’à seize observateurs et jusqu’à huit machines Klipper, Bambu P2S ou Elegoo CC1/CC2. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
 - Le fichier `.fabcore/state.json` est créé avec les droits `0600`. Il contient les clés API Moonraker et les codes d’accès LAN nécessaires à la reconnexion. Protéger le répertoire et ses sauvegardes comme des secrets. Exécuter une seule instance par répertoire de données.
-- Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes sur les autres modèles, la caméra Bambu, SMTP et les autres constructeurs restent pour les jalons suivants.
+- Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes sur les autres modèles, la caméra Bambu, les alertes automatiques et les autres constructeurs restent pour les jalons suivants.
 
 ## Paramètres d’exécution
 
