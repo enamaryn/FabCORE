@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { commandMoonraker, moonrakerOrigin, privateIPv4, readMoonraker } from './moonraker.mjs';
 import { createBambuMonitor } from './bambu.mjs';
-import { readElegoo } from './elegoo.mjs';
+import { identifyElegoo, readElegoo } from './elegoo.mjs';
 import { readElegooCC1 } from './elegoo-cc1.mjs';
 import { discoveryNetworks, scanNetwork } from './discovery.mjs';
 import { cameraURL, streamCamera } from './camera.mjs';
@@ -93,7 +93,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2 = readElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2 = readElegoo, identifyCC2 = identifyElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -219,16 +219,22 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       const machine = store.state.machines.find(({ id }) => id === camera[1]);
       const url = machine && cameraURL(machine);
       if (!url) return error(res, 404, 'camera-unsupported');
-      if (cameraStreams.size >= 8 || [...cameraStreams.values()].some(({ id }) => id === machine.id)) {
-        return error(res, 429, 'camera-busy');
+      const existingStream = [...cameraStreams].find(([, stream]) => stream.id === machine.id && !stream.signal.aborted);
+      if (existingStream && existingStream[1].owner !== activeSession) return error(res, 429, 'camera-busy');
+      if (!existingStream && cameraStreams.size >= 8) return error(res, 429, 'camera-busy');
+      if (existingStream) {
+        const [previous] = existingStream;
+        previous.abort();
+        cameraStreams.delete(previous);
       }
       const controller = new AbortController();
       const stop = () => controller.abort();
       const expires = setTimeout(stop, Math.max(0, viewer.expires - Date.now()));
-      cameraStreams.set(controller, { owner: activeSession, id: machine.id });
+      cameraStreams.set(controller, { owner: activeSession, id: machine.id, signal: controller.signal });
       res.once('close', stop);
       try {
-        const identity = await elegooReaders.get(machine.kind)(machine, { signal: controller.signal });
+        const identify = machine.kind === 'elegoo' ? identifyCC2 : elegooReaders.get(machine.kind);
+        const identity = await identify(machine, { signal: controller.signal });
         if (controller.signal.aborted) return res.destroy();
         if (identity.serial !== machine.serial || (identity.issue && identity.issue !== 'elegoo-print')) {
           return error(res, 502, 'camera-unavailable');

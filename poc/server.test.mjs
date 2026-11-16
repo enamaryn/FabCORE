@@ -89,6 +89,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
       assert.equal(network.cidr, '192.168.1.0/24');
       return [{ kind: 'elegoo', host: '192.168.1.55', serial: 'CC2TEST01' }];
     },
+    identifyCC2: async (machine) => ({ serial: machine.serial }),
     openCamera: async (url) => {
       assert.equal(url.port, '8080');
       assert.equal(url.pathname, '/video');

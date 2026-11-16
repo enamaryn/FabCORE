@@ -129,7 +129,8 @@ function liveDetail() {
   const m = machine(state.machine);
   if (!m) return liveFleet();
   const camera = ['elegoo', 'elegoo-cc1'].includes(m.kind)
-    ? `<section class="panel stack" style="margin-top:1rem">
+    ? `<section class="panel stack" style="margin-top:1rem" data-camera-panel>
+      <style>[data-camera-panel] [hidden]{display:none!important}</style>
       <h2>${t('Caméra en direct','Live camera')}</h2>
       <div data-live-camera></div>
       <p data-camera-status role="status" hidden></p>
