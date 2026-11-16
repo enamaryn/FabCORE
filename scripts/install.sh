@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+
+if ! command -v apt-get >/dev/null || ! command -v dpkg >/dev/null; then
+  echo 'Cet installateur nécessite Debian ou Ubuntu.' >&2
+  exit 1
+fi
+
+packages=()
+for package in ca-certificates curl ffmpeg; do
+  if [[ $(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true) != 'install ok installed' ]]; then
+    packages+=("$package")
+  fi
+done
+
+if (( ${#packages[@]} )); then
+  apt=(apt-get)
+  if (( EUID != 0 )); then
+    if ! command -v sudo >/dev/null; then
+      echo 'Installez ca-certificates, curl et ffmpeg depuis un compte administrateur, puis relancez cette commande.' >&2
+      exit 1
+    fi
+    apt=(sudo apt-get)
+  fi
+  "${apt[@]}" update
+  "${apt[@]}" install -y --no-install-recommends "${packages[@]}"
+fi
+
+if ! command -v node >/dev/null || ! command -v npm >/dev/null ||
+    ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)'; then
+  node_version=v24.22.3
+  case "$(dpkg --print-architecture)" in
+    amd64) node_arch=x64 ;;
+    arm64) node_arch=arm64 ;;
+    *) echo 'Installez Node.js 24 et npm pour cette architecture, puis relancez cette commande.' >&2; exit 1 ;;
+  esac
+
+  cache="${XDG_CACHE_HOME:-$HOME/.cache}/fabcore"
+  node_dist="node-${node_version}-linux-${node_arch}"
+  mkdir -p -- "$cache"
+  if [[ ! -x "$cache/$node_dist/bin/node" ]]; then
+    staging=$(mktemp -d "$cache/install.XXXXXXXX")
+    trap 'rm -rf -- "$staging"' EXIT
+    (
+      cd -- "$staging"
+      release_url="https://nodejs.org/dist/$node_version"
+      archive="$node_dist.tar.gz"
+      curl -fsSL --retry 2 -O "$release_url/SHASUMS256.txt" -O "$release_url/$archive"
+      awk -v archive="$archive" '$2 == archive { print }' SHASUMS256.txt | sha256sum --check --strict
+      tar -xzf "$archive"
+      mv -T -- "$node_dist" "$cache/$node_dist"
+    )
+    rm -rf -- "$staging"
+    trap - EXIT
+  fi
+  export PATH="$cache/$node_dist/bin:$PATH"
+fi
+
+npm ci --no-audit --no-fund
+ffmpeg -version >/dev/null
+exec npm start
