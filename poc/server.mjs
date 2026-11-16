@@ -13,13 +13,15 @@ import { discoveryNetworks, scanNetwork } from './discovery.mjs';
 import { cameraURL, streamCamera } from './camera.mjs';
 import { createOidc } from './oidc.mjs';
 import { internalNtfy, notificationSettings, publicNotifications, sendNotification } from './notifications.mjs';
+import { readXTool } from './xtool.mjs';
 import { openStore } from './store.mjs';
 
 const machineModels = {
   klipper: 'Klipper · Moonraker',
   bambu: 'Bambu Lab · P2S',
   elegoo: 'Elegoo · Centauri Carbon 2',
-  'elegoo-cc1': 'Elegoo · Centauri Carbon'
+  'elegoo-cc1': 'Elegoo · Centauri Carbon',
+  'xtool-m2': 'xTool · M2'
 };
 
 const derive = promisify(scrypt);
@@ -83,7 +85,7 @@ function monitor(readPrinter) {
         () => { entry.current = { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' }; }
       ).finally(() => {
         entry.checkedAt = new Date().toISOString();
-        entry.next = Date.now() + (machine.kind?.startsWith('elegoo') ? 7000 : 1000);
+        entry.next = Date.now() + (machine.kind === 'xtool-m2' ? 15000 : machine.kind?.startsWith('elegoo') ? 7000 : 1000);
         entry.pending = null;
       });
     }
@@ -107,9 +109,9 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
   const attempts = new Map();
   const elegooReaders = new Map([['elegoo', readCC2], ['elegoo-cc1', readCC1]]);
   const snapshot = monitor(async (machine) => {
-    const reader = elegooReaders.get(machine.kind);
+    const reader = machine.kind === 'xtool-m2' ? readXTool : elegooReaders.get(machine.kind);
     if (!reader) return readPrinter(machine);
-    const { serial, ...telemetry } = await reader(machine);
+    const { serial, fingerprint, ...telemetry } = await reader(machine);
     return telemetry;
   });
   const pendingCommands = new Set();
@@ -396,6 +398,9 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         if (privateIPv4(host) && (!serial || /^[a-zA-Z0-9_-]{6,64}$/.test(serial))) {
           connection = { origin: `ws://${host}:3030`, serial: serial || undefined };
         }
+      } else if (kind === 'xtool-m2') {
+        const host = value(data, 'host', 15).trim();
+        if (privateIPv4(host)) connection = { origin: `wss://${host}:28900`, serial: existing?.serial, fingerprint: existing?.fingerprint };
       } else if (kind === 'klipper') {
         const origin = moonrakerOrigin(value(data, 'origin', 200).trim());
         const apiKey = value(data, 'apiKey', 256).trim() || (data.apiKey === '' ? existing?.apiKey ?? '' : '');
@@ -404,22 +409,23 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       if (!name || !connection) return error(res, 400, 'machine-invalid');
       const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
       const testing = path === '/api/machines/test';
-      const elegooReader = elegooReaders.get(kind);
-      if (testing || elegooReader) {
+      const machineReader = kind === 'xtool-m2' ? readXTool : elegooReaders.get(kind);
+      if (testing || machineReader) {
         if (probes >= 2) return error(res, 429, 'probe-busy');
         probes++;
         const abort = new AbortController();
         res.once('close', () => abort.abort());
         try {
           if (testing && kind === 'bambu') return answer(res, 200, await bambu.probe(machine, abort.signal));
-          const result = elegooReader ? await elegooReader(machine, { signal: abort.signal }) : await readPrinter(machine);
+          const result = machineReader ? await machineReader(machine, { signal: abort.signal }) : await readPrinter(machine);
           if (abort.signal.aborted) return;
-          const ok = elegooReader
-            ? Boolean(result.serial && (!result.issue || result.issue === 'elegoo-print'))
+          const ok = machineReader
+            ? Boolean(result.serial && (!result.issue || result.issue === 'elegoo-print' || result.issue === 'xtool-device'))
             : !result.issue || result.issue === 'print';
           if (testing) return answer(res, 200, { ok, issue: ok ? null : result.issue });
           if (!ok) return error(res, 422, result.issue ?? 'elegoo-info');
           machine.serial = result.serial;
+          if (kind === 'xtool-m2') machine.fingerprint = result.fingerprint;
           if (existing && !store.state.machines.includes(existing)) return error(res, 409, 'machine-changed');
         } finally {
           probes--;

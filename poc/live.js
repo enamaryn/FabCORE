@@ -34,6 +34,10 @@ const problem = (code) => ({
 
 function liveIssue(issue) {
   return ({
+    'xtool-connection': t('FabCore ne peut pas joindre la M2 sur le port 28900.', 'FabCore cannot reach the M2 on port 28900.'),
+    'xtool-protocol': t('La M2 n’a pas renvoyé un état compatible WS-V2.', 'The M2 did not return a compatible WS-V2 status.'),
+    'xtool-identity': t('Le certificat ou le numéro de série de la M2 a changé.', 'The M2 certificate or serial number changed.'),
+    'xtool-device': t('La M2 signale une erreur.', 'The M2 reports an error.'),
     'cc1-discovery': t('CC1 introuvable par découverte locale. Vérifiez l’IP ou renseignez le MainboardID.', 'CC1 discovery failed. Check the IP or enter the MainboardID.'),
     'cc1-connection': t('FabCore ne peut pas joindre la CC1 sur le port 3030.', 'FabCore cannot reach the CC1 on port 3030.'),
     'cc1-report': t('Aucun état SDCP ne correspond à cette CC1. Vérifiez le MainboardID.', 'No SDCP status matches this CC1. Check the MainboardID.'),
@@ -115,14 +119,14 @@ function liveTelemetry(m) {
   return `<section class="panel stack">
       <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2><div class="row wrap">${badge(m.status)}${controls}${canManage ? btn('edit',t('Modifier la machine','Edit machine')) : ''}</div></div>
       ${m.issue?`<p class="notice">${liveIssue(m.issue)}</p>`:''}
-      <div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
-      <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>
+      ${m.kind === 'xtool-m2' ? '' : `<div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
+      <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>`}
       <small>${t('Dernière vérification','Last check')} · <span id="last-check">${esc(translatableTime)}</span></small>
-    </section><section class="panel stack">
+    </section>${m.kind === 'xtool-m2' ? '' : `<section class="panel stack">
       <h2>${t('Télémétrie','Telemetry')}</h2>
       <div class="row between"><span>${t('Buse','Nozzle')}</span><strong>${m.nozzle===null?'—':m.nozzle+' °C'}</strong></div>
       <div class="row between"><span>${t('Plateau','Bed')}</span><strong>${m.bed===null?'—':m.bed+' °C'}</strong></div>
-    </section>`;
+    </section>`}`;
 }
 
 function liveDetail() {
@@ -351,24 +355,25 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
   const isBambu = kind === 'bambu';
   const isElegoo = kind === 'elegoo';
   const isCC1 = kind === 'elegoo-cc1';
+  const isM2 = kind === 'xtool-m2';
   dialog.innerHTML = `<form id="add-machine" class="stack" autocomplete="off">
     <h2>${existing ? t('Modifier une machine','Edit a machine') : t('Ajouter une machine','Add a machine')}</h2>
     ${existing ? `<input type="hidden" name="id" value="${esc(existing.id)}"><input type="hidden" name="kind" value="${kind}">` : ''}
     ${existing ? '' : btn('discover',t('Détecter sur le réseau','Discover on network'))}
     <div class="fields">
-      ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind"><option value="klipper" ${kind === 'klipper' ? 'selected' : ''}>Klipper · Moonraker</option><option value="bambu" ${isBambu ? 'selected' : ''}>Bambu Lab · P2S</option><option value="elegoo" ${isElegoo ? 'selected' : ''}>Elegoo · Centauri Carbon 2</option><option value="elegoo-cc1" ${isCC1 ? 'selected' : ''}>Elegoo · Centauri Carbon</option></select></label>`}
+      ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind"><option value="klipper" ${kind === 'klipper' ? 'selected' : ''}>Klipper · Moonraker</option><option value="bambu" ${isBambu ? 'selected' : ''}>Bambu Lab · P2S</option><option value="elegoo" ${isElegoo ? 'selected' : ''}>Elegoo · Centauri Carbon 2</option><option value="elegoo-cc1" ${isCC1 ? 'selected' : ''}>Elegoo · Centauri Carbon</option><option value="xtool-m2" ${isM2 ? 'selected' : ''}>xTool · M2</option></select></label>`}
       <label>${t('Nom de la machine','Machine name')}<input name="name" required maxlength="80" value="${esc(name)}"></label>
-      ${isBambu || isElegoo || isCC1 ? `
+      ${isBambu || isElegoo || isCC1 || isM2 ? `
       <label>${t('Adresse IPv4 locale','Local IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : esc(detected?.host ?? '')}"></label>
       ${isBambu ? `<label>${t('Numéro de série','Serial number')}<input name="serial" required maxlength="32" value="${esc(existing?.serial ?? detected?.serial ?? '')}"></label>` : ''}
       ${isCC1 && !existing ? `<label>${t('MainboardID (facultatif)', 'MainboardID (optional)')}<input name="serial" maxlength="64" value="${esc(detected?.serial ?? '')}"></label>` : ''}
-      ${isCC1 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
+      ${isCC1 || isM2 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
       ` : `
       <label>${t('Adresse Moonraker','Moonraker address')}<input name="origin" type="url" placeholder="http://192.168.1.50:7125" required maxlength="200" value="${esc(existing?.origin ?? detected?.origin ?? '')}"></label>
       <label>${t('Clé API Moonraker (facultative)','Moonraker API key (optional)')}<input name="apiKey" type="password" maxlength="256" autocomplete="new-password"></label>
       `}
     </div>
-    ${existing && !isCC1 ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
+    ${existing && !isCC1 && !isM2 ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
     <p class="error" role="alert"></p>
     <p role="status" hidden></p>
     <div class="row wrap">${btn('close',t('Annuler','Cancel'))}<button type="submit" value="test">${t('Tester la connexion','Test connection')}</button><button class="primary" type="submit" value="save">${existing ? t('Enregistrer','Save') : t('Ajouter','Add')}</button></div>
