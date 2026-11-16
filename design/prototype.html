@@ -11,6 +11,7 @@
 @media(max-width:720px){.layout{display:block}.sidebar{display:none}.top{padding:8px 13px;min-height:57px}.area{padding:21px 13px 85px}.mobile{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;bottom:0;left:0;right:0;z-index:3;background:var(--side);border-top:1px solid var(--line);padding:3px 4px max(3px,env(safe-area-inset-bottom));gap:2px}.mobile button{flex-direction:column;justify-content:center;gap:2px;padding:4px;font-size:10px;min-height:48px}.mobile .ico{width:17px;height:17px}.toast{bottom:66px}.hero{align-items:flex-start;flex-wrap:wrap}.stats{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:17px;gap:7px}.stat{padding:10px}.cards{gap:8px}.machine{padding:10px}.machine .machine-mark{display:none}.machine .row:first-child{flex-wrap:wrap}.steps li{font-size:0}.steps li::after{content:attr(data-number);font-size:12px}.hide-mobile{display:none}}
 @media(max-width:365px){.cards{grid-template-columns:1fr}.crumb span{display:none}}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s,color .15s}}
+.review-area{max-width:1750px}.review-grid{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px;align-items:start}.review-nav{max-height:78vh;overflow:auto}.review-nav section{display:grid;margin-bottom:12px}.review-nav h2{font-size:15px;padding:7px 6px}.review-preview{position:sticky;top:10px}.review-frame{width:100%;height:75vh;min-height:520px;display:block;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg)}.review-frame.mobile{width:min(100%,390px);position:static;margin:auto;padding:0}.feed{position:relative}.fixture-progress{margin-top:6px}@media(max-width:720px){.review-grid{grid-template-columns:1fr}.review-nav{max-height:245px}.review-preview{position:static}.review-frame{height:67vh;min-height:450px}}
 </style>
 </head>
 <body><div id="app"></div><dialog id="dialog"></dialog><div id="status" role="status" aria-live="polite"></div>
@@ -49,9 +50,9 @@ const demo=[
  {id:'KL-01',name:'Ender 3 · Klipper',model:'Moonraker / Klipper',address:'192.0.2.51',status:'offline',progress:0,file:'',eta:'',nozzle:null,bed:null,camera:false,control:false},
  {id:'MK4-01',name:'Prusa MK4S',model:'PrusaLink',address:'192.0.2.61',status:'ready',progress:0,file:'',eta:'',nozzle:24,bed:24,camera:false,control:false}
 ];
-const state={lang:pref('fabcore-lang','fr'),theme:pref('fabcore-theme','dark'),page:'home',machine:'P2S-01',machines:structuredClone(demo),layout:'grid',filter:'all',role:'admin',step:0,setup:{},files:['support-capteur.3mf','boitier-abs.gcode','guide-cable.gcode'],users:[{name:'Camille Martin',email:'camille@example.test',role:'admin'},{name:'Alex Bernard',email:'alex@example.test',role:'operator'},{name:'Sam Petit',email:'sam@example.test',role:'viewer'}],events:[{id:'CC2-02',kind:'error',fr:'Fabrication interrompue',en:'Print interrupted',time:'09:42'},{id:'K1-01',kind:'done',fr:'Fabrication terminée',en:'Print completed',time:'09:31'},{id:'KL-01',kind:'offline',fr:'Connexion perdue',en:'Connection lost',time:'09:18'}],unread:true};
+let state={lang:pref('fabcore-lang','fr'),theme:pref('fabcore-theme','dark'),page:'home',machine:'P2S-01',machines:structuredClone(demo),layout:'grid',filter:'all',role:'admin',step:0,setup:{},files:['support-capteur.3mf','boitier-abs.gcode','guide-cable.gcode'],users:[{name:'Camille Martin',email:'camille@example.test',role:'admin'},{name:'Alex Bernard',email:'alex@example.test',role:'operator'},{name:'Sam Petit',email:'sam@example.test',role:'viewer'}],events:[{id:'CC2-02',kind:'error',fr:'Fabrication interrompue',en:'Print interrupted',time:'09:42'},{id:'K1-01',kind:'done',fr:'Fabrication terminée',en:'Print completed',time:'09:31'},{id:'KL-01',kind:'offline',fr:'Connexion perdue',en:'Connection lost',time:'09:18'}],unread:true};
 const app=document.querySelector('#app'), dialog=document.querySelector('#dialog');
-const pages=()=>({home:['grid',t('Vue d’ensemble','Overview')],machines:['machine',t('Machines','Machines')],cameras:['camera',t('Caméras','Cameras')],files:['file',t('Fichiers','Files')],notifications:['bell','Notifications'],history:['history',t('Historique','History')],users:['users',t('Utilisateurs','Users')],connectors:['plug',t('Connecteurs','Connectors')],settings:['control',t('Paramètres','Settings')],more:['menu',t('Plus','More')],setup:['plug',t('Première installation','First setup')],login:['users',t('Connexion','Sign in')],detail:['machine',t('Machine','Machine')]});
+const pages=()=>({home:['grid',t('Vue d’ensemble','Overview')],machines:['machine',t('Machines','Machines')],cameras:['camera',t('Caméras','Cameras')],files:['file',t('Fichiers','Files')],notifications:['bell','Notifications'],history:['history',t('Historique','History')],users:['users',t('Utilisateurs','Users')],connectors:['plug',t('Connecteurs','Connectors')],settings:['control',t('Paramètres','Settings')],more:['menu',t('Plus','More')],setup:['plug',t('Première installation','First setup')],login:['users',t('Connexion','Sign in')],detail:['machine',t('Machine','Machine')],review:['list',t('Revue des écrans','Screen review')],jobs:['activity',t('Fabrications','Jobs')],permissions:['users',t('Rôles et permissions','Roles and permissions')],services:['plug','Services'],family:['machine',t('Famille de machines','Machine family')],camera:['camera',t('Caméra','Camera')],discover:['activity',t('Découverte réseau','Network discovery')]});
 const roles=()=>({admin:t('Administrateur','Administrator'),operator:t('Opérateur','Operator'),viewer:t('Observateur','Viewer')});
 const states=()=>({printing:[t('En fabrication','Printing'),'info'],ready:[t('Disponible','Ready'),'good'],error:[t('Erreur','Error'),'bad'],done:[t('Terminée','Completed'),'good'],offline:[t('Hors ligne','Offline'),'neutral'],paused:[t('En pause','Paused'),'warn'],connecting:[t('Connexion…','Connecting…'),'info']});
 const machine=(id)=>state.machines.find(m=>m.id===id);
@@ -65,11 +66,12 @@ const title=(name,sub='',action='')=>`<div class="hero"><div><h1 tabindex="-1">$
 function render(focus=false){
  document.documentElement.lang=state.lang;
  document.documentElement.dataset.theme=state.theme==='system'?(media.matches?'light':'dark'):state.theme;
+ if(state.page==='review'){renderReview();if(focus)app.querySelector('h1')?.focus();return}
  const p=pages();
  const full=state.page==='setup'||state.page==='login';
  const current=state.page==='detail'?label(state.machine):p[state.page][1];
- const content={home:dashboard,machines:machines,cameras:cameras,files:files,notifications:notifications,history:history,users:users,connectors:connectors,settings:settings,more:more,setup:setup,login:login,detail:detail};
- app.innerHTML=`<a class="skip" href="#content">${t('Aller au contenu','Skip to content')}</a><div class="${full?'':'layout'}">${full?'':`<aside class="sidebar">${brand()}<nav aria-label="${t('Navigation principale','Main navigation')}">${['home','machines','cameras','files','notifications','history','users','connectors','settings'].map(id=>nav(id)).join('')}</nav><div class="sidefoot"><small class="signal">● ${t('Environnement de démonstration','Demo environment')}</small>${nav('setup')}</div></aside>`}
+ const content={home:dashboard,machines:machines,cameras:cameras,files:files,notifications:notifications,history:history,users:users,connectors:connectors,settings:settings,more:more,setup:setup,login:login,detail:detail,jobs:jobs,permissions:permissions,services:services,family:family,camera:machineCamera,discover:discoveryPage};
+ app.innerHTML=`<a class="skip" href="#content">${t('Aller au contenu','Skip to content')}</a><div class="${full?'':'layout'}">${full?'':`<aside class="sidebar">${brand()}<nav aria-label="${t('Navigation principale','Main navigation')}">${['home','machines','cameras','files','notifications','history','users','connectors','settings'].map(id=>nav(id)).join('')}</nav><div class="sidefoot"><small class="signal">● ${t('Environnement de démonstration','Demo environment')}</small>${nav('setup')}${nav('review')}</div></aside>`}
  <div><header class="top"><div class="crumb">${full?brand():`${icon(p[state.page][0])}<span>${esc(current)}</span>`}</div><div class="row">
  ${!full?`<span class="signal hide-mobile">${t('Simulation','Simulation')}</span>`:''}
  ${btn('lang',state.lang==='fr'?'EN':'FR','','ghost',`aria-label="${state.lang==='fr'?'Switch to English':'Passer en français'}"`)}
@@ -99,11 +101,16 @@ function dashboard(){
  <div class="main-grid"><section><div class="row between section-head"><h2>${t('Machines','Machines')}</h2>${btn('nav:machines',t('Tout le parc','View fleet'),'arrow','ghost')}</div><div class="cards">${state.machines.slice(0,6).map(card).join('')||`<p class="muted">${t('Ajoutez une machine pour commencer.','Add a machine to get started.')}</p>`}</div></section>
  <section class="panel"><div class="row between section-head"><h2>${t('Activité récente','Recent activity')}</h2>${icon('activity')}</div>${listEvents(state.events.slice(0,4))}<div style="margin-top:12px">${btn('nav:history',t('Voir l’historique','View history'),'arrow','ghost')}</div></section></div>`;
 }
+function fleetList(items){
+ return `<div class="panel table"><table><thead><tr><th>${t('Machine','Machine')}</th><th>${t('État','Status')}</th><th class="hide-mobile">${t('Progression','Progress')}</th><th>${t('Ouvrir','Open')}</th></tr></thead>
+ <tbody>${items.map(m=>`<tr><td><strong>${esc(m.name)}</strong><br><small>${esc(m.id)} · ${esc(m.model)}</small></td><td>${badge(m.status)}</td><td class="hide-mobile">${m.progress} %<progress class="fixture-progress" value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress></td><td>${btn('machine:'+m.id,'','arrow','ghost',`aria-label="${esc(m.name)}"`)}</td></tr>`).join('')}</tbody></table></div>`;
+}
 function machines(){
+ if(state.reviewStatus)return title(t('Machines','Machines'))+`<section class="panel stack" role="status"><h2>${state.reviewStatus==='error'?t('Impossible de charger le parc','Could not load the fleet'):t('Chargement du parc…','Loading fleet…')}</h2>${state.reviewStatus==='error'?btn('fleet-retry',t('Réessayer','Try again'),'activity','primary'):'<progress aria-label="Loading"></progress>'}</section>`;
  const visible=state.machines.filter(m=>state.filter==='all'||m.status===state.filter);
  return `${title(t('Machines','Machines'),t('Filtrez le parc par état. Chaque équipement conserve son identifiant.','Filter the fleet by status. Each device keeps its own identifier.'),state.role==='viewer'?'':btn('add',t('Ajouter une machine','Add machine'),'plus','primary'))}
- <div class="row between wrap section-head"><label class="row labelled">${t('État','Status')}<select id="filter">${options({all:t('Tous les états','All statuses'),...Object.fromEntries(Object.entries(states()).map(([k,v])=>[k,v[0]]))},state.filter)}</select></label><div class="row">${btn('view:grid',t('Grille','Grid'),'grid','ghost',`aria-pressed="${state.layout==='grid'}"`)}${btn('view:list',t('Liste','List'),'list','ghost',`aria-pressed="${state.layout==='list'}"`)}</div></div>
- <div class="cards ${state.layout}">${visible.map(card).join('')||`<div class="panel">${t('Aucune machine pour cet état.','No machines match this status.')}</div>`}</div>`;
+ <div class="row between wrap section-head"><label class="row labelled">${t('État','Status')}<select id="filter">${options({all:t('Tous les états','All statuses'),...Object.fromEntries(Object.entries(states()).map(([k,v])=>[k,v[0]]))},state.filter)}</select></label><div class="row">${btn('view:grid',t('Grille','Grid'),'grid','ghost',`aria-pressed="${state.layout==='grid'}"`)}${state.role==='viewer'?'':btn('nav:discover',t('Découvrir','Discover'),'activity','ghost')}${btn('nav:jobs',t('Fabrications','Jobs'),'activity','ghost')}${btn('view:list',t('Liste','List'),'list','ghost',`aria-pressed="${state.layout==='list'}"`)}</div></div>
+ ${visible.length?(state.layout==='list'?fleetList(visible):`<div class="cards">${visible.map(card).join('')}</div>`):`<div class="panel">${state.machines.length?t('Aucune machine pour cet état.','No machines match this status.'):t('Le parc est vide. Ajoutez une machine ou lancez une découverte réseau.','Your fleet is empty. Add a machine or run network discovery.')}</div>`}`;
 }
 const cameraArt=`<svg viewBox="0 0 320 230" aria-hidden="true"><defs><linearGradient id="frame" x2="1" y2="1"><stop stop-color="#789184"/><stop offset="1" stop-color="#293c32"/></linearGradient></defs><path d="M39 30h242v165H39z" fill="#18271f" stroke="url(#frame)" stroke-width="13"/><path d="M53 57h214M53 76h214M74 48v120m174-120v120" fill="none" stroke="#617268" stroke-width="6"/><path d="M71 161h178l20 27H51z" fill="#53675b"/><path d="M85 165h151m-155 7h160m-166 7h172" stroke="#28392f" stroke-width="2"/><path d="M145 65h30v28l-15 12-15-12z" fill="#a5b4ab"/><path d="M131 150v-30l29-13 29 13v30l-29 13z" fill="#55d982"/><path d="m131 120 29 14 29-14m-29 14v29" fill="none" stroke="#21623b" stroke-width="3"/></svg>`;
 function feed(m){
@@ -118,16 +125,16 @@ function detail(){
  return `${title(esc(m.name),`${esc(m.model)} · ${esc(m.id)} · ${esc(m.address)}`,btn('nav:machines',t('Retour au parc','Back to fleet'),'grid','ghost'))}
  <div class="main-grid"><section class="panel stack"><div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2>${badge(m.status)}</div>
  ${m.status==='error'?`<p class="error" role="status">${t('Perte de communication pendant la fabrication.','Communication lost during printing.')}</p>`:''}
- ${feed(m)}<div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div><progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>
+ ${feed(m)}${m.camera?btn('camera:'+m.id,t('Agrandir la caméra','Expand camera'),'camera','ghost'):''}<div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div><progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>
  <div class="row wrap">${!controls?`<p class="muted">${reason}</p>`:m.status==='printing'||m.status==='paused'?btn('command:'+(m.status==='printing'?'pause':'resume'),m.status==='printing'?t('Mettre en pause','Pause'):t('Reprendre','Resume'),'control','primary')+btn('command:stop',t('Annuler la fabrication','Cancel print'),'alert','danger'):btn('transfer',t('Choisir un fichier','Choose a file'),'file','primary')}</div></section>
  <aside class="stack"><section class="panel stack"><h2>${t('Télémétrie','Telemetry')}</h2><div class="row between"><span>${t('Buse','Nozzle')}</span><strong>${m.nozzle===null?'—':m.nozzle+' °C'}</strong></div><div class="row between"><span>${t('Plateau','Bed')}</span><strong>${m.bed===null?'—':m.bed+' °C'}</strong></div><div class="row between"><span>${t('Temps restant','Time remaining')}</span><strong>${esc(m.eta)||'—'}</strong></div></section><section class="panel"><h2>${t('Historique machine','Machine history')}</h2>${listEvents(state.events.filter(e=>e.id===m.id))}</section></aside></div>`;
 }
-function cameras(){return title(t('Caméras','Cameras'),t('Aperçus d’atelier simulés.','Simulated workshop previews.'))+`<div class="cards">${state.machines.map(m=>`<section class="panel stack"><h2>${esc(m.name)}</h2>${feed(m)}${btn('machine:'+m.id,t('Voir la machine','View machine'),'arrow','ghost')}</section>`).join('')}</div>`}
-function files(){return title(t('Fichiers','Files'),t('Bibliothèque de démonstration.','Demo file library.'),state.role==='viewer'?'':btn('file-add',t('Ajouter un fichier','Add file'),'plus','primary'))+`<section class="panel table"><table><thead><tr><th>${t('Fichier','File')}</th><th>${t('Action','Action')}</th></tr></thead><tbody>${state.files.map((f,i)=>`<tr><td>${esc(f)}</td><td>${state.role==='viewer'?'—':btn('transfer:'+i,t('Transférer','Transfer'),'arrow','ghost')}</td></tr>`).join('')}</tbody></table></section>`}
+function cameras(){return title(t('Caméras','Cameras'),t('Aperçus d’atelier simulés.','Simulated workshop previews.'))+`<div class="cards">${state.machines.map(m=>`<section class="panel stack"><h2>${esc(m.name)}</h2>${feed(m)}${btn('camera:'+m.id,t('Ouvrir la caméra','Open camera'),'camera','ghost')}</section>`).join('')}</div>`}
+function files(){return title(t('Fichiers','Files'),t('Bibliothèque de démonstration.','Demo file library.'),state.role==='viewer'?'':btn('file-add',t('Ajouter un fichier','Add file'),'plus','primary'))+`<section class="panel table">${state.files.length?'':`<p class="notice">${t('Aucun fichier dans la bibliothèque.','No files in the library.')}</p>`}<table><thead><tr><th>${t('Fichier','File')}</th><th>${t('Action','Action')}</th></tr></thead><tbody>${state.files.map((f,i)=>`<tr><td>${esc(f)}</td><td>${state.role==='viewer'?'—':btn('transfer:'+i,t('Transférer','Transfer'),'arrow','ghost')}</td></tr>`).join('')}</tbody></table></section>`}
 function notifications(){return title('Notifications',t('Alertes de l’atelier et préférences de réception.','Workshop alerts and delivery preferences.'),btn('read',t('Tout marquer comme lu','Mark all as read'),'check','ghost'))+`<div class="main-grid"><section class="panel"><h2>${state.unread?t('Alertes non lues','Unread alerts'):t('Alertes lues','Read alerts')}</h2>${listEvents()}</section><section class="panel stack"><h2>${t('Canaux','Channels')}</h2>${fields('alerts')}${btn('alerts-save',t('Enregistrer','Save'),'check','primary')}</section></div>`}
 function history(){return title(t('Historique','History'),t('Événements et actions simulés.','Simulated events and actions.'))+`<section class="panel">${listEvents()}</section>`}
-function users(){return title(t('Utilisateurs','Users'),t('Droits d’accès de l’équipe atelier.','Workshop team permissions.'),state.role==='admin'?btn('user-add',t('Ajouter un utilisateur','Add user'),'plus','primary'):'')+`<section class="panel table"><table><thead><tr><th>${t('Utilisateur','User')}</th><th>${t('Rôle','Role')}</th></tr></thead><tbody>${state.users.map((u,i)=>`<tr><td><strong>${esc(u.name)}</strong><br><small>${esc(u.email)}</small></td><td>${i&&state.role==='admin'?`<select data-role-index="${i}" aria-label="${esc(u.name)}">${options(roles(),u.role)}</select>`:esc(roles()[u.role])}</td></tr>`).join('')}</tbody></table></section><p class="notice" style="margin-top:12px">${t('Administrateur : configuration et comptes. Opérateur : pilotage et fichiers. Observateur : consultation.','Administrator: configuration and accounts. Operator: controls and files. Viewer: read only.')}</p>`}
-function connectors(){return title(t('Connecteurs','Connectors'),t('Catalogue et capacités à valider par modèle.','Catalog and capabilities pending model validation.'))+`<div class="cards">${['Bambu Lab','Elegoo','Creality','Moonraker / Klipper','PrusaLink','OctoPrint','MSLA / Resin','GRBL / Laser','CNC'].map((n,i)=>`<section class="panel stack"><div class="row between"><h2>${n}</h2><span class="badge ${i<6?'info':'neutral'}">${i<6?t('Aperçu FDM','FDM preview'):t('À l’étude','Planned')}</span></div>${btn('connector:'+i,t('Voir les capacités','View capabilities'),'plug','ghost')}</section>`).join('')}</div>`}
+function users(){return title(t('Utilisateurs','Users'),t('Droits d’accès de l’équipe atelier.','Workshop team permissions.'),`<div class="row wrap">${btn('nav:permissions',t('Permissions','Permissions'),'users','ghost')}${state.role==='admin'?btn('user-add',t('Ajouter un utilisateur','Add user'),'plus','primary'):''}</div>`)+`<section class="panel table"><table><thead><tr><th>${t('Utilisateur','User')}</th><th>${t('Rôle','Role')}</th></tr></thead><tbody>${state.users.map((u,i)=>`<tr><td><strong>${esc(u.name)}</strong><br><small>${esc(u.email)}</small></td><td>${i&&state.role==='admin'?`<select data-role-index="${i}" aria-label="${esc(u.name)}">${options(roles(),u.role)}</select>`:esc(roles()[u.role])}</td></tr>`).join('')}</tbody></table></section><p class="notice" style="margin-top:12px">${t('Administrateur : configuration et comptes. Opérateur : pilotage et fichiers. Observateur : consultation.','Administrator: configuration and accounts. Operator: controls and files. Viewer: read only.')}</p>`}
+function connectors(){return title(t('Connecteurs','Connectors'),t('Catalogue et capacités à valider par modèle.','Catalog and capabilities pending model validation.'))+`<div class="cards">${['Bambu Lab','Elegoo','Creality','Moonraker / Klipper','PrusaLink','OctoPrint','MSLA / Resin','GRBL / Laser','CNC'].map((n,i)=>`<section class="panel stack"><div class="row between"><h2>${n}</h2><span class="badge ${i<6?'info':'neutral'}">${i<6?t('Aperçu FDM','FDM preview'):t('À l’étude','Planned')}</span></div>${i<6?btn('connector:'+i,t('Voir les capacités','View capabilities'),'plug','ghost'):btn('family:'+['resin','laser','cnc'][i-6],t('Ouvrir l’aperçu','Open preview'),'machine','ghost')}</section>`).join('')}</div>`}
 function fields(kind){
  const list={
  auth:`<label>${t('Mode de connexion','Sign-in mode')}<select name="auth">${options({local:t('Compte local','Local account'),oidc:'OIDC · Pocket ID',hybrid:t('Hybride · local + OIDC','Hybrid · local + OIDC')},state.setup.auth||'local')}</select></label>${state.setup.auth&&state.setup.auth!=='local'?`<label>${t('URL de l’émetteur OIDC','OIDC issuer URL')}<input name="issuer" type="url" placeholder="https://id.example.test" value="${esc(state.setup.issuer)}" required></label><label>Client ID<input name="client" value="${esc(state.setup.client)}" required></label><label>${t('Secret client (fictif)','Client secret (demo)')}<input type="password" name="secret" autocomplete="off" required></label>`:''}`,
@@ -135,8 +142,8 @@ function fields(kind){
  smtp:`<label class="check"><input name="smtp" type="checkbox" ${state.setup.smtp?'checked':''}> ${t('Configurer SMTP','Configure SMTP')}</label>${state.setup.smtp?`<label>${t('Hôte','Host')}<input name="host" placeholder="smtp.example.test" value="${esc(state.setup.host)}" required></label><label>Port<input name="port" type="number" min="1" max="65535" value="${esc(state.setup.port||587)}" required></label><label>${t('Expéditeur','Sender')}<input name="sender" type="email" placeholder="atelier@example.test" value="${esc(state.setup.sender)}" required></label>`:''}`};
  return `<div class="fields" data-fields="${kind}">${list[kind]}</div>`;
 }
-function settings(){return title(t('Paramètres','Settings'),t('Préférences et accès à la démonstration.','Preferences and demo access.'))+`<div class="cards"><section class="panel stack"><h2>${t('Apparence et langue','Appearance and language')}</h2><div class="fields"><label>${t('Thème','Theme')}<select id="theme">${options({dark:t('Sombre','Dark'),light:t('Clair','Light'),system:t('Système','System')},state.theme)}</select></label><label>${t('Langue','Language')}<select id="language">${options({fr:'Français',en:'English'},state.lang)}</select></label><label>${t('Rôle de démonstration','Demo role')}<select id="role">${options(roles(),state.role)}</select></label></div></section><section class="panel stack"><h2>${t('Accès et installation','Access and setup')}</h2>${btn('nav:setup',t('Assistant de première installation','First setup wizard'),'plug','ghost')}${btn('nav:login',t('Se déconnecter','Sign out'),'arrow','ghost')}</section></div>`}
-function more(){return title(t('Plus','More'))+`<nav class="panel" aria-label="${t('Autres rubriques','More sections')}">${['cameras','files','history','users','connectors','settings','setup'].map(id=>nav(id)).join('')}</nav>`}
+function settings(){return title(t('Paramètres','Settings'),t('Préférences et accès à la démonstration.','Preferences and demo access.'))+`<div class="cards"><section class="panel stack"><h2>${t('Apparence et langue','Appearance and language')}</h2><div class="fields"><label>${t('Thème','Theme')}<select id="theme">${options({dark:t('Sombre','Dark'),light:t('Clair','Light'),system:t('Système','System')},state.theme)}</select></label><label>${t('Langue','Language')}<select id="language">${options({fr:'Français',en:'English'},state.lang)}</select></label><label>${t('Rôle de démonstration','Demo role')}<select id="role">${options(roles(),state.role)}</select></label></div></section><section class="panel stack"><h2>${t('Accès et installation','Access and setup')}</h2>${btn('nav:setup',t('Assistant de première installation','First setup wizard'),'plug','ghost')}${btn('nav:services',t('Services et intégrations','Services and integrations'),'plug','ghost')}${btn('nav:review',t('Revue des écrans','Screen review'),'list','ghost')}${btn('nav:login',t('Se déconnecter','Sign out'),'arrow','ghost')}</section></div>`}
+function more(){return title(t('Plus','More'))+`<nav class="panel" aria-label="${t('Autres rubriques','More sections')}">${['cameras','jobs','files','history','users','connectors','settings','setup','review'].map(id=>nav(id)).join('')}</nav>`}
 const stepNames=()=>[t('Activation','Activation'),t('Administrateur','Administrator'),t('Connexion','Sign-in'),t('Notifications','Notifications'),'SMTP',t('Découverte','Discovery'),t('Machines','Machines'),t('Vérification','Review')];
 function setup(){
  if(state.finished)return `<section class="setup">${title(t('Installation terminée','Setup complete'),t('Le bootstrap simulé est verrouillé.','Simulated bootstrap is locked.'))}<div class="panel row wrap">${btn('nav:home',t('Revenir à l’atelier','Back to workshop'),'arrow','primary')}${btn('setup-reset',t('Rejouer la démonstration','Replay demo'),'history','ghost')}</div></section>`;
@@ -147,29 +154,30 @@ function setup(){
   `<p>${t('En installation réelle, le jeton se récupère dans le terminal du serveur. Pour cette maquette, utilisez le jeton fictif ci-dessous.','On a real installation, retrieve the token from the server terminal. Use the sample token below for this mockup.') } <code>FABCORE-DEMO</code></p><div class="fields">${input('token',t('Jeton d’activation','Activation token'),'text','required autocomplete="off"')}</div>`,
   `<p>${t('Créez le compte local de récupération. Utilisez des identifiants fictifs.','Create the local recovery account. Use fictitious credentials.')}</p><div class="fields">${input('admin',t('Nom d’affichage','Display name'))}${input('username',t('Identifiant','Username'))}${input('email',t('Adresse e-mail','Email address'),'email')}${input('password',t('Mot de passe fictif','Demo password'),'password','required minlength="8" autocomplete="new-password"')}${input('confirm',t('Confirmer le mot de passe','Confirm password'),'password','required autocomplete="new-password"')}</div>`,
   fields('auth'),fields('alerts'),fields('smtp'),
-  `<p>${t('Le scan fictif cherche des machines FDM. Les deux Centauri Carbon 2 ont des identifiants distincts.','The simulated scan finds FDM printers. Both Centauri Carbon 2 units have different identifiers.')}</p><div class="fields">${btn('scan',values.scanning?t('Recherche…','Searching…'):t('Simuler un scan réseau','Simulate discovery'),'activity','ghost',values.scanning?'disabled':'')}${values.found?demo.map(m=>`<label class="check"><input name="discovered" value="${m.id}" type="checkbox" ${(values.selected||[]).includes(m.id)?'checked':''}> ${m.name} · ${m.id} · ${m.address}</label>`).join('')+(values.selected?.length?'':`<small>${t('Aucun équipement sélectionné.','No devices selected.')}</small>`):''}</div>`,
+  `<p>${t('Le scan fictif cherche des machines FDM. Les deux Centauri Carbon 2 ont des identifiants distincts.','The simulated scan finds FDM printers. Both Centauri Carbon 2 units have different identifiers.')}</p><div class="fields">${btn('scan',values.scanning?t('Recherche…','Searching…'):t('Simuler un scan réseau','Simulate discovery'),'activity','ghost',values.scanning?'disabled':'')}${values.found&&values.none?`<p class="notice">${t('Aucune machine détectée. Réessayez ou choisissez l’ajout manuel à l’étape suivante.','No devices found. Try again or choose manual add on the next step.')}</p>`:values.found?demo.map(m=>`<label class="check"><input name="discovered" value="${m.id}" type="checkbox" ${(values.selected||[]).includes(m.id)?'checked':''}> ${m.name} · ${m.id} · ${m.address}</label>`).join('')+(values.selected?.length?'':`<small>${t('Aucun équipement sélectionné.','No devices selected.')}</small>`):''}</div>`,
   `<p>${t('Nommez les équipements sélectionnés ou ajoutez une adresse manuellement.','Name selected devices or add an address manually.')}</p><div class="fields">${(values.selected||[]).map(id=>{const m=demo.find(item=>item.id===id);return `<label>${m.id} · ${m.model}<input name="alias-${id}" value="${esc(values['alias-'+id]||m.name)}" required></label>`}).join('')}<label class="check"><input name="manual" type="checkbox" ${values.manual?'checked':''}> ${t('Ajouter une machine manuellement','Add a machine manually')}</label>${values.manual?input('manualName',t('Nom de la machine','Machine name'))+input('address',t('Adresse fictive','Sample address')):''}${btn('setup-test',t('Tester les connexions simulées','Test simulated connections'),'activity')}</div>`,
   `<div class="fields"><p>${t('Administrateur','Administrator')} <strong>${esc(values.admin)}</strong></p><p>${t('Authentification','Authentication')} <strong>${esc(values.auth||'local')}</strong></p><p>Web Push <strong>${values.push?t('Activé','On'):t('Désactivé','Off')}</strong> · ntfy <strong>${optionsText(values.ntfy)}</strong> · SMTP <strong>${values.smtp?t('Activé','On'):t('Désactivé','Off')}</strong></p><p>${t('Machines sélectionnées','Selected machines')} <strong>${(values.selected||[]).length+Number(Boolean(values.manual))}</strong></p><p class="notice">${t('La finalisation marque le bootstrap comme verrouillé dans la simulation.','Finishing marks bootstrap as locked in the simulation.')}</p></div>`
  ];
  return `<section class="setup">${title(t('Première installation','First setup'),t('Assistant de démonstration · utilisez uniquement des données fictives.','Demo wizard · use fictitious values only.'),btn('nav:home',t('Atelier démo','Demo workshop'),'arrow','ghost'))}
  <ol class="steps">${steps.map((n,i)=>`<li data-number="${i+1}" ${i===state.step?'aria-current="step" class="current"':i<state.step?'class="done"':''}>${n}</li>`).join('')}</ol>
- <form id="setup-form" class="panel" autocomplete="off"><h2 tabindex="-1">${state.step+1}/8 · ${steps[state.step]}</h2>${bodies[state.step]}<p id="form-error" class="error" role="alert"></p><div class="row between wrap" style="margin-top:12px">${state.step?btn('back',t('Précédent','Back'),'','ghost'):'<span></span>'}<button type="submit" class="primary">${state.step===7?t('Finaliser et ouvrir l’atelier','Finish and open workshop'):t('Continuer','Continue')}${icon('arrow')}</button></div></form></section>`;
+ <form id="setup-form" class="panel" autocomplete="off"><h2 tabindex="-1">${state.step+1}/8 · ${steps[state.step]}</h2>${bodies[state.step]}<p id="form-error" class="error" role="alert">${esc(values.error)}</p><div class="row between wrap" style="margin-top:12px">${state.step?btn('back',t('Précédent','Back'),'','ghost'):'<span></span>'}<button type="submit" class="primary">${state.step===7?t('Finaliser et ouvrir l’atelier','Finish and open workshop'):t('Continuer','Continue')}${icon('arrow')}</button></div></form></section>`;
 }
 function optionsText(mode){return ({off:t('Désactivé','Off'),external:t('Externe','External'),internal:t('Intégré','Built-in')})[mode||'off']}
 function login(){
- return `<section class="setup">${title(t('Connexion à FabCore','Sign in to FabCore'),t('Accès fictif au prototype.','Simulated prototype access.'))}<form id="login-form" class="panel stack"><div class="fields"><label>${t('Identifiant de démonstration','Demo username')}<input required value="demo" autocomplete="off"></label></div><div class="row wrap"><button type="submit" class="primary">${t('Ouvrir l’atelier','Open workshop')}</button>${btn('nav:setup',t('Première installation','First setup'))}</div></form></section>`;
+ return `<section class="setup">${title(t('Connexion à FabCore','Sign in to FabCore'),t('Accès fictif au prototype.','Simulated prototype access.'))}<form id="login-form" class="panel stack"><div class="fields"><label>${t('Identifiant de démonstration','Demo username')}<input required value="demo" autocomplete="off"></label></div><div class="row wrap"><button type="submit" class="primary">${t('Ouvrir l’atelier','Open workshop')}</button>${state.setup.auth&&state.setup.auth!=='local'?btn('oidc-login',t('Continuer avec Pocket ID','Continue with Pocket ID'),'plug','ghost'):''}${btn('nav:setup',t('Première installation','First setup'))}</div></form></section>`;
 }
 function go(page,machineId){
  if(page==='setup'&&state.finished){state.step=7}
- state.page=page;if(machineId)state.machine=machineId;
- historySet(page+(page==='detail'?'/'+state.machine:''));
+ state.reviewStatus='';state.page=page;if(machineId)state.machine=machineId;
+ historySet(page+(['detail','camera'].includes(page)?'/'+state.machine:page==='family'?'/'+state.family:''));
  render(true);scrollTo(0,0);
 }
 function historySet(value){if(location.hash!=='#'+value)window.history.pushState(null,'','#'+value)}
 function fromHash(){
- const [page,id]=location.hash.slice(1).split('/');
- if(Object.hasOwn(pages(),page)){state.page=page;if(page==='detail')state.machine=id||state.machine}
- else state.page='home';
+ const [page,id,lang,theme]=location.hash.slice(1).split('/');
+ if(page==='review-screen'){reviewScreen(id,lang,theme);return}
+ if(Object.hasOwn(pages(),page)){state.page=page;if(['detail','camera'].includes(page))state.machine=id||state.machine;if(page==='family'&&Object.hasOwn(families(),id))state.family=id}
+ else state.page='review';
  render();
 }
 function toast(message){
@@ -193,6 +201,7 @@ function addMachine(name,address){
 }
 function transfer(index){
  if(state.role==='viewer')return;
+ if(!state.files.length){toast(t('Ajoutez un fichier à la bibliothèque.','Add a file to the library.'));return}
  const eligible=state.machines.filter(m=>m.control&&['ready','done'].includes(m.status));
  if(!eligible.length){toast(t('Aucune machine disponible pour le transfert.','No machine available for transfer.'));return}
  const matching=eligible.find(m=>m.id===state.machine);
@@ -233,8 +242,22 @@ document.addEventListener('click',e=>{
  const [action,value]=button.dataset.action.split(':');
  if(action==='nav')go(value);
  if(action==='machine')go('detail',value);
- if(action==='lang'){cacheSetup(document.querySelector('#setup-form'));state.lang=state.lang==='fr'?'en':'fr';save('fabcore-lang',state.lang);render();app.querySelector('[data-action="lang"]').focus()}
- if(action==='theme'){cacheSetup(document.querySelector('#setup-form'));state.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';save('fabcore-theme',state.theme);render();app.querySelector('[data-action="theme"]').focus()}
+ if(action==='camera')go('camera',value);
+ if(action==='family'&&Object.hasOwn(families(),value)){state.family=value;go('family')}
+ if(action==='review-pick'){state.reviewPick=value;refreshReview();app.querySelector('[data-action="review-pick:'+value+'"]')?.focus()}
+ if(action==='review-mode'){state.reviewMode=value;refreshReview();app.querySelector('[data-action="review-mode:'+value+'"]')?.focus()}
+ if(action==='fleet-retry'){state.reviewStatus='';render()}
+ if(action==='oidc-login'){go('home');toast(t('Connexion Pocket ID simulée.','Simulated Pocket ID sign-in.'))}
+ if(action==='discover-scan'&&state.role!=='viewer'){
+  state.discovering=true;render();
+  setTimeout(()=>{state.discovering=false;state.discovery=[...demo,{id:'OC-01',name:'Prusa MINI · OctoPrint',model:'OctoPrint',address:'192.0.2.71',status:'ready',progress:0,file:'',eta:'',nozzle:23,bed:24,camera:false,control:true}];if(state.page==='discover')render()},550);
+ }
+ if(action==='discover-add'&&state.role!=='viewer'&&!machine(value)){
+  const found=state.discovery?.find(m=>m.id===value);
+  if(found){state.machines.push({...found});event(found.id,'done','Machine ajoutée','Machine added');go('machines')}
+ }
+ if(action==='lang'){cacheSetup(document.querySelector('#setup-form'));state.lang=state.lang==='fr'?'en':'fr';save('fabcore-lang',state.lang);refreshReview();app.querySelector('[data-action="lang"]').focus()}
+ if(action==='theme'){cacheSetup(document.querySelector('#setup-form'));state.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';save('fabcore-theme',state.theme);refreshReview();app.querySelector('[data-action="theme"]').focus()}
  if(action==='view'){state.layout=value;render();app.querySelector('[data-action="view:'+value+'"]').focus()}
  if(action==='command')command(value);
  if(action==='close')dialog.close();
@@ -242,13 +265,13 @@ document.addEventListener('click',e=>{
  if(action==='read'){state.unread=false;render();toast(t('Alertes marquées comme lues.','Alerts marked as read.'))}
  if(action==='alerts-save'){const fields=app.querySelector('[data-fields="alerts"]');if(!Array.from(fields.querySelectorAll('input')).every(input=>input.reportValidity()))return;toast(t('Préférences simulées enregistrées.','Simulated preferences saved.'))}
  if(action==='back'){cacheSetup(document.querySelector('#setup-form'));state.step--;render();app.querySelector('#setup-form h2').focus()}
- if(action==='scan'){state.setup.scanning=true;render();setTimeout(()=>{state.setup.scanning=false;state.setup.found=true;if(!state.setup.selected)state.setup.selected=[];if(state.page==='setup'&&state.step===5){render();app.querySelector('[data-action="scan"]').focus();toast(t('6 résultats simulés.','6 simulated results.'))}},550)}
+ if(action==='scan'){state.setup.scanning=true;render();setTimeout(()=>{state.setup.scanning=false;state.setup.found=true;state.setup.none=false;if(!state.setup.selected)state.setup.selected=[];if(state.page==='setup'&&state.step===5){render();app.querySelector('[data-action="scan"]').focus();toast(t('6 résultats simulés.','6 simulated results.'))}},550)}
  if(action==='setup-test'){const form=document.querySelector('#setup-form');if(form.reportValidity())toast(t('Vérification simulée terminée.','Simulated check completed.'))}
  if(action==='transfer')transfer(value);
  if(action==='add'&&state.role!=='viewer')modal(t('Ajouter une machine','Add machine'),`<div class="fields">${field('name',t('Nom','Name'))}${field('address',t('Adresse fictive','Sample address'))}</div>`,t('Ajouter','Add'),data=>{const name=data.get('name').trim();const address=data.get('address').trim();if(!name||!address)return t('Renseignez le nom et l’adresse.','Enter a name and address.');addMachine(name,address)});
  if(action==='file-add'&&state.role!=='viewer')modal(t('Ajouter un fichier fictif','Add a demo file'),`<div class="fields">${field('name',t('Nom du fichier','File name'))}</div>`,t('Ajouter','Add'),data=>{const name=data.get('name').trim();if(!name)return t('Renseignez le nom.','Enter a name.');state.files.push(name)});
  if(action==='user-add'&&state.role==='admin')modal(t('Ajouter un utilisateur','Add user'),`<div class="fields">${field('name',t('Nom','Name'))}${field('email',t('E-mail fictif','Demo email'),'email')}<label>${t('Rôle','Role')}<select name="role">${options(roles(),'viewer')}</select></label></div>`,t('Ajouter','Add'),data=>{const email=data.get('email').trim();if(state.users.some(u=>u.email.toLowerCase()===email.toLowerCase()))return t('Cette adresse est déjà utilisée.','This address already exists.');const name=data.get('name').trim();if(!name)return t('Renseignez le nom.','Enter a name.');state.users.push({name,email,role:data.get('role')})});
- if(action==='connector')modal(t('Capacités à valider','Capabilities to validate'),`<p>${Number(value)<6?t('Télémétrie, fichiers, commandes et caméra — validation distincte par modèle et firmware.','Telemetry, files, controls and camera — validate per model and firmware.'):t('Aperçu du catalogue : résine, laser ou CNC. Le pilotage sera défini selon la famille de machines.','Catalog preview: resin, laser or CNC. Controls will depend on the machine family.')}</p>`);
+ if(action==='connector')modal(t('Capacités à valider','Capabilities to validate'),`<p>${Number(value)<6?t('Télémétrie, fichiers, commandes et caméra — validation distincte par modèle et firmware.','Telemetry, files, controls and camera — validate per model and firmware.'):t('Aperçu du catalogue : résine, laser ou CNC. Le pilotage sera défini selon la famille de machines.','Catalog preview: resin, laser or CNC. Controls will depend on the machine family.')}</p>${state.role==='admin'?`<div class="fields"><label>${t('Machine de démonstration','Demo machine')}<select name="machine">${options(Object.fromEntries(state.machines.map(m=>[m.id,m.name])))}</select></label></div>`:''}`,state.role==='admin'?t('Associer','Assign'):'',state.role==='admin'?data=>{const m=machine(data.get('machine'));if(!m)return t('Ajoutez une machine avant de l’associer.','Add a machine before assigning a connector.');event(m.id,'info','Connecteur associé (simulé)','Connector assigned (simulated)');toast(t('Association simulée enregistrée.','Simulated assignment saved.'))}:null);
 });
 document.addEventListener('change',e=>{
  const el=e.target;
@@ -267,11 +290,138 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('submit',e=>{
  if(e.target.id==='setup-form'){e.preventDefault();const error=submitSetup(e.target);if(error)e.target.querySelector('#form-error').textContent=error}
+ if(e.target.id==='services-form'){e.preventDefault();toast(t('Configuration simulée enregistrée.','Simulated settings saved.'))}
  if(e.target.id==='login-form'){e.preventDefault();go('home');toast(t('Connexion simulée.','Simulated sign-in.'))}
 });
 addEventListener('popstate',fromHash);
 addEventListener('hashchange',()=>{if(location.hash!=='#content')fromHash()});
 media.addEventListener('change',()=>{if(state.theme==='system'){document.documentElement.dataset.theme=media.matches?'light':'dark'}});
+const reviewGroups=()=>[
+ [t('Installation et accès','Setup and access'),[
+  ['login',t('Connexion locale','Local sign-in'),'login'],
+  ['login-oidc',t('Connexion Pocket ID','Pocket ID sign-in'),'login',()=>{state.setup.auth='hybrid'}],
+  ...stepNames().map((label,step)=>['setup-'+(step+1),(step+1)+'. '+label,'setup',()=>presetSetup(step)]),
+  ['setup-expired',t('Jeton expiré','Expired token'),'setup',()=>{state.setup.error=t('Le jeton a expiré. Depuis le terminal, générez un nouveau jeton.','The token expired. Generate a new token from the terminal.')}],
+  ['setup-invalid',t('Jeton refusé','Invalid token'),'setup',()=>{state.setup.error=t('Jeton incorrect. Essayez FABCORE-DEMO.','Invalid token. Try FABCORE-DEMO.')}],
+  ['setup-oidc',t('Configuration Pocket ID / OIDC','Pocket ID / OIDC settings'),'setup',()=>presetSetup(2,{auth:'hybrid',issuer:'https://id.example.test',client:'fabcore'})],
+  ['setup-ntfy',t('ntfy intégré','Built-in ntfy'),'setup',()=>presetSetup(3,{ntfy:'internal',push:true})],
+  ['setup-ntfy-external',t('ntfy externe','External ntfy'),'setup',()=>presetSetup(3,{ntfy:'external',push:true})],
+  ['setup-smtp',t('SMTP configuré','SMTP enabled'),'setup',()=>presetSetup(4,{smtp:true,host:'smtp.example.test',sender:'atelier@example.test'})],
+  ['setup-scanning',t('Scan en cours','Scan in progress'),'setup',()=>presetSetup(5,{scanning:true,found:false})],
+  ['setup-no-result',t('Scan sans résultat','No devices discovered'),'setup',()=>presetSetup(5,{found:true,none:true,selected:[]})],
+  ['setup-manual',t('Ajout manuel','Manual add'),'setup',()=>presetSetup(6,{manual:true})],
+  ['setup-locked',t('Installation terminée','Setup complete'),'setup',()=>{state.finished=true}]
+ ]],
+ [t('Atelier et machines','Workshop and machines'),[
+  ['overview',t('Vue d’ensemble','Overview'),'home'],
+  ['grid',t('Parc en grille','Fleet grid'),'machines'],
+  ['list',t('Parc en liste','Fleet list'),'machines',()=>{state.layout='list'}],
+  ['empty',t('Parc vide','Empty fleet'),'machines',()=>{state.machines=[]}],
+  ['no-match',t('Filtre sans résultat','No matching machines'),'machines',()=>{state.filter='connecting'}],
+  ['loading',t('Chargement du parc','Loading fleet'),'machines',()=>{state.reviewStatus='loading'}],
+  ['network-error',t('Erreur de chargement','Fleet load error'),'machines',()=>{state.reviewStatus='error'}],
+  ...demo.map((m)=>['detail-'+m.id,m.name,'detail',()=>{state.machine=m.id}]),
+  ['detail-paused',t('Machine en pause','Paused machine'),'detail',()=>{machine('P2S-01').status='paused'}],
+  ['detail-connecting',t('Machine en connexion','Connecting machine'),'detail',()=>{machine('KL-01').status='connecting';state.machine='KL-01'}],
+  ['detail-viewer',t('Pilotage en lecture seule','Read-only controls'),'detail',()=>{state.role='viewer'}],
+  ['stop',t('Confirmation d’annulation','Cancel confirmation'),'detail',null,()=>command('stop')],
+  ['add-machine',t('Ajout manuel au parc','Manual fleet add'),'machines',null,()=>clickDemo('add')],
+  ['discover',t('Découverte depuis le parc','Discover from fleet'),'discover'],
+  ['cams',t('Galerie caméras','Camera gallery'),'cameras'],
+  ['camera-ready',t('Caméra agrandie','Expanded camera'),'camera',()=>{state.machine='P2S-01'}],
+  ['camera-missing',t('Caméra indisponible','Camera unavailable'),'camera',()=>{state.machine='CC2-02'}],
+  ...Object.keys(families()).map(key=>['family-'+key,families()[key].title,'family',()=>{state.family=key}])
+ ]],
+ [t('Fabrications et administration','Jobs and administration'),[
+  ['jobs',t('Fabrications','Jobs'),'jobs'],
+  ['files',t('Bibliothèque de fichiers','File library'),'files'],
+  ['files-empty',t('Bibliothèque vide','Empty library'),'files',()=>{state.files=[]}],
+  ['file-add',t('Ajout de fichier','Add file'),'files',null,()=>clickDemo('file-add')],
+  ['transfer',t('Transfert de fichier','File transfer'),'files',null,()=>transfer('0')],
+  ['notifications',t('Alertes et préférences','Alerts and preferences'),'notifications'],
+  ['read',t('Alertes lues','Read alerts'),'notifications',()=>{state.unread=false}],
+  ['history',t('Historique','History'),'history'],
+  ['history-empty',t('Historique vide','Empty history'),'history',()=>{state.events=[]}],
+  ['users',t('Utilisateurs','Users'),'users'],
+  ['user-add',t('Ajouter un utilisateur','Add user'),'users',null,()=>clickDemo('user-add')],
+  ['permissions',t('Rôles et permissions','Roles and permissions'),'permissions'],
+  ['users-viewer',t('Utilisateurs en lecture seule','Read-only user list'),'users',()=>{state.role='viewer'}],
+  ['settings',t('Paramètres généraux','General settings'),'settings'],
+  ['services',t('Paramètres des services','Service settings'),'services',()=>{state.setup.auth='hybrid';state.setup.ntfy='external';state.setup.smtp=true}],
+  ['connectors',t('Catalogue de connecteurs','Connector catalog'),'connectors'],
+  ['connector',t('Associer un connecteur','Assign a connector'),'connectors',null,()=>clickDemo('connector:0')],
+  ['more',t('Navigation mobile « Plus »','Mobile More navigation'),'more']
+ ]]
+];
+function clickDemo(action){app.querySelector(`[data-action="${action}"]`)?.click()}
+function presetSetup(step,overrides={}){
+ state.step=step;
+ state.setup={admin:'Camille Martin',username:'camille',email:'camille@example.test',auth:'local',ntfy:'off',found:step>=5,selected:step>=5?['CC2-01','CC2-02']:[],...overrides};
+}
+function refreshReview(){
+ const open=app.querySelector('.review-nav')?.scrollTop||0;
+ render();
+ const nav=app.querySelector('.review-nav');
+ if(nav)nav.scrollTop=open;
+}
+function renderReview(){
+ const groups=reviewGroups(), entries=groups.flatMap(([,rows])=>rows);
+ const [id,description]=entries.find(([id])=>id===state.reviewPick)||entries.find(([id])=>id==='overview');
+ const mode=state.reviewMode||'desktop';
+ app.innerHTML=`<header class="top"><div class="crumb">${brand()}<span>${t('Revue UX/UI','UX/UI review')}</span></div><div class="row">${btn('lang',state.lang==='fr'?'EN':'FR','','ghost',`aria-label="${state.lang==='fr'?'Switch to English':'Passer en français'}"`)}${btn('theme','','sun','ghost',`aria-label="${t('Basculer le thème','Toggle theme')}"`)}${btn('nav:home',t('Atelier','Workshop'),'grid','ghost')}</div></header>
+ <main class="area review-area"><div class="hero"><div><h1>${t('Revue du parcours complet','Full journey review')}</h1><p>${t('Ouvre un écran ou un état directement. Les boutons dans l’aperçu permettent de poursuivre le parcours.','Open any screen or state directly. Use the buttons inside the preview to continue the journey.')}</p></div></div>
+ <div class="review-grid"><nav class="panel review-nav" aria-label="${t('Écrans à valider','Screens to review')}">${groups.map(([group,rows])=>`<section><h2>${group}</h2>${rows.map(([key,label])=>btn('review-pick:'+key,esc(label),'','',key===id?'aria-current="page"':'')).join('')}</section>`).join('')}</nav>
+ <section class="stack review-preview" aria-label="${t('Aperçu du prototype','Prototype preview')}"><div class="row between wrap"><h2>${esc(description)}</h2><div class="row wrap">${btn('review-mode:desktop',t('Bureau','Desktop'),'grid','ghost',`aria-pressed="${mode==='desktop'}"`)}${btn('review-mode:mobile','Mobile','list','ghost',`aria-pressed="${mode==='mobile'}"`)}<a target="_blank" rel="noopener" href="#review-screen/${id}/${state.lang}/${state.theme}">${t('Plein écran','Full screen')}</a></div></div>
+ <iframe class="review-frame ${mode}" title="${esc(description)}" src="#review-screen/${id}/${state.lang}/${state.theme}"></iframe></section></div></main>`;
+}
+function reviewScreen(id,lang,theme){
+ state=structuredClone(reviewSeed);
+ state.reviewStatus='';
+ state.discovery=null;
+ state.discovering=false;
+ if(dialog.open)dialog.close();
+ const entry=reviewGroups().flatMap(([,rows])=>rows).find(([key])=>key===id);
+ if(!entry){state.page='home';render();return}
+ if(['fr','en'].includes(lang))state.lang=lang;
+ if(['dark','light','system'].includes(theme))state.theme=theme;
+ state.page=entry[2];entry[3]?.();render();entry[4]?.();
+}
+function machineCamera(){
+ const m=machine(state.machine);
+ if(!m)return title(t('Caméra introuvable','Camera not found'))+btn('nav:cameras',pages().cameras[1]);
+ return title(esc(m.name),t('Caméra · ','Camera · ')+esc(m.id),btn('nav:cameras',t('Toutes les caméras','All cameras'),'camera','ghost'))+`<section class="panel stack">${feed(m)}${btn('machine:'+m.id,t('Retour à la machine','Back to machine'),'machine','ghost')}</section>`;
+}
+function jobs(){
+ const jobs=state.machines.filter(m=>m.file);
+ return title(t('Fabrications','Jobs'),t('Suivez les travaux par machine.','Track jobs by machine.'))+`<div class="cards">${jobs.map(card).join('')||`<p class="notice">${t('Aucune fabrication à afficher.','No jobs to show.')}</p>`}</div>`;
+}
+function permissions(){
+ const columns=[t('Consulter le parc et les caméras','View fleet and cameras'),t('Piloter et transférer des fichiers','Control and transfer files'),t('Gérer les comptes et les services','Manage users and services')];
+ return title(t('Rôles et permissions','Roles and permissions'),t('Les droits s’appliquent aussi à la machine et à ses capacités.','Permissions also depend on the machine and its capabilities.'),btn('nav:users',pages().users[1],'users','ghost'))+`<div class="cards">
+ ${Object.entries(roles()).map(([key,role],index)=>`<section class="panel stack"><h2>${role}</h2>${columns.map((item,i)=>`<p>${i<3-index?'✓':'—'} ${item}</p>`).join('')}</section>`).join('')}</div>`;
+}
+function services(){
+ if(state.role!=='admin')return title(t('Services','Services'))+`<p class="notice">${t('Un compte administrateur est nécessaire.','An administrator account is required.')}</p>`;
+ return title(t('Services','Services'),t('Configurez les services de l’atelier.','Configure workshop services.'),btn('nav:settings',pages().settings[1],'control','ghost'))+`<form id="services-form" class="stack"><div class="cards">${[['auth',t('Connexion','Sign-in')],['alerts','Notifications'],['smtp','SMTP']].map(([key,text])=>`<section class="panel stack"><h2>${text}</h2>${fields(key)}</section>`).join('')}</div><div><button type="submit" class="primary">${t('Enregistrer les services','Save services')}</button></div></form>`;
+}
+function families(){return {
+ resin:{title:t('Impression résine','Resin printing'),model:'Elegoo Mars · MSLA',file:'figurine-demo.ctb',stats:[[t('Couche','Layer'),'452 / 960'],[t('Exposition par couche','Layer exposure'),'2.2 s'],[t('Température du bac','Vat temperature'),'26 °C']]},
+ laser:{title:t('Découpe et gravure laser','Laser engraving and cutting'),model:'xTool M2 · diode',file:'plaque-atelier.svg',stats:[[t('Puissance','Power'),'36 %'],[t('Vitesse','Speed'),'110 mm/s'],[t('Capot','Lid'),t('Fermé','Closed')]]},
+ cnc:{title:t('Usinage CNC','CNC milling'),model:'Atelier CNC · GRBL',file:'platine-demo.nc',stats:[['X / Y / Z','24 / 33 / 8 mm'],[t('Avance','Feed'),'450 mm/min'],[t('Broche','Spindle'),'9 000 rpm']]}
+}}
+function family(){
+ const f=families()[state.family||'resin'];
+ return title(f.title,esc(f.model),btn('nav:connectors',pages().connectors[1],'plug','ghost'))+`<div class="main-grid"><section class="panel stack"><div class="row between wrap"><h2>${t('Travail en cours','Current job')}</h2>${badge('printing')}</div><div class="row between"><span>${esc(f.file)}</span><strong>47 %</strong></div><progress value="47" max="100" aria-label="${t('Progression','Progress')}"></progress><p class="notice">${t('Aperçu de supervision. Le pilotage dépend de la famille et des capacités du modèle.','Monitoring preview. Controls depend on the machine family and model capabilities.')}</p></section><section class="panel stack"><h2>${t('Télémétrie','Telemetry')}</h2>${f.stats.map(([label,value])=>`<div class="row between"><span>${label}</span><strong>${value}</strong></div>`).join('')}</section></div>`;
+}
+function discoveryPage(){
+ const found=state.discovery||[];
+ if(state.role==='viewer')return title(t('Découverte réseau','Network discovery'))+`<p class="notice">${t('Ce rôle permet la consultation uniquement.','This role is read-only.')}</p>`;
+ return title(t('Découverte réseau','Network discovery'),t('Simulez un scan pour ajouter des équipements au parc.','Simulate a scan to add devices to the fleet.'),btn('nav:machines',pages().machines[1],'machine','ghost'))+`<section class="panel stack"><div class="row wrap">${btn('discover-scan',state.discovering?t('Recherche…','Searching…'):t('Simuler un scan réseau','Simulate discovery'),'activity','primary',state.discovering?'disabled':'')}${btn('add',t('Ajouter manuellement','Add manually'),'plus','ghost')}</div>
+ ${found.map(m=>`<div class="row between wrap activity"><div><strong>${m.name}</strong><br><small>${m.id} · ${m.address}</small></div>${machine(m.id)?badge('ready'):btn('discover-add:'+m.id,t('Ajouter','Add'),'plus','ghost')}</div>`).join('')}
+ ${state.discovery?`<p class="muted">${t('Un résultat peut correspondre à un équipement déjà présent.','A result may match a machine already in the fleet.')}</p>`:''}</section>`;
+}
+
+const reviewSeed=structuredClone(state);
 fromHash();
 </script>
 </body></html>

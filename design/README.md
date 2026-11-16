@@ -1,6 +1,6 @@
 # FabCore · Proposition UX/UI
 
-Ouvrir [prototype.html](prototype.html) localement dans Chromium, Firefox ou Safari. Le prototype peut être ouvert depuis le dossier téléchargé et fonctionne hors ligne. L’[identité et les wireframes](identite.html) permettent de comparer les pistes et les cinq écrans prioritaires. Les [logos et icônes](brand/) sont fournis en SVG éditable. Quatre icônes disposent aussi d’un export PNG.
+Ouvrir [prototype.html](prototype.html) localement dans Chromium, Firefox ou Safari. Le fichier ouvre directement la revue interactive. Chaque écran ou état dispose d’un accès direct, avec aperçu Bureau, Mobile et ouverture en plein écran. Le bouton Atelier ouvre le parcours en continu. Le prototype fonctionne hors ligne. L’[identité et les wireframes](identite.html) permettent de comparer les pistes et les cinq écrans prioritaires. Les [logos et icônes](brand/) sont fournis en SVG éditable. Quatre icônes disposent aussi d’un export PNG.
 
 ## Scénarios de revue
 
