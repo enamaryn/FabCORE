@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { test } from 'node:test';
-import { readElegoo } from './elegoo.mjs';
+import { elegooClientId, readElegoo } from './elegoo.mjs';
 import { readElegooCC1 } from './elegoo-cc1.mjs';
 
 const cc2 = { origin: 'mqtt://192.168.1.51:1883', accessCode: 'Test123' };
@@ -90,4 +90,11 @@ test('CC1 interroge le statut SDCP et ignore une autre identité', async () => {
   });
   assert.deepEqual(state, { status: 'printing', issue: null, progress: 9, nozzle: 250, bed: 60, file: 'part.gcode', serial });
   assert.deepEqual(calls, [0, 'closed']);
+});
+
+
+test('CC2 utilise un identifiant MQTT stable pour chaque numéro de série', () => {
+  assert.match(elegooClientId('CC2TEST01'), /^1_PC_[0-9]{9}$/);
+  assert.equal(elegooClientId('CC2TEST01'), elegooClientId('CC2TEST01'));
+  assert.notEqual(elegooClientId('CC2TEST01'), elegooClientId('CC2TEST02'));
 });

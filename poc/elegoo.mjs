@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { connect } from 'mqtt';
 import { readResponse } from './moonraker.mjs';
 
@@ -20,9 +20,16 @@ function normalize(result) {
   };
 }
 
+const activeReads = new Map();
+
+export function elegooClientId(serial) {
+  const fingerprint = createHash('sha256').update('FabCore CC2:' + serial).digest();
+  return '1_PC_' + (100000000 + fingerprint.readUInt32BE() % 900000000);
+}
+
 function requestStatus(machine, serial, connectPrinter, signal) {
   return new Promise((resolve) => {
-    const clientId = `1_PC_${randomInt(100000000, 999999999)}`;
+    const clientId = elegooClientId(serial);
     const requestId = `${clientId}_req`;
     const base = `elegoo/${serial}`;
     const registration = `${base}/${requestId}/register_response`;
@@ -75,7 +82,7 @@ function requestStatus(machine, serial, connectPrinter, signal) {
   });
 }
 
-export async function readElegoo(machine, { fetcher = fetch, connectPrinter = connect, signal } = {}) {
+export async function identifyElegoo(machine, { fetcher = fetch, signal } = {}) {
   const url = new URL('/system/info', `http://${new URL(machine.origin).hostname}`);
   url.searchParams.set('X-Token', machine.accessCode);
   try {
@@ -88,9 +95,24 @@ export async function readElegoo(machine, { fetcher = fetch, connectPrinter = co
     const serial = (await readResponse(info))?.system_info?.sn;
     if (typeof serial !== 'string' || !/^[a-zA-Z0-9_-]{6,64}$/.test(serial)) return empty('error', 'elegoo-info');
     if (machine.serial && machine.serial !== serial) return empty('error', 'elegoo-identity');
-    const result = await requestStatus(machine, serial, connectPrinter, signal);
-    return { ...result, serial };
+    return { serial };
   } catch (error) {
     return error instanceof SyntaxError ? empty('error', 'elegoo-info') : empty('offline', 'elegoo-connection');
   }
+}
+
+
+export async function readElegoo(machine, { fetcher = fetch, connectPrinter = connect, signal } = {}) {
+  const identity = await identifyElegoo(machine, { fetcher, signal });
+  if (!identity.serial) return identity;
+  const { serial } = identity;
+  if (signal?.aborted) return empty('offline', 'elegoo-connection');
+  const key = JSON.stringify([machine.origin, serial, machine.accessCode]);
+  let pending = activeReads.get(key);
+  if (!pending) {
+    // The transport has its own timeout. One caller cancelling must not affect another caller.
+    pending = requestStatus(machine, serial, connectPrinter).finally(() => activeReads.delete(key));
+    activeReads.set(key, pending);
+  }
+  return { ...await pending, serial };
 }
