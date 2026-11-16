@@ -106,13 +106,31 @@ Sur une imprimante Klipper enregistrée, ouvrir la fiche en administrateur penda
 
 En administrateur, créer un compte avec **Ajouter un observateur**, puis se connecter dans une fenêtre privée. Le compte peut suivre les impressions et ouvrir les caméras autorisées. La modification du parc et les commandes d’impression sont réservées à l’administrateur.
 
+## Connexion OIDC avec Pocket ID
+
+Créer un client OIDC **confidentiel**, avec PKCE, dans Pocket ID. Enregistrer l’URL de retour exacte `https://fabcore.example.com/api/oidc/callback`, en remplaçant le domaine par celui de FabCore. Le serveur FabCore doit pouvoir joindre l’URL HTTPS du fournisseur.
+
+| Variable | Valeur |
+| --- | --- |
+| `FABCORE_OIDC_ISSUER` | URL publique HTTPS de Pocket ID, par exemple `https://id.example.com` |
+| `FABCORE_OIDC_CLIENT_ID` | Identifiant du client |
+| `FABCORE_OIDC_CLIENT_SECRET` | Secret du client, conservé côté serveur |
+| `FABCORE_OIDC_ADMIN_GROUP` | Nom exact du groupe autorisé à administrer FabCore, facultatif |
+| `FABCORE_OIDC_OBSERVER_GROUP` | Nom exact du groupe autorisé à consulter FabCore, facultatif |
+
+Configurer au moins un groupe et des noms distincts si les deux rôles sont utilisés. Lorsqu’un utilisateur appartient aux deux groupes, le rôle Administrateur s’applique. FabCore demande la portée `groups` et lit les groupes dans la réponse UserInfo. Un membre sans groupe FabCore autorisé voit la page de connexion. Limiter également l’accès au client aux groupes concernés dans Pocket ID.
+
+Définir ces variables dans l’environnement de FabCore, puis redémarrer le service. Le bouton **Se connecter avec Pocket ID** apparaît une fois le compte administrateur local créé et FabCore accessible en HTTPS. La connexion locale reste disponible. La déconnexion ferme la session FabCore. Les groupes sont réévalués à chaque connexion OIDC.
+
+[Documentation des clients Pocket ID](https://pocket-id.org/docs/setup/connect-an-app)
+
 ## Fonctionnement et limites
 
 - Pour la télémétrie, l’adaptateur interroge `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.
 - Le navigateur actualise la télémétrie toutes les deux secondes pendant une session de supervision. Les requêtes concurrentes partagent un résultat par machine et les erreurs de transport sont visibles.
 - Le POC prend en charge un administrateur local, jusqu’à seize observateurs et jusqu’à huit machines Klipper, Bambu P2S ou Elegoo CC1/CC2. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
 - Le fichier `.fabcore/state.json` est créé avec les droits `0600`. Il contient les clés API Moonraker et les codes d’accès LAN nécessaires à la reconnexion. Protéger le répertoire et ses sauvegardes comme des secrets. Exécuter une seule instance par répertoire de données.
-- Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes sur les autres modèles, la caméra Bambu, Pocket ID, SMTP et les autres constructeurs restent pour les jalons suivants.
+- Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes sur les autres modèles, la caméra Bambu, SMTP et les autres constructeurs restent pour les jalons suivants.
 
 ## Paramètres d’exécution
 

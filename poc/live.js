@@ -5,6 +5,8 @@ state.events = [];
 state.users = [];
 
 const problem = (code) => ({
+  'oidc-failed': t('Connexion Pocket ID indisponible ou accès refusé. Vous pouvez utiliser un compte local.',
+    'Pocket ID sign-in is unavailable or access was denied. You can use a local account.'),
   token: t('Jeton incorrect.', 'Invalid activation token.'),
   expired: t('Jeton expiré. Redémarrez FabCore pour en obtenir un nouveau.', 'Token expired. Restart FabCore for a new one.'),
   credentials: t('Vérifiez vos identifiants. À l’installation, le mot de passe doit contenir au moins 12 caractères.', 'Check your credentials. Setup requires a password of at least 12 characters.'),
@@ -88,7 +90,9 @@ function credentialsPage() {
       </div>
       <p class="error" role="alert">${live.error?esc(problem(live.error)):''}</p>
       <div><button class="primary" type="submit">${setup?t('Activer FabCore','Activate FabCore'):t('Se connecter','Sign in')}</button></div>
-    </form></section>`;
+    </form>
+    ${!setup && live.oidcEnabled ? `<p><a href="/api/oidc/start">${t('Se connecter avec Pocket ID','Sign in with Pocket ID')}</a></p>` : ''}
+    </section>`;
 }
 
 function liveFleet() {
@@ -263,6 +267,11 @@ async function loadSession() {
     const session = await api('session');
     if (session.authenticated) return openWorkshop(session.username, session.role);
     live.phase = session.installed ? 'login' : 'setup';
+    live.oidcEnabled = session.oidcEnabled;
+    if (new URLSearchParams(location.search).get('auth') === 'oidc-failed') {
+      live.error = 'oidc-failed';
+      history.replaceState(null, '', '/');
+    }
   } catch {
     live.phase = 'failed';
   }
@@ -443,7 +452,7 @@ document.addEventListener('click', async (event) => {
       live.refreshError = false;
       state.machines = [];
       state.events = [];
-      renderLive();
+      await loadSession();
     } catch (error) {
       toast(problem(error.code));
     }
