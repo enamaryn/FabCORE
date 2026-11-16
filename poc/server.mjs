@@ -109,9 +109,13 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
   const attempts = new Map();
   const elegooReaders = new Map([['elegoo', readCC2], ['elegoo-cc1', readCC1]]);
   const snapshot = monitor(async (machine) => {
-    const reader = machine.kind === 'xtool-m2' ? readXTool : elegooReaders.get(machine.kind);
+    if (machine.kind === 'xtool-m2') {
+      const { serial, fingerprint, ...telemetry } = await readXTool(machine);
+      return telemetry;
+    }
+    const reader = elegooReaders.get(machine.kind);
     if (!reader) return readPrinter(machine);
-    const { serial, fingerprint, ...telemetry } = await reader(machine);
+    const { serial, ...telemetry } = await reader(machine);
     return telemetry;
   });
   const pendingCommands = new Set();
@@ -409,17 +413,17 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       if (!name || !connection) return error(res, 400, 'machine-invalid');
       const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
       const testing = path === '/api/machines/test';
-      const machineReader = kind === 'xtool-m2' ? readXTool : elegooReaders.get(kind);
-      if (testing || machineReader) {
+      const elegooReader = kind === 'xtool-m2' ? readXTool : elegooReaders.get(kind);
+      if (testing || elegooReader) {
         if (probes >= 2) return error(res, 429, 'probe-busy');
         probes++;
         const abort = new AbortController();
         res.once('close', () => abort.abort());
         try {
           if (testing && kind === 'bambu') return answer(res, 200, await bambu.probe(machine, abort.signal));
-          const result = machineReader ? await machineReader(machine, { signal: abort.signal }) : await readPrinter(machine);
+          const result = elegooReader ? await elegooReader(machine, { signal: abort.signal }) : await readPrinter(machine);
           if (abort.signal.aborted) return;
-          const ok = machineReader
+          const ok = elegooReader
             ? Boolean(result.serial && (!result.issue || result.issue === 'elegoo-print' || result.issue === 'xtool-device'))
             : !result.issue || result.issue === 'print';
           if (testing) return answer(res, 200, { ok, issue: ok ? null : result.issue });
