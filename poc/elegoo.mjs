@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { connect } from 'mqtt';
+import { canvasFilaments } from './filaments.mjs';
 import { readResponse } from './moonraker.mjs';
 
 const states = new Map([[0, 'connecting'], [1, 'ready'], [2, 'printing'], [3, 'ready'], [4, 'ready'], [5, 'connecting'], [6, 'error']]);
@@ -142,6 +143,8 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
     let lastRequest = 0;
     let lastPing = 0;
     let latest = {};
+    let nextCanvas = 0;
+    let canvasAt = null;
     const watchdog = setTimeout(() => fail('error', 'elegoo-report'), 8000);
     watchdog.unref();
     const tick = setInterval(() => {
@@ -156,7 +159,18 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
         client.publish(request, JSON.stringify({ type: 'PING' }));
         return;
       }
-      if (current - lastReport >= 15000 && current - Math.max(lastRequest, lastPing) >= 2500) query();
+      if (current - lastReport >= 15000 && current - Math.max(lastRequest, lastPing) >= 2500) {
+        query();
+        return;
+      }
+      if (canvasAt !== null && current - canvasAt >= 150000) {
+        delete entry.current.filaments;
+        canvasAt = null;
+      }
+      if (lastReport && current >= nextCanvas && current - Math.max(lastRequest, lastPing) >= 2500) {
+        nextCanvas = current + 60000;
+        client.publish(request, JSON.stringify({ id: 2, method: 2005, params: {} }));
+      }
     }, 1000);
     tick.unref();
     entry.close = () => {
@@ -201,6 +215,14 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
         return;
       }
       if (!registered || !message?.result || typeof message.result !== 'object') return;
+      if (topic === response && message.id === 2 && (message.method === undefined || message.method === 2005)) {
+        const filaments = canvasFilaments(message.result);
+        if (filaments !== null) {
+          canvasAt = now();
+          entry.current = { ...entry.current, filaments };
+        }
+        return;
+      }
       const push = (topic === response || topic === status) && [6000, 6008].includes(message.method);
       const reply = topic === response && message.id === 1 && (message.method === undefined || message.method === 1002);
       if (!push && !reply) return;
@@ -214,7 +236,7 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
       clearTimeout(watchdog);
       lastReport = now();
       diagnostics?.report(machine.id);
-      entry.current = { ...report, serial: machine.serial };
+      entry.current = { ...entry.current, ...report, serial: machine.serial };
     });
   }
   return {
