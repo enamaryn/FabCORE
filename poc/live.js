@@ -90,12 +90,9 @@ function liveFleet() {
       `<p class="notice">${t('Ajoute une adresse Moonraker pour commencer.','Add a Moonraker address to get started.')}</p>`);
 }
 
-function liveDetail() {
-  const m = machine(state.machine);
-  if (!m) return liveFleet();
+function liveTelemetry(m) {
   const translatableTime = m.checkedAt ? new Date(m.checkedAt).toLocaleTimeString(state.lang) : '—';
-  return title(esc(m.name), esc(m.model + ' · ' + m.origin), btn('nav:machines',t('Retour au parc','Back to fleet'),'grid','ghost')) +
-    `<div class="main-grid"><section class="panel stack">
+  return `<section class="panel stack">
       <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2><div class="row wrap">${badge(m.status)}${btn('edit',t('Modifier la machine','Edit machine'))}</div></div>
       ${m.issue?`<p class="notice">${liveIssue(m.issue)}</p>`:''}
       <div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
@@ -105,10 +102,56 @@ function liveDetail() {
       <h2>${t('Télémétrie','Telemetry')}</h2>
       <div class="row between"><span>${t('Buse','Nozzle')}</span><strong>${m.nozzle===null?'—':m.nozzle+' °C'}</strong></div>
       <div class="row between"><span>${t('Plateau','Bed')}</span><strong>${m.bed===null?'—':m.bed+' °C'}</strong></div>
-    </section></div>`;
+    </section>`;
+}
+
+function liveDetail() {
+  const m = machine(state.machine);
+  if (!m) return liveFleet();
+  const camera = ['elegoo', 'elegoo-cc1'].includes(m.kind)
+    ? `<section class="panel stack" style="margin-top:1rem">
+      <h2>${t('Caméra en direct','Live camera')}</h2>
+      <div data-live-camera></div>
+      <p data-camera-status role="status" hidden></p>
+      <div class="row wrap">${btn('camera-start',t('Ouvrir le flux','Open stream'))}
+      ${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
+    </section>` : '';
+  return title(esc(m.name), esc(m.model + ' · ' + m.origin), btn('nav:machines',t('Retour au parc','Back to fleet'),'grid','ghost')) +
+    `<div class="main-grid" data-live-telemetry>${liveTelemetry(m)}</div>${camera}`;
+}
+
+function showCamera(open, failed = false) {
+  const camera = app.querySelector('[data-live-camera]');
+  const m = machine(state.machine);
+  if (!camera || !m) return;
+  const status = app.querySelector('[data-camera-status]');
+  const start = app.querySelector('[data-action="camera-start"]');
+  const stop = app.querySelector('[data-action="camera-stop"]');
+  camera.querySelector('img')?.removeAttribute('src');
+  camera.replaceChildren();
+  status.textContent = failed
+    ? t('Flux indisponible. Vérifiez la caméra de cette imprimante, puis réessayez.',
+        'Stream unavailable. Check this printer’s camera, then retry.') : '';
+  status.hidden = !failed;
+  start.hidden = open;
+  stop.hidden = !open;
+  if (!open) {
+    start.focus();
+    return;
+  }
+  const image = document.createElement('img');
+  image.alt = t('Vue en direct de ', 'Live view of ') + m.name;
+  image.style.cssText = 'display:block;width:100%;max-width:850px;border-radius:12px';
+  image.addEventListener('error', () => {
+    if (image.isConnected) showCamera(false, true);
+  }, { once: true });
+  camera.append(image);
+  image.src = '/api/machines/' + encodeURIComponent(m.id) + '/camera';
+  stop.focus();
 }
 
 function renderLive() {
+  app.querySelector('[data-live-camera] img')?.removeAttribute('src');
   document.documentElement.lang = state.lang;
   document.documentElement.dataset.theme = state.theme === 'system' ? (media.matches ? 'light' : 'dark') : state.theme;
   const signedIn = live.phase === 'workshop';
@@ -152,15 +195,22 @@ async function refresh() {
       });
     }
     state.events = state.events.slice(0, 30);
-    const compare = (items) => JSON.stringify(items.map(({ checkedAt, ...m }) => m));
+    const compare = (items) => JSON.stringify(items.map(({ checkedAt, cameraOpen, ...m }) => m));
     const changed = compare(machines) !== compare(state.machines);
     state.machines = machines;
     const timestamp = live.page === 'detail' && app.querySelector('#last-check');
-    const checkedAt = machine(state.machine)?.checkedAt;
+    const current = machine(state.machine);
+    const cameraImage = app.querySelector('[data-live-camera] img');
+    if (cameraImage && current?.cameraOpen) cameraImage.dataset.streamOpened = 'true';
+    if (cameraImage?.dataset.streamOpened && !current?.cameraOpen) showCamera(false, true);
+    const checkedAt = current?.checkedAt;
     if (timestamp && checkedAt) timestamp.textContent = new Date(checkedAt).toLocaleTimeString(state.lang);
     if ((changed || hadRefreshError) && !dialog.open) {
       const action = document.activeElement?.dataset.action;
-      renderLive();
+      const telemetry = app.querySelector('[data-live-telemetry]');
+      if (!hadRefreshError && telemetry && current && (cameraImage || app.querySelector('[data-camera-status]:not([hidden])'))) {
+        telemetry.innerHTML = liveTelemetry(current);
+      } else renderLive();
       if (action) [...app.querySelectorAll('[data-action]')].find(button => button.dataset.action === action && button.getClientRects().length)?.focus();
     }
   } catch (error) {
@@ -329,6 +379,8 @@ document.addEventListener('click', async (event) => {
     openMachineForm();
   }
   if (action === 'discover') openDiscovery();
+  if (action === 'camera-start') showCamera(true);
+  if (action === 'camera-stop') showCamera(false);
   if (action === 'detected') {
     const detected = discoveredDevices[Number(value)];
     if (detected && !detected.registered) openMachineForm(detected.kind, '', null, detected);

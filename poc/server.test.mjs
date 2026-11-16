@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
+import { once } from 'node:events';
+import { PassThrough } from 'node:stream';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -51,11 +53,23 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   let connected = true;
   let reads = 0;
   const origin = 'http://fabcore.test';
+  const cameraInputs = new Map();
+  let cameraContentType = 'multipart/x-mixed-replace; boundary=frame';
   const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token',
     networks: () => [{ cidr: '192.168.1.0/24' }],
     scan: async (network) => {
       assert.equal(network.cidr, '192.168.1.0/24');
       return [{ kind: 'elegoo', host: '192.168.1.55', serial: 'CC2TEST01' }];
+    },
+    openCamera: async (url) => {
+      assert.equal(url.port, '8080');
+      assert.equal(url.pathname, '/video');
+      const input = new PassThrough();
+      input.statusCode = 200;
+      input.headers = { 'content-type': cameraContentType };
+      cameraInputs.set(url.hostname, input);
+      input.write('frame from ' + url.hostname);
+      return input;
     },
     readCC2: async (machine) => {
     const serial = machine.origin.endsWith('.54:1883') ? 'CC2TEST02' : 'CC2TEST01';
@@ -163,6 +177,48 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.deepEqual(fleet.machines.slice(1).map(({ serial, origin }) => [serial, origin]), [
     ['CC2TEST01', 'mqtt://192.168.1.55:1883'], ['CC2TEST02', 'mqtt://192.168.1.54:1883']
   ]);
+  const secondCC2Id = (await secondCC2.json()).id;
+  const cameraPath = (id) => '/api/machines/' + id + '/camera';
+  assert.equal((await call(cameraPath(firstCC2Id))).status, 401);
+  assert.equal((await call(cameraPath(id), { cookie })).status, 404);
+  assert.equal(cameraInputs.size, 0);
+  cameraContentType = 'text/html';
+  assert.equal((await call(cameraPath(firstCC2Id), { cookie })).status, 502);
+  assert.ok(cameraInputs.get('192.168.1.55').destroyed);
+  cameraContentType = 'multipart/x-mixed-replace; boundary=frame';
+  const clients = [];
+  const openStream = (id) => new Promise((resolve, reject) => {
+    const client = request(base + cameraPath(id), {
+      headers: { Host: 'fabcore.test', Cookie: cookie }
+    }, resolve);
+    client.setTimeout(3000, () => client.destroy(new Error('Camera test timed out')));
+    client.on('error', reject);
+    client.end();
+    clients.push(client);
+  });
+  try {
+    const [first, second] = await Promise.all([openStream(firstCC2Id), openStream(secondCC2Id)]);
+    assert.equal(first.statusCode, 200);
+    assert.equal(second.statusCode, 200);
+    assert.equal(first.headers['content-type'], cameraContentType);
+    assert.equal(first.headers['x-accel-buffering'], 'no');
+    const [frame1, frame2] = await Promise.all([once(first, 'data'), once(second, 'data')]);
+    assert.equal(frame1[0].toString(), 'frame from 192.168.1.55');
+    assert.equal(frame2[0].toString(), 'frame from 192.168.1.54');
+    const upstreamClosed = new Promise((resolve) => cameraInputs.get('192.168.1.55').once('close', resolve));
+    first.destroy();
+    await upstreamClosed;
+    const nextFrame = once(second, 'data');
+    cameraInputs.get('192.168.1.54').write('another frame');
+    assert.equal((await nextFrame)[0].toString(), 'another frame');
+    const secondClosed = new Promise((resolve) => cameraInputs.get('192.168.1.54').once('close', resolve));
+    assert.equal((await call('/api/logout', { body: {}, cookie: session(await call('/api/login', { body: credentials })) })).status, 200);
+    assert.equal(cameraInputs.get('192.168.1.54').destroyed, false);
+    second.destroy();
+    await secondClosed;
+  } finally {
+    for (const client of clients) client.destroy();
+  }
   assert.equal((await call('/api/discovery')).status, 401);
   assert.deepEqual(await (await call('/api/discovery', { cookie })).json(), { networks: ['192.168.1.0/24'] });
   const scan = { network: '192.168.1.0/24' };
