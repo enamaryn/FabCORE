@@ -51,7 +51,11 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   let connected = true;
   let reads = 0;
   const origin = 'http://fabcore.test';
-  const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token', readPrinter: (machine) =>
+  const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token', readCC2: async (machine) => {
+    const serial = machine.origin.endsWith('.54:1883') ? 'CC2TEST02' : 'CC2TEST01';
+    const issue = machine.serial && machine.serial !== serial ? 'elegoo-identity' : null;
+    return { serial, issue, status: issue ? 'error' : 'ready', nozzle: 25, bed: 24, progress: 0, file: '' };
+  }, readPrinter: (machine) =>
     readMoonraker(machine, async () => {
       reads++;
       if (!connected) throw new TypeError('connection failed');
@@ -135,6 +139,24 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.equal(edited.name, changed.name);
   assert.equal(edited.origin, changed.origin);
   assert.equal(edited.apiKey, undefined);
+  const cc2 = { kind: 'elegoo', host: '192.168.1.53', accessCode: 'ExampleCode', name: 'CC2 atelier' };
+  assert.deepEqual(await (await call('/api/machines/test', { body: cc2, cookie })).json(), { ok: true, issue: null });
+  const firstCC2 = await call('/api/machines', { body: cc2, cookie });
+  assert.equal(firstCC2.status, 201);
+  const firstCC2Id = (await firstCC2.json()).id;
+  const secondCC2 = await call('/api/machines', { body: { ...cc2, host: '192.168.1.54', name: 'CC2 bureau' }, cookie });
+  assert.equal(secondCC2.status, 201);
+  assert.equal((await call('/api/machines', { body: { ...cc2, host: '192.168.1.55' }, cookie })).status, 409);
+  const movedCC2 = { ...cc2, id: firstCC2Id, host: '192.168.1.55', accessCode: '' };
+  assert.deepEqual(await (await call('/api/machines/edit', { body: movedCC2, cookie })).json(), { id: firstCC2Id });
+  const wrongCC2 = await call('/api/machines/edit', { body: { ...movedCC2, host: '192.168.1.54' }, cookie });
+  assert.equal(wrongCC2.status, 422);
+  assert.deepEqual(await wrongCC2.json(), { error: 'elegoo-identity' });
+  const fleet = await (await call('/api/machines', { cookie })).json();
+  assert.ok(!JSON.stringify(fleet).includes(cc2.accessCode));
+  assert.deepEqual(fleet.machines.slice(1).map(({ serial, origin }) => [serial, origin]), [
+    ['CC2TEST01', 'mqtt://192.168.1.55:1883'], ['CC2TEST02', 'mqtt://192.168.1.54:1883']
+  ]);
   const file = join(directory, 'state.json');
   const text = await readFile(file, 'utf8');
   assert.ok(!text.includes(credentials.password) && !text.includes(token));
