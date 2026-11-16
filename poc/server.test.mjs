@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createFabCore } from './server.mjs';
-import { moonrakerOrigin, readMoonraker } from './moonraker.mjs';
+import { commandMoonraker, moonrakerOrigin, readMoonraker } from './moonraker.mjs';
 
 const printer = { origin: 'http://192.168.1.40:7125', apiKey: 'key-test' };
 const sample = {
@@ -29,6 +29,20 @@ test('Moonraker utilise une requête GET fixe et normalise la télémétrie', as
     return Response.json(sample);
   });
   assert.deepEqual(result, { status: 'printing', issue: null, progress: 46, file: 'support.gcode', nozzle: 205.1, bed: 60.2 });
+});
+
+test('Moonraker envoie uniquement les commandes pause et reprise vers la cible configurée', async () => {
+  for (const action of ['pause', 'resume']) {
+    assert.equal(await commandMoonraker(printer, action, async (url, options) => {
+      assert.equal(url, printer.origin + '/printer/print/' + action);
+      assert.equal(options.method, 'POST');
+      assert.equal(options.redirect, 'error');
+      assert.equal(options.headers['X-Api-Key'], printer.apiKey);
+      return Response.json({ result: 'ok' });
+    }), true);
+  }
+  assert.equal(await commandMoonraker(printer, 'cancel', () => assert.fail()), false);
+  await assert.rejects(commandMoonraker(printer, 'pause', async () => new Response('', { status: 502 })));
 });
 
 test('Moonraker distingue un accès refusé, Klippy indisponible et la perte de liaison', async () => {
@@ -52,10 +66,19 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   ctx.after(() => rm(directory, { recursive: true, force: true }));
   let connected = true;
   let reads = 0;
+  let printState = 'printing';
+  const commands = [];
+  let ambiguousCommand = false;
   const origin = 'http://fabcore.test';
   const cameraInputs = new Map();
   let cameraContentType = 'multipart/x-mixed-replace; boundary=frame';
   const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token',
+    sendCommand: async (machine, action) => {
+      commands.push([machine.id, machine.origin, action]);
+      if (ambiguousCommand) throw new Error('Connection lost after sending');
+      printState = action === 'pause' ? 'paused' : 'printing';
+      return true;
+    },
     networks: () => [{ cidr: '192.168.1.0/24' }],
     scan: async (network) => {
       assert.equal(network.cidr, '192.168.1.0/24');
@@ -79,7 +102,9 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
     readMoonraker(machine, async () => {
       reads++;
       if (!connected) throw new TypeError('connection failed');
-      return Response.json(sample);
+      const telemetry = structuredClone(sample);
+      telemetry.result.status.print_stats.state = printState;
+      return Response.json(telemetry);
     })
   });
   ctx.after(() => new Promise(resolve => server.close(resolve)));
@@ -159,6 +184,30 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.equal(edited.name, changed.name);
   assert.equal(edited.origin, changed.origin);
   assert.equal(edited.apiKey, undefined);
+  const commandPath = '/api/machines/' + id + '/command';
+  const observer = { username: 'observateur', password: 'observer-demo-password' };
+  assert.equal((await call('/api/observers', { body: observer, cookie })).status, 201);
+  const watchLogin = await call('/api/login', { body: observer });
+  assert.deepEqual(await watchLogin.json(), { authenticated: true, username: observer.username, role: 'observer' });
+  const watchCookie = session(watchLogin);
+  assert.equal((await call('/api/machines', { cookie: watchCookie })).status, 200);
+  assert.equal((await call(commandPath, { body: { action: 'pause' } })).status, 401);
+  assert.equal((await call(commandPath, { body: { action: 'pause' }, cookie: watchCookie })).status, 403);
+  assert.equal((await call('/api/machines', { body: add, cookie: watchCookie })).status, 403);
+  assert.equal((await call('/api/discovery', { cookie: watchCookie })).status, 403);
+  assert.equal((await call(commandPath, { body: { action: 'resume' }, cookie })).status, 409);
+  assert.equal((await call(commandPath, { body: { action: 'pause' }, cookie, requestOrigin: 'http://other.test' })).status, 403);
+  assert.deepEqual(commands, []);
+  assert.deepEqual(await (await call(commandPath, { body: { action: 'pause' }, cookie })).json(), { status: 'paused' });
+  assert.equal((await stateIs('paused')).id, id);
+  assert.deepEqual(await (await call(commandPath, { body: { action: 'resume' }, cookie })).json(), { status: 'printing' });
+  assert.deepEqual(commands, [[id, changed.origin, 'pause'], [id, changed.origin, 'resume']]);
+  ambiguousCommand = true;
+  const unconfirmed = await call(commandPath, { body: { action: 'pause' }, cookie });
+  assert.equal(unconfirmed.status, 504);
+  assert.deepEqual(await unconfirmed.json(), { error: 'command-unconfirmed' });
+  assert.equal(commands.length, 3);
+  ambiguousCommand = false;
   const cc2 = { kind: 'elegoo', host: '192.168.1.53', accessCode: 'ExampleCode', name: 'CC2 atelier' };
   assert.deepEqual(await (await call('/api/machines/test', { body: cc2, cookie })).json(), { ok: true, issue: null });
   const firstCC2 = await call('/api/machines', { body: cc2, cookie });

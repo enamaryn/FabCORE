@@ -3,8 +3,9 @@ import { randomBytes, randomUUID, createHash, scrypt, timingSafeEqual } from 'no
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import { moonrakerOrigin, privateIPv4, readMoonraker } from './moonraker.mjs';
+import { commandMoonraker, moonrakerOrigin, privateIPv4, readMoonraker } from './moonraker.mjs';
 import { createBambuMonitor } from './bambu.mjs';
 import { readElegoo } from './elegoo.mjs';
 import { readElegooCC1 } from './elegoo-cc1.mjs';
@@ -90,7 +91,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter = readMoonraker, readCC2 = readElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera } = {}) {
+export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2 = readElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -109,6 +110,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
     const { serial, ...telemetry } = await reader(machine);
     return telemetry;
   });
+  const pendingCommands = new Set();
   let probes = 0;
   let discoveryActive = false;
   const cameraStreams = new Map();
@@ -124,17 +126,20 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
     const id = req.headers.cookie?.match(/(?:^|;\s*)fabcore_session=([\w-]{43})(?:;|$)/)?.[1];
     if (!id) return null;
     const key = digest(id).toString('hex');
-    const expires = sessions.get(key);
-    if (expires > Date.now()) return key;
+    if (sessions.get(key)?.expires > Date.now()) return key;
     sessions.delete(key);
     return null;
   }
-  function signIn(res) {
+  function signIn(res, username, role) {
     const id = randomBytes(32).toString('base64url');
-    for (const [key, expires] of sessions) if (expires <= Date.now()) sessions.delete(key);
-    if (sessions.size >= 32) sessions.delete(sessions.keys().next().value);
-    sessions.set(digest(id).toString('hex'), Date.now() + sessionAge);
-    answer(res, 200, { authenticated: true, username: store.state.admin.username }, { 'Set-Cookie': cookie(id, sessionAge / 1000) });
+    for (const [key, entry] of sessions) if (entry.expires <= Date.now()) sessions.delete(key);
+    if (sessions.size >= 32) {
+      const oldest = sessions.keys().next().value;
+      sessions.delete(oldest);
+      stopCameraStreams(oldest);
+    }
+    sessions.set(digest(id).toString('hex'), { expires: Date.now() + sessionAge, username, role });
+    answer(res, 200, { authenticated: true, username, role }, { 'Set-Cookie': cookie(id, sessionAge / 1000) });
   }
   function withinLimit(route) {
     const now = Date.now();
@@ -169,10 +174,11 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       return res.end(body);
     }
     const activeSession = session(req);
+    const viewer = sessions.get(activeSession);
     if (req.method === 'GET' && path === '/api/session') {
       return answer(res, 200, {
         installed: Boolean(store.state.admin), authenticated: Boolean(activeSession),
-        username: activeSession ? store.state.admin.username : null
+        username: viewer?.username ?? null, ...(viewer ? { role: viewer.role } : {})
       });
     }
     const camera = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera$/);
@@ -186,7 +192,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       }
       const controller = new AbortController();
       const stop = () => controller.abort();
-      const expires = setTimeout(stop, Math.max(0, sessions.get(activeSession) - Date.now()));
+      const expires = setTimeout(stop, Math.max(0, viewer.expires - Date.now()));
       cameraStreams.set(controller, { owner: activeSession, id: machine.id });
       res.once('close', stop);
       try {
@@ -207,7 +213,8 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       return;
     }
     if (path === '/api/discovery') {
-      if (!activeSession) return error(res, 401, 'sign-in');
+      if (!viewer) return error(res, 401, 'sign-in');
+      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
       const available = networks();
       if (req.method === 'GET') return answer(res, 200, { networks: available.map(({ cidr }) => cidr) });
       if (req.method !== 'POST') return error(res, 405, 'missing');
@@ -244,7 +251,39 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         ...(machine.kind === 'bambu' ? bambu.read(machine) : snapshot(machine))
       })) });
     }
-    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/edit'].includes(path)) {
+    const command = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/command$/);
+    if (req.method === 'POST' && command) {
+      if (!viewer) return error(res, 401, 'sign-in');
+      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+      if (!requireJson(req, res)) return;
+      let data;
+      try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+      const action = data.action;
+      if (action !== 'pause' && action !== 'resume') return error(res, 400, 'invalid');
+      const machine = store.state.machines.find(({ id }) => id === command[1]);
+      if (!machine || (machine.kind ?? 'klipper') !== 'klipper') return error(res, 404, 'missing');
+      if (pendingCommands.has(machine.id)) return error(res, 409, 'command-busy');
+      const before = action === 'pause' ? 'printing' : 'paused';
+      const after = action === 'pause' ? 'paused' : 'printing';
+      pendingCommands.add(machine.id);
+      try {
+        if ((await readPrinter(machine)).status !== before) return error(res, 409, 'command-state');
+        if (res.destroyed) return;
+        if (!session(req)) return error(res, 401, 'sign-in');
+        try {
+          if (!(await sendCommand(machine, action))) return error(res, 502, 'command-rejected');
+          for (let attempt = 0; attempt < 4; attempt++) {
+            if ((await readPrinter(machine)).status === after) return answer(res, 200, { status: after });
+            if (attempt < 3) await delay(350);
+          }
+        } catch { /* The request may have reached the printer. Never retry it automatically. */ }
+        return error(res, 504, 'command-unconfirmed');
+      } finally {
+        snapshot.forget(machine.id);
+        pendingCommands.delete(machine.id);
+      }
+    }
+    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/edit', '/api/observers'].includes(path)) {
       return error(res, 404, 'missing');
     }
     if (!requireJson(req, res)) return;
@@ -255,13 +294,17 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       }
       return answer(res, 200, { authenticated: false }, { 'Set-Cookie': cookie('', 0) });
     }
-    if (path.startsWith('/api/machines') && !activeSession) return error(res, 401, 'sign-in');
+    if (path.startsWith('/api/machines') || path === '/api/observers') {
+      if (!viewer) return error(res, 401, 'sign-in');
+      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+    }
     if (path === '/api/setup' && store.state.admin) return error(res, 409, 'installed');
     if ((path === '/api/setup' || path === '/api/login') && !withinLimit(path)) return error(res, 429, 'rate');
     let data;
     try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
     if (path.startsWith('/api/machines')) {
       const existing = store.state.machines.find((machine) => machine.id === data.id);
+      if (existing && pendingCommands.has(existing.id)) return error(res, 409, 'command-busy');
       if ((path === '/api/machines/edit' || data.id) && !existing) return error(res, 404, 'missing');
       const name = value(data, 'name', 80).trim();
       const kind = data.kind ?? 'klipper';
@@ -343,17 +386,32 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       if (store.state.admin) return error(res, 409, 'installed');
       if (activation.expires <= Date.now()) return error(res, 410, 'expired');
       store.save({ ...store.state, admin: { username, salt, hash } });
-      return signIn(res);
+      return signIn(res, username, 'admin');
     }
     const admin = store.state.admin;
+    const observers = store.state.observers ?? [];
+    if (path === '/api/observers') {
+      if (username.length < 3 || password.length < 12) return error(res, 400, 'credentials');
+      const salt = randomBytes(16).toString('hex');
+      const hash = (await derive(password, salt, 64)).toString('hex');
+      const latest = store.state.observers ?? [];
+      if (admin.username === username || latest.some((entry) => entry.username === username)) {
+        return error(res, 409, 'observer-duplicate');
+      }
+      if (latest.length >= 16) return error(res, 409, 'observer-limit');
+      store.save({ ...store.state, observers: [...latest, { username, salt, hash }] });
+      return answer(res, 201, { username });
+    }
     if (!admin || !password) return error(res, 401, 'credentials');
-    const hash = await derive(password, admin.salt, 64);
-    if (!timingSafeEqual(hash, Buffer.from(admin.hash, 'hex')) || username !== admin.username) return error(res, 401, 'credentials');
+    const role = username === admin.username ? 'admin' : 'observer';
+    const account = role === 'admin' ? admin : observers.find((entry) => entry.username === username);
+    const hash = await derive(password, account?.salt ?? admin.salt, 64);
+    if (!account || !timingSafeEqual(hash, Buffer.from(account.hash, 'hex'))) return error(res, 401, 'credentials');
     if (activeSession) {
       sessions.delete(activeSession);
       stopCameraStreams(activeSession);
     }
-    return signIn(res);
+    return signIn(res, username, role);
   }
   const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => {
     route(req, res).catch(() => {

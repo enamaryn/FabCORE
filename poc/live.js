@@ -1,3 +1,4 @@
+const pendingPrintCommands = new Set();
 const live = { phase: 'loading', page: 'home', username: '', pending: false, error: '', refreshError: false };
 state.machines = [];
 state.events = [];
@@ -12,6 +13,13 @@ const problem = (code) => ({
   'machine-changed': t('La fiche a changé pendant le test. Rouvrez-la et réessayez.', 'The record changed during the test. Reopen it and try again.'),
   'discovery-network': t('Ce réseau local est indisponible.', 'This local network is unavailable.'),
   'discovery-busy': t('Un scan est déjà en cours.', 'A scan is already running.'),
+  forbidden: t('Cette action est réservée à l’administrateur.', 'Only an administrator can perform this action.'),
+  'command-busy': t('Une commande est déjà en cours sur cette imprimante.', 'A command is already in progress for this printer.'),
+  'command-state': t('L’état actuel de l’imprimante ne permet pas cette commande.', 'The current printer state does not allow this command.'),
+  'command-rejected': t('Moonraker a refusé la commande.', 'Moonraker rejected the command.'),
+  'command-unconfirmed': t('État non confirmé. Vérifiez l’imprimante avant de réessayer.', 'State not confirmed. Check the printer before retrying.'),
+  'observer-duplicate': t('Cet identifiant est déjà utilisé.', 'This username is already in use.'),
+  'observer-limit': t('La limite de 16 observateurs est atteinte.', 'The limit of 16 observers has been reached.'),
   'probe-busy': t('Un test est déjà en cours. Réessayez dans quelques secondes.', 'A test is already running. Try again in a few seconds.'),
   'machine-invalid': t('Vérifiez le nom, l’adresse IPv4 privée et les identifiants de la machine.', 'Check the machine name, private IPv4 address and credentials.'),
   'machine-duplicate': t('Cette machine est déjà enregistrée.', 'This machine is already registered.'),
@@ -85,15 +93,20 @@ function credentialsPage() {
 
 function liveFleet() {
   const list = state.machines;
-  return title(t('Machines','Machines'), t('Parc de machines en lecture seule.','Read-only machine fleet.'), btn('add',t('Ajouter une machine','Add machine'),'plus','primary')) +
+  return title(t('Machines','Machines'), t('Parc de machines.','Machine fleet.'), state.role === 'viewer' ? '' : btn('add',t('Ajouter une machine','Add machine'),'plus','primary')) +
     (list.length ? `<div class="cards">${list.map(card).join('')}</div>` :
       `<p class="notice">${t('Ajoute une adresse Moonraker pour commencer.','Add a Moonraker address to get started.')}</p>`);
 }
 
 function liveTelemetry(m) {
   const translatableTime = m.checkedAt ? new Date(m.checkedAt).toLocaleTimeString(state.lang) : '—';
+  const canManage = state.role === 'admin';
+  const action = m.kind === 'klipper' && (m.status === 'printing' ? 'pause' : m.status === 'paused' ? 'resume' : null);
+  const controls = canManage && action ? btn('print-command:' + action,
+    action === 'pause' ? t('Mettre en pause','Pause print') : t('Reprendre','Resume print'),
+    '', 'primary', pendingPrintCommands.has(m.id) ? 'disabled' : '') : '';
   return `<section class="panel stack">
-      <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2><div class="row wrap">${badge(m.status)}${btn('edit',t('Modifier la machine','Edit machine'))}</div></div>
+      <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2><div class="row wrap">${badge(m.status)}${controls}${canManage ? btn('edit',t('Modifier la machine','Edit machine')) : ''}</div></div>
       ${m.issue?`<p class="notice">${liveIssue(m.issue)}</p>`:''}
       <div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
       <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>
@@ -158,10 +171,11 @@ function renderLive() {
   const screens = { home: dashboard, machines: liveFleet, detail: liveDetail, history: () =>
     title(t('Activité récente','Recent activity')) + `<section class="panel">${listEvents()}</section>` };
   app.innerHTML = `<a class="skip" href="#content">${t('Aller au contenu','Skip to content')}</a><div class="${signedIn?'layout':''}">
-    ${signedIn?`<aside class="sidebar">${brand()}<nav aria-label="${t('Navigation principale','Main navigation')}">${liveNavigation()}</nav><div class="sidefoot"><small class="signal">POC · ${t('Lecture seule','Read only')}</small></div></aside>`:''}
+    ${signedIn?`<aside class="sidebar">${brand()}<nav aria-label="${t('Navigation principale','Main navigation')}">${liveNavigation()}</nav><div class="sidefoot"><small class="signal">POC${state.role === 'viewer' ? ' · ' + t('Observateur','Observer') : ''}</small></div></aside>`:''}
     <div><header class="top"><div class="crumb">${signedIn?`<span>${esc(live.username)}</span>`:brand()}</div><div class="row wrap">
       ${btn('lang',state.lang==='fr'?'EN':'FR','','ghost',`aria-label="${state.lang==='fr'?'Switch to English':'Passer en français'}"`)}
       ${btn('theme','','sun','ghost',`aria-label="${t('Basculer le thème','Toggle theme')}"`)}
+      ${signedIn && state.role === 'admin' ? btn('observer',t('Ajouter un observateur','Add observer')) : ''}
       ${signedIn?btn('logout',t('Déconnexion','Sign out'),'','ghost'):''}
     </div></header><main id="content" class="area" tabindex="-1">
       ${live.refreshError?`<p class="notice" role="status">${t('Actualisation indisponible. Les données affichées datent de la dernière réponse.','Refresh unavailable. Showing the last response.')}</p>`:''}
@@ -230,7 +244,8 @@ async function refresh() {
   }
 }
 
-function openWorkshop(username) {
+function openWorkshop(username, role) {
+  state.role = role === 'admin' ? 'admin' : 'viewer';
   live.username = username;
   live.phase = 'workshop';
   live.page = 'home';
@@ -246,7 +261,7 @@ function openWorkshop(username) {
 async function loadSession() {
   try {
     const session = await api('session');
-    if (session.authenticated) return openWorkshop(session.username);
+    if (session.authenticated) return openWorkshop(session.username, session.role);
     live.phase = session.installed ? 'login' : 'setup';
   } catch {
     live.phase = 'failed';
@@ -374,7 +389,38 @@ document.addEventListener('click', async (event) => {
     renderLive();
     app.querySelector('h1')?.focus();
   }
-  if (action === 'add') {
+  if (action === 'observer' && state.role === 'admin') {
+    dialog.innerHTML = `<form id="add-observer" class="stack">
+      <h2>${t('Ajouter un observateur','Add observer')}</h2>
+      <label>${t('Identifiant','Username')}<input name="username" minlength="3" maxlength="40" required autocomplete="off"></label>
+      <label>${t('Mot de passe','Password')}<input name="password" type="password" minlength="12" maxlength="128" required autocomplete="new-password"></label>
+      <p class="error" role="alert"></p>
+      <div class="row wrap">${btn('close',t('Annuler','Cancel'))}<button class="primary" type="submit">${t('Créer le compte','Create account')}</button></div>
+    </form>`;
+    dialog.showModal();
+  }
+  if (action === 'print-command' && state.role === 'admin') {
+    const current = machine(state.machine);
+    if (!current || pendingPrintCommands.has(current.id)) return;
+    if (value === 'resume' && !window.confirm(t('Reprendre l’impression sur ', 'Resume the print on ') + current.name + ' ?')) return;
+    pendingPrintCommands.add(current.id);
+    target.disabled = true;
+    try {
+      const result = await api('machines/' + current.id + '/command', { action: value });
+      toast(result.status === 'paused' ? t('Impression en pause.','Print paused.') : t('Impression reprise.','Print resumed.'));
+    } catch (error) {
+      toast(problem(error.code ?? 'command-unconfirmed'));
+    } finally {
+      pendingPrintCommands.delete(current.id);
+      target.disabled = false;
+      await refresh();
+      if (live.page === 'detail' && state.machine === current.id) {
+        const commandButton = app.querySelector('[data-action^="print-command:"]');
+        if (commandButton) commandButton.disabled = false;
+      }
+    }
+  }
+  if (action === 'add' && state.role === 'admin') {
     discoveryCancel?.abort();
     openMachineForm();
   }
@@ -422,7 +468,7 @@ document.addEventListener('submit', async (event) => {
     if (!form.querySelector('button[type="submit"]').disabled) await scanFromForm(form);
     return;
   }
-  if (!['credentials','add-machine'].includes(form.id)) return;
+  if (!['credentials','add-machine','add-observer'].includes(form.id)) return;
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form));
   const errorText = form.querySelector('.error');
@@ -435,7 +481,11 @@ document.addEventListener('submit', async (event) => {
   controls.forEach((element) => { element.disabled = true; });
   errorText.textContent = '';
   try {
-    if (form.id === 'add-machine') {
+    if (form.id === 'add-observer') {
+      await api('observers', data);
+      dialog.close();
+      toast(t('Compte observateur créé.','Observer account created.'));
+    } else if (form.id === 'add-machine') {
       if (event.submitter?.value === 'test') {
         const status = form.querySelector('[role="status"]');
         status.hidden = false;
@@ -459,7 +509,7 @@ document.addEventListener('submit', async (event) => {
       toast(t('Machine enregistrée.','Machine registered.'));
     } else {
       const result = await api(live.phase === 'setup' ? 'setup' : 'login', data);
-      openWorkshop(result.username);
+      openWorkshop(result.username, result.role);
     }
   } catch (error) {
     if (error.code === 'installed') {
