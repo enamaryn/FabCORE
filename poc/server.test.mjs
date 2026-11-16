@@ -51,7 +51,13 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   let connected = true;
   let reads = 0;
   const origin = 'http://fabcore.test';
-  const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token', readCC2: async (machine) => {
+  const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token',
+    networks: () => [{ cidr: '192.168.1.0/24' }],
+    scan: async (network) => {
+      assert.equal(network.cidr, '192.168.1.0/24');
+      return [{ kind: 'elegoo', host: '192.168.1.55', serial: 'CC2TEST01' }];
+    },
+    readCC2: async (machine) => {
     const serial = machine.origin.endsWith('.54:1883') ? 'CC2TEST02' : 'CC2TEST01';
     const issue = machine.serial && machine.serial !== serial ? 'elegoo-identity' : null;
     return { serial, issue, status: issue ? 'error' : 'ready', nozzle: 25, bed: 24, progress: 0, file: '' };
@@ -157,6 +163,14 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.deepEqual(fleet.machines.slice(1).map(({ serial, origin }) => [serial, origin]), [
     ['CC2TEST01', 'mqtt://192.168.1.55:1883'], ['CC2TEST02', 'mqtt://192.168.1.54:1883']
   ]);
+  assert.equal((await call('/api/discovery')).status, 401);
+  assert.deepEqual(await (await call('/api/discovery', { cookie })).json(), { networks: ['192.168.1.0/24'] });
+  const scan = { network: '192.168.1.0/24' };
+  assert.equal((await call('/api/discovery', { body: scan, cookie, requestOrigin: 'http://other.test' })).status, 403);
+  assert.equal((await call('/api/discovery', { body: { network: '192.168.2.0/24' }, cookie })).status, 400);
+  assert.deepEqual(await (await call('/api/discovery', { body: scan, cookie })).json(), {
+    devices: [{ kind: 'elegoo', host: '192.168.1.55', serial: 'CC2TEST01', registered: true }]
+  });
   const file = join(directory, 'state.json');
   const text = await readFile(file, 'utf8');
   assert.ok(!text.includes(credentials.password) && !text.includes(token));

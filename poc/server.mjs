@@ -8,6 +8,7 @@ import { moonrakerOrigin, privateIPv4, readMoonraker } from './moonraker.mjs';
 import { createBambuMonitor } from './bambu.mjs';
 import { readElegoo } from './elegoo.mjs';
 import { readElegooCC1 } from './elegoo-cc1.mjs';
+import { discoveryNetworks, scanNetwork } from './discovery.mjs';
 import { openStore } from './store.mjs';
 
 const machineModels = {
@@ -88,7 +89,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter = readMoonraker, readCC2 = readElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken } = {}) {
+export function createFabCore({ directory, origin, readPrinter = readMoonraker, readCC2 = readElegoo, readCC1 = readElegooCC1, bambu = createBambuMonitor(), activationToken, networks = discoveryNetworks, scan = scanNetwork } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -108,6 +109,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
     return telemetry;
   });
   let probes = 0;
+  let discoveryActive = false;
   function cookie(value, age) {
     return `fabcore_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${secure ? '; Secure' : ''}`;
   }
@@ -165,6 +167,36 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         installed: Boolean(store.state.admin), authenticated: Boolean(activeSession),
         username: activeSession ? store.state.admin.username : null
       });
+    }
+    if (path === '/api/discovery') {
+      if (!activeSession) return error(res, 401, 'sign-in');
+      const available = networks();
+      if (req.method === 'GET') return answer(res, 200, { networks: available.map(({ cidr }) => cidr) });
+      if (req.method !== 'POST') return error(res, 405, 'missing');
+      if (!requireJson(req, res)) return;
+      let data;
+      try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+      const network = available.find(({ cidr }) => cidr === data.network);
+      if (!network) return error(res, 400, 'discovery-network');
+      if (discoveryActive) return error(res, 429, 'discovery-busy');
+      const abort = new AbortController();
+      const stop = () => abort.abort();
+      res.once('close', stop);
+      discoveryActive = true;
+      try {
+        const found = await scan(network, abort.signal);
+        if (abort.signal.aborted) return;
+        const devices = found.map((device) => ({
+          ...device,
+          registered: store.state.machines.some((machine) => (machine.kind ?? 'klipper') === device.kind &&
+            (device.origin === machine.origin || (device.serial && device.serial === machine.serial) ||
+              (device.kind !== 'klipper' && new URL(machine.origin).hostname === device.host)))
+        }));
+        return answer(res, 200, { devices });
+      } finally {
+        res.off('close', stop);
+        discoveryActive = false;
+      }
     }
     if (req.method === 'GET' && path === '/api/machines') {
       if (!activeSession) return error(res, 401, 'sign-in');

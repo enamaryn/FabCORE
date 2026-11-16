@@ -10,6 +10,8 @@ const problem = (code) => ({
   rate: t('Trop de tentatives. Réessayez dans une minute.', 'Too many attempts. Try again in a minute.'),
   installed: t('FabCore est déjà activé. Connectez-vous.', 'FabCore is already activated. Sign in.'),
   'machine-changed': t('La fiche a changé pendant le test. Rouvrez-la et réessayez.', 'The record changed during the test. Reopen it and try again.'),
+  'discovery-network': t('Ce réseau local est indisponible.', 'This local network is unavailable.'),
+  'discovery-busy': t('Un scan est déjà en cours.', 'A scan is already running.'),
   'probe-busy': t('Un test est déjà en cours. Réessayez dans quelques secondes.', 'A test is already running. Try again in a few seconds.'),
   'machine-invalid': t('Vérifiez le nom, l’adresse IPv4 privée et les identifiants de la machine.', 'Check the machine name, private IPv4 address and credentials.'),
   'machine-duplicate': t('Cette machine est déjà enregistrée.', 'This machine is already registered.'),
@@ -43,9 +45,11 @@ function liveIssue(issue) {
   })[issue] || '';
 }
 
-async function api(path, data) {
-  const response = await fetch('/api/' + path, data === undefined ? { signal: AbortSignal.timeout(5000) } : {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(path.startsWith('machines') ? 18000 : 5000)
+async function api(path, data, cancel) {
+  const timeout = AbortSignal.timeout(path === 'discovery' || path.startsWith('machines') ? 18000 : 5000);
+  const signal = cancel ? AbortSignal.any([timeout, cancel]) : timeout;
+  const response = await fetch('/api/' + path, data === undefined ? { signal } : {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal
   });
   const payload = await response.json();
   if (!response.ok) throw Object.assign(new Error(payload.error), { code: payload.error });
@@ -200,23 +204,24 @@ async function loadSession() {
   renderLive();
 }
 
-function openMachineForm(kind = 'klipper', name = '', existing = null) {
+function openMachineForm(kind = 'klipper', name = '', existing = null, detected = null) {
   const isBambu = kind === 'bambu';
   const isElegoo = kind === 'elegoo';
   const isCC1 = kind === 'elegoo-cc1';
   dialog.innerHTML = `<form id="add-machine" class="stack" autocomplete="off">
     <h2>${existing ? t('Modifier une machine','Edit a machine') : t('Ajouter une machine','Add a machine')}</h2>
     ${existing ? `<input type="hidden" name="id" value="${esc(existing.id)}"><input type="hidden" name="kind" value="${kind}">` : ''}
+    ${existing ? '' : btn('discover',t('Détecter sur le réseau','Discover on network'))}
     <div class="fields">
       ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind"><option value="klipper" ${kind === 'klipper' ? 'selected' : ''}>Klipper · Moonraker</option><option value="bambu" ${isBambu ? 'selected' : ''}>Bambu Lab · P2S</option><option value="elegoo" ${isElegoo ? 'selected' : ''}>Elegoo · Centauri Carbon 2</option><option value="elegoo-cc1" ${isCC1 ? 'selected' : ''}>Elegoo · Centauri Carbon</option></select></label>`}
       <label>${t('Nom de la machine','Machine name')}<input name="name" required maxlength="80" value="${esc(name)}"></label>
       ${isBambu || isElegoo || isCC1 ? `
-      <label>${t('Adresse IPv4 locale','Local IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : ''}"></label>
-      ${isBambu ? `<label>${t('Numéro de série','Serial number')}<input name="serial" required maxlength="32" value="${esc(existing?.serial ?? '')}"></label>` : ''}
-      ${isCC1 && !existing ? `<label>${t('MainboardID (facultatif)', 'MainboardID (optional)')}<input name="serial" maxlength="64"></label>` : ''}
+      <label>${t('Adresse IPv4 locale','Local IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : esc(detected?.host ?? '')}"></label>
+      ${isBambu ? `<label>${t('Numéro de série','Serial number')}<input name="serial" required maxlength="32" value="${esc(existing?.serial ?? detected?.serial ?? '')}"></label>` : ''}
+      ${isCC1 && !existing ? `<label>${t('MainboardID (facultatif)', 'MainboardID (optional)')}<input name="serial" maxlength="64" value="${esc(detected?.serial ?? '')}"></label>` : ''}
       ${isCC1 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
       ` : `
-      <label>${t('Adresse Moonraker','Moonraker address')}<input name="origin" type="url" placeholder="http://192.168.1.50:7125" required maxlength="200" value="${esc(existing?.origin ?? '')}"></label>
+      <label>${t('Adresse Moonraker','Moonraker address')}<input name="origin" type="url" placeholder="http://192.168.1.50:7125" required maxlength="200" value="${esc(existing?.origin ?? detected?.origin ?? '')}"></label>
       <label>${t('Clé API Moonraker (facultative)','Moonraker API key (optional)')}<input name="apiKey" type="password" maxlength="256" autocomplete="new-password"></label>
       `}
     </div>
@@ -226,6 +231,61 @@ function openMachineForm(kind = 'klipper', name = '', existing = null) {
     <div class="row wrap">${btn('close',t('Annuler','Cancel'))}<button type="submit" value="test">${t('Tester la connexion','Test connection')}</button><button class="primary" type="submit" value="save">${existing ? t('Enregistrer','Save') : t('Ajouter','Add')}</button></div>
   </form>`;
   if (!dialog.open) dialog.showModal();
+}
+
+let discoveryCancel;
+let discoveredDevices = [];
+
+async function openDiscovery() {
+  discoveryCancel?.abort();
+  discoveryCancel = new AbortController();
+  const { signal } = discoveryCancel;
+  discoveredDevices = [];
+  dialog.innerHTML = `<form id="discover-machines" class="stack">
+    <h2>${t('Détecter des machines','Discover machines')}</h2>
+    <label>${t('Réseau local du serveur','Server local network')}<select name="network" required disabled></select></label>
+    <div class="row wrap">${btn('add',t('Saisie manuelle','Enter manually'))}<button class="primary" type="submit" disabled>${t('Lancer le scan','Start scan')}</button></div>
+    <p role="status">${t('Chargement des réseaux…','Loading networks…')}</p>
+    <div class="stack" data-discovery-results></div>
+  </form>`;
+  const form = dialog.querySelector('form');
+  const status = form.querySelector('[role="status"]');
+  try {
+    const { networks } = await api('discovery', undefined, signal);
+    if (signal.aborted) return;
+    form.elements.network.innerHTML = networks.map((network) => `<option>${esc(network)}</option>`).join('');
+    form.elements.network.disabled = !networks.length;
+    form.querySelector('button[type="submit"]').disabled = !networks.length;
+    status.textContent = networks.length ? '' : t('Aucun réseau local disponible.', 'No local network available.');
+  } catch (error) {
+    if (!signal.aborted) status.textContent = problem(error.code);
+  }
+}
+
+async function scanFromForm(form) {
+  const { signal } = discoveryCancel;
+  const status = form.querySelector('[role="status"]');
+  const results = form.querySelector('[data-discovery-results]');
+  const submit = form.querySelector('button[type="submit"]');
+  const network = form.elements.network.value;
+  submit.disabled = form.elements.network.disabled = true;
+  results.replaceChildren();
+  status.textContent = t('Recherche en cours…','Scanning…');
+  try {
+    const { devices } = await api('discovery', { network }, signal);
+    if (signal.aborted) return;
+    discoveredDevices = devices;
+    status.textContent = devices.length ? t('Choisissez une machine à ajouter.', 'Choose a machine to add.')
+      : t('Aucune machine identifiée. L’ajout manuel reste disponible.', 'No printer identified. You can still add it manually.');
+    const models = { klipper: 'Klipper · Moonraker', bambu: 'Bambu Lab · P2S', elegoo: 'Elegoo · Centauri Carbon 2', 'elegoo-cc1': 'Elegoo · Centauri Carbon' };
+    results.innerHTML = devices.map((device, index) => `<div class="row between wrap"><span>${esc(models[device.kind])} · ${esc(device.host)}</span>
+      ${device.registered ? `<small>${t('Déjà ajoutée','Already added')}</small>`
+        : btn('detected:' + index, t('Configurer','Configure'))}</div>`).join('');
+  } catch (error) {
+    if (!signal.aborted) status.textContent = problem(error.code);
+  } finally {
+    submit.disabled = form.elements.network.disabled = false;
+  }
 }
 
 document.addEventListener('click', async (event) => {
@@ -264,7 +324,15 @@ document.addEventListener('click', async (event) => {
     renderLive();
     app.querySelector('h1')?.focus();
   }
-  if (action === 'add') openMachineForm();
+  if (action === 'add') {
+    discoveryCancel?.abort();
+    openMachineForm();
+  }
+  if (action === 'discover') openDiscovery();
+  if (action === 'detected') {
+    const detected = discoveredDevices[Number(value)];
+    if (detected && !detected.registered) openMachineForm(detected.kind, '', null, detected);
+  }
   if (action === 'edit') {
     const current = machine(state.machine);
     if (current) openMachineForm(current.kind, current.name, current);
@@ -297,6 +365,11 @@ dialog.addEventListener('change', (event) => {
 
 document.addEventListener('submit', async (event) => {
   const form = event.target;
+  if (form.id === 'discover-machines') {
+    event.preventDefault();
+    if (!form.querySelector('button[type="submit"]').disabled) await scanFromForm(form);
+    return;
+  }
   if (!['credentials','add-machine'].includes(form.id)) return;
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form));
@@ -352,6 +425,7 @@ document.addEventListener('submit', async (event) => {
 });
 
 dialog.addEventListener('close', () => {
+  discoveryCancel?.abort();
   dialog.innerHTML = '';
   if (live.phase === 'workshop') renderLive();
 });
