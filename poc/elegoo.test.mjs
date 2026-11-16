@@ -105,6 +105,8 @@ test('CC2 conserve une session, applique les rapports et attend avant de se réi
   const machine = { ...cc2, id: 'test-1', serial };
   const clients = [];
   let clock = Date.now();
+  let receiveCanvas;
+  const canvasReceived = new Promise((resolve) => { receiveCanvas = resolve; });
   const monitor = createElegooMonitor({
     now: () => clock,
     fetcher: identify(serial),
@@ -114,9 +116,16 @@ test('CC2 conserve une session, applique les rapports et attend avant de se réi
       const reply = root + '/' + options.clientId + '/api_response';
       client.deliver = (topic, data) => client.emit('message', topic, Buffer.from(JSON.stringify(data)));
       client.subscribe = (_, done) => done(null, [{ qos: 0 }, { qos: 0 }, { qos: 0 }]);
-      client.publish = (topic) => {
+      client.publish = (topic, payload) => {
         if (topic.endsWith('/api_register')) client.deliver(root + '/' + options.clientId + '_req/register_response', { error: 'ok' });
-        else client.deliver(reply, { id: 1, result: { machine_status: { status: 1 }, extruder: { temperature: 21 } } });
+        else if (JSON.parse(payload).method === 2005) {
+          client.deliver(reply, { id: 2, method: 2005, result: { error_code: 0, canvas_info: {
+            active_canvas_id: 0, active_tray_id: 1, canvas_list: [{ canvas_id: 0, connected: 1,
+              tray_list: [{ tray_id: 0, status: 0 }, { tray_id: 1, status: 2, filament_type: 'PLA', filament_name: 'PLA Silk', filament_color: '#AE1188' }]
+            }]
+          } } });
+          receiveCanvas();
+        } else client.deliver(reply, { id: 1, result: { machine_status: { status: 1 }, extruder: { temperature: 21 } } });
       };
       client.end = () => { client.ended = true; };
       clients.push(client);
@@ -131,6 +140,13 @@ test('CC2 conserve une session, applique les rapports et attend avant de se réi
     clients[0].deliver('elegoo/' + serial + '/api_status', { method: 6000, result: { extruder: { temperature: 22 } } });
     assert.equal((await monitor.read(machine)).nozzle, 22);
     assert.equal(clients.length, 1);
+    clock += 3000;
+    const timeout = setTimeout(receiveCanvas, 2500);
+    try { await canvasReceived; } finally { clearTimeout(timeout); }
+    const slots = (await monitor.read(machine)).filaments[0].slots;
+    assert.equal(slots[0].occupied, false);
+    assert.deepEqual(slots[1], { id: 1, occupied: true, active: true, material: 'PLA', name: 'PLA Silk', color: '#AE1188' });
+    assert.equal(slots[2].occupied, null);
     clients[0].emit('close');
     assert.equal((await monitor.read(machine)).status, 'offline');
     assert.equal(clients.length, 1);

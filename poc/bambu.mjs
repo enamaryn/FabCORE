@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { checkServerIdentity } from 'node:tls';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connect } from 'mqtt';
+import { bambuFilaments } from './filaments.mjs';
 
 const ca = readFileSync(new URL('./certs/bambu-p2s.pem', import.meta.url));
 const states = new Map([
@@ -20,6 +21,8 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
     const requestTopic = `device/${machine.serial}/request`;
     const printer = { current: empty('connecting', null), lastReport: 0 };
     let report = {};
+    let ams = {};
+    let filaments = null;
     let timeout;
     const client = connectPrinter(machine.origin, {
       username: 'bblp',
@@ -48,6 +51,8 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
     client.on('connect', () => {
       if (tracked) diagnostics?.record('mqtt', 'connected', machine.id);
       report = {};
+      ams = {};
+      filaments = null;
       printer.lastReport = 0;
       printer.current = empty('connecting', null);
       client.subscribe(reportTopic, (error, grants) => {
@@ -64,6 +69,10 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
       try { delta = JSON.parse(payload)?.print; } catch { return; }
       if (delta?.command !== 'push_status') return;
       report = { ...report, ...delta };
+      if (delta.ams && typeof delta.ams === 'object' && !Array.isArray(delta.ams)) {
+        ams = { ...ams, ...delta.ams };
+        filaments = bambuFilaments(ams);
+      }
       // The printer can retain a failed job after its print error was cleared.
       const clearedFailure = report.gcode_state === 'FAILED' && report.print_error === 0;
       const status = clearedFailure ? 'ready' : states.get(report.gcode_state);
@@ -78,6 +87,7 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
         bed: temperature(report.bed_temper),
         progress: status === 'done' ? 100 : !clearedFailure && Number.isFinite(report.mc_percent)
           ? Math.round(Math.max(0, Math.min(100, report.mc_percent))) : 0,
+        ...(filaments !== null ? { filaments } : {}),
         file: !clearedFailure && typeof report.subtask_name === 'string' ? report.subtask_name.trim().slice(0, 200) : ''
       };
     });

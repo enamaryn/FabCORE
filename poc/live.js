@@ -205,6 +205,30 @@ function liveTelemetry(m) {
     </section>`}`;
 }
 
+function liveFilaments(machine) {
+  if (!['bambu', 'elegoo'].includes(machine.kind)) return '';
+  const system = machine.kind === 'bambu' ? 'AMS' : 'CANVAS';
+  const missing = Array.isArray(machine.filaments)
+    ? t('Aucun module connecté.', 'No unit connected.')
+    : t('Données des emplacements indisponibles.', 'Slot information is unavailable.');
+  const units = machine.filaments?.map(({ id, variant, slots }) => `<div class="stack">
+    <h3>${variant === 'ht' ? 'AMS HT ' + (id - 3) : system + ' ' + (id + 1)}</h3>
+    ${slots.map((slot) => {
+      const occupation = slot.occupied === null ? t('Présence inconnue', 'Occupancy unknown')
+        : slot.occupied ? t('Occupé', 'Occupied') : t('Vide', 'Empty');
+      const material = [...new Set([slot.material, slot.name].filter(Boolean))].map(esc).join(' · ');
+      return `<div class="activity row between wrap">
+        <strong>${t('Emplacement', 'Slot')} ${slot.id + 1}</strong>
+        <span>${slot.color ? `<span aria-hidden="true" style="display:inline-block;width:1em;height:1em;border:1px solid currentColor;border-radius:50%;background:${esc(slot.color)}"></span> ${esc(slot.color)} · ` : ''}
+          ${material ? material + ' · ' : ''}${occupation}${slot.active ? ' · ' + t('Actif', 'Active') : ''}</span>
+      </div>`;
+    }).join('')}
+  </div>`).join('');
+  return `<section class="panel stack" style="grid-column:1/-1">
+    <h2>${t('Filaments', 'Filaments')} · ${system}</h2>${units || `<p>${missing}</p>`}
+  </section>`;
+}
+
 function liveDetail() {
   const m = machine(state.machine);
   if (!m) return liveFleet();
@@ -218,7 +242,7 @@ function liveDetail() {
       ${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
     </section>` : '';
   return title(esc(m.name), esc(m.model + ' · ' + m.origin), btn('nav:machines',t('Retour au parc','Back to fleet'),'grid','ghost')) +
-    `<div class="main-grid" data-live-telemetry>${liveTelemetry(m)}</div>${camera}`;
+    `<div class="main-grid" data-live-telemetry>${liveTelemetry(m)}${liveFilaments(m)}</div>${camera}`;
 }
 
 function showCamera(open, failed = false) {
@@ -377,7 +401,7 @@ async function refresh() {
       const action = document.activeElement?.dataset.action;
       const telemetry = app.querySelector('[data-live-telemetry]');
       if (!hadRefreshError && telemetry && current && (cameraImage || app.querySelector('[data-camera-status]:not([hidden])'))) {
-        telemetry.innerHTML = liveTelemetry(current);
+        telemetry.innerHTML = liveTelemetry(current) + liveFilaments(current);
       } else renderLive();
       if (action) [...app.querySelectorAll('[data-action]')].find(button => button.dataset.action === action && button.getClientRects().length)?.focus();
     }
