@@ -41,6 +41,12 @@ test('P2S lit le rapport MQTT, fusionne les mises à jour et se reconnecte sans 
   send({ mc_percent: 99 }, 'device/other/report');
   assert.equal(monitor.read(machine).progress, 65);
   assert.equal(monitor.read(machine).nozzle, 254);
+  send({ gcode_state: 'FAILED', print_error: 1234 });
+  assert.equal(monitor.read(machine).issue, 'bambu-print');
+  send({ print_error: 0 });
+  const { checkedAt: clearedAt, ...cleared } = monitor.read(machine);
+  assert.ok(clearedAt);
+  assert.deepEqual(cleared, { status: 'ready', issue: null, nozzle: 254, bed: 70, progress: 0, file: '' });
   client.emit('close');
   assert.equal(monitor.read(machine).status, 'offline');
   client.emit('connect');
