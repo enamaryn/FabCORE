@@ -100,13 +100,19 @@ Sur la fiche d’une **Centauri Carbon** ou d’une **Centauri Carbon 2**, cliqu
 
 Ouvrir une CC2 différente dans chacun de deux onglets, vérifier les images, puis fermer le premier flux et constater que le second continue. Refaire l’essai en éteignant la première machine hors impression. Le flux est ouvert à la demande et reste réservé à la session authentifiée. Ce jalon couvre la visualisation en direct sur les deux modèles Elegoo.
 
+## POC-06 · Pause, reprise et Observateur
+
+Sur une imprimante Klipper enregistrée, ouvrir la fiche en administrateur pendant une impression de test et choisir **Mettre en pause**, puis **Reprendre**. La commande vise l’adresse Moonraker enregistrée. Confirmer le changement dans FabCore et dans Mainsail ou Fluidd. En cas de réponse non confirmée, vérifier l’état réel avant de réessayer.
+
+En administrateur, créer un compte avec **Ajouter un observateur**, puis se connecter dans une fenêtre privée. Le compte peut suivre les impressions et ouvrir les caméras autorisées. La modification du parc et les commandes d’impression sont réservées à l’administrateur.
+
 ## Fonctionnement et limites
 
-- L’adaptateur interroge exclusivement `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.
+- Pour la télémétrie, l’adaptateur interroge `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.
 - Le navigateur actualise la télémétrie toutes les deux secondes pendant une session de supervision. Les requêtes concurrentes partagent un résultat par machine et les erreurs de transport sont visibles.
-- Le POC prend en charge un administrateur local et jusqu’à huit machines Klipper, Bambu P2S ou Elegoo CC1/CC2. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
+- Le POC prend en charge un administrateur local, jusqu’à seize observateurs et jusqu’à huit machines Klipper, Bambu P2S ou Elegoo CC1/CC2. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
 - Le fichier `.fabcore/state.json` est créé avec les droits `0600`. Il contient les clés API Moonraker et les codes d’accès LAN nécessaires à la reconnexion. Protéger le répertoire et ses sauvegardes comme des secrets. Exécuter une seule instance par répertoire de données.
-- Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes de fabrication, la caméra Bambu, Pocket ID, SMTP et les autres constructeurs restent pour les jalons suivants.
+- Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes sur les autres modèles, la caméra Bambu, Pocket ID, SMTP et les autres constructeurs restent pour les jalons suivants.
 
 ## Paramètres d’exécution
 

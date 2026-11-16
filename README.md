@@ -11,14 +11,15 @@ FabCore est un tableau de bord auto-hébergeable pour gérer un parc d’imprima
 - Découvrir les imprimantes sur le réseau local, tester leur connexion et gérer leurs fiches.
 - Suivre l’état, les températures et la progression des impressions.
 - Ouvrir les caméras en direct sur les Elegoo Centauri Carbon et Centauri Carbon 2 compatibles.
-- Se connecter avec un compte administrateur local.
+- Administrer le parc avec un compte local et créer des comptes Observateur en lecture seule.
+- Mettre en pause et reprendre une impression Klipper via Moonraker avec un compte administrateur.
 
 **Prévues**
 
-- **Accès et utilisateurs** · Comptes multiples, rôles et permissions, connexion unique via OIDC (par exemple Pocket ID).
+- **Accès et utilisateurs** · Gestion avancée des comptes et permissions, connexion unique via OIDC (par exemple Pocket ID).
 - **Notifications** · Alertes de fin d’impression, d’erreur ou de perte de connexion par e-mail via SMTP, via ntfy ou via Web Push.
 - **Fichiers d’impression** · Bibliothèque de fichiers, import et transfert vers les imprimantes compatibles.
-- **Suivi et pilotage** · Historique des impressions, ouverture des caméras d’autres modèles et commandes comme la pause et la reprise, selon les capacités de l’imprimante.
+- **Suivi et pilotage** · Historique des impressions, ouverture des caméras d’autres modèles et commandes de pilotage sur d’autres modèles, selon les capacités de l’imprimante.
 
 ## Installation
 

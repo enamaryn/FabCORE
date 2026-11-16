@@ -84,3 +84,23 @@ export async function readMoonraker(machine, fetcher = fetch) {
     return error instanceof SyntaxError ? unavailable('error', 'moonraker') : unavailable('offline', 'connection');
   }
 }
+
+const printCommands = new Map([['pause', '/printer/print/pause'], ['resume', '/printer/print/resume']]);
+
+export async function commandMoonraker(machine, action, fetcher = fetch) {
+  const endpoint = printCommands.get(action);
+  if (!endpoint || moonrakerOrigin(machine.origin) !== machine.origin) return false;
+  const response = await fetcher(machine.origin + endpoint, {
+    method: 'POST',
+    redirect: 'error',
+    signal: AbortSignal.timeout(2500),
+    headers: machine.apiKey ? { 'X-Api-Key': machine.apiKey } : {}
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    if (response.status >= 500) throw new Error('Moonraker command outcome unknown');
+    return false;
+  }
+  if ((await readResponse(response))?.result !== 'ok') throw new Error('Moonraker command outcome unknown');
+  return true;
+}
