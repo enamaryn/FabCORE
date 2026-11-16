@@ -10,6 +10,7 @@ Le [guide d’installation du POC-01](poc/README.md#installer-sur-un-serveur-ou-
 - [POC-01 · Activation locale et supervision Klipper](poc/README.md)
 - [POC-02 · Supervision Bambu P2S](poc/README.md#poc-02--essai-sur-une-bambu-lab-p2s)
 - [POC-03 · Supervision Elegoo CC1 et CC2](poc/README.md#poc-03--essai-sur-les-elegoo-centauri-carbon)
+- [POC-04 · Découverte réseau](poc/README.md#poc-04--découverte-réseau)
 - [Maquette interactive](design/prototype.html)
 
 ### Pull requests par jalon

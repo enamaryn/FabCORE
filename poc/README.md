@@ -32,10 +32,10 @@ npm --version
 
 ### 3. Télécharger et démarrer FabCore
 
-Le POC Elegoo est disponible sur la branche `poc/03-elegoo`. Si le dépôt demande une authentification GitHub, utiliser un compte autorisé à lire le dépôt.
+Le POC de découverte est disponible sur la branche `poc/04-discovery`. Si le dépôt demande une authentification GitHub, utiliser un compte autorisé à lire le dépôt.
 
 ```bash
-git clone --branch poc/03-elegoo --single-branch https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
+git clone --branch poc/04-discovery --single-branch https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
 cd "$HOME/FabCORE"
 npm ci
 npm test
@@ -87,6 +87,12 @@ Si MQTT ne répond pas ou ne renvoie aucun rapport, vérifier la version du micr
 - **Centauri Carbon 2 (CC2).** Choisir le modèle, saisir son IPv4 et le code LAN de l’imprimante. FabCore récupère son numéro de série sur le port 80, puis vérifie l’état via MQTT sur le port 1883. Selon le firmware, activer **LAN uniquement** pour accéder à ces interfaces. Le transport local CC2 est en clair, code LAN compris. Utiliser un réseau local de confiance.
 - Cliquer sur **Tester la connexion**, puis ajouter les machines avec des noms distincts. Comparer état, températures et progression avec l’interface de l’imprimante. Hors impression, éteindre puis rallumer une seule CC2 et vérifier que l’autre fiche conserve sa télémétrie.
 - Le POC interroge uniquement l’état. Références de protocole [elegoo-link](https://github.com/ELEGOO-3D/elegoo-link) et [pycentauri](https://github.com/bjan/pycentauri/blob/main/docs/PROTOCOL.md).
+
+## POC-04 · Découverte réseau
+
+Dans **Ajouter une machine → Détecter sur le réseau**, sélectionner un sous-réseau directement raccordé au serveur FabCore et lancer le scan. Choisir un résultat pour préremplir le protocole et l’adresse, puis saisir le code d’accès si nécessaire et tester la connexion. Les machines déjà enregistrées sont signalées.
+
+Le scan est réservé à l’administrateur connecté et limité à une tranche IPv4 privée de 254 hôtes maximum. Il utilise les réponses Moonraker sur le port 7125, la découverte SDCP en UDP, le certificat MQTT Bambu et les métadonnées publiques du point d’entrée CC2. La détection CC2 dépend du firmware et peut être absente lorsque les informations exigent le code LAN. L’ajout manuel couvre aussi les machines hors du sous-réseau scanné et les instances Moonraker configurées sur un port non standard.
 
 ## Fonctionnement et limites
 
