@@ -128,7 +128,7 @@ function liveTelemetry(m) {
 function liveDetail() {
   const m = machine(state.machine);
   if (!m) return liveFleet();
-  const camera = ['elegoo', 'elegoo-cc1'].includes(m.kind)
+  const camera = ['bambu', 'elegoo', 'elegoo-cc1'].includes(m.kind)
     ? `<section class="panel stack" style="margin-top:1rem" data-camera-panel>
       <style>[data-camera-panel] [hidden]{display:none!important}</style>
       <h2>${t('Caméra en direct','Live camera')}</h2>

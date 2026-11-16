@@ -10,6 +10,7 @@ import { createBambuMonitor } from './bambu.mjs';
 import { createElegooMonitor, identifyElegoo, readElegoo } from './elegoo.mjs';
 import { readElegooCC1 } from './elegoo-cc1.mjs';
 import { discoveryNetworks, scanNetwork } from './discovery.mjs';
+import { streamBambuCamera } from './bambu-camera.mjs';
 import { cameraURL, streamCamera } from './camera.mjs';
 import { createOidc } from './oidc.mjs';
 import { internalNtfy, notificationSettings, publicNotifications, sendNotification } from './notifications.mjs';
@@ -218,8 +219,9 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
     if (req.method === 'GET' && camera) {
       if (!activeSession) return error(res, 401, 'sign-in');
       const machine = store.state.machines.find(({ id }) => id === camera[1]);
-      const url = machine && cameraURL(machine);
-      if (!url) return error(res, 404, 'camera-unsupported');
+      const isBambu = machine?.kind === 'bambu';
+      const url = machine && !isBambu && cameraURL(machine);
+      if (!isBambu && !url) return error(res, 404, 'camera-unsupported');
       const existingStream = [...cameraStreams].find(([, stream]) => stream.id === machine.id && !stream.signal.aborted);
       if (existingStream && existingStream[1].owner !== activeSession) return error(res, 429, 'camera-busy');
       if (!existingStream && cameraStreams.size >= 8) return error(res, 429, 'camera-busy');
@@ -234,6 +236,13 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       cameraStreams.set(controller, { owner: activeSession, id: machine.id, signal: controller.signal });
       res.once('close', stop);
       try {
+        if (isBambu) {
+          if (!(await streamBambuCamera(machine, res, controller.signal))) {
+            if (controller.signal.aborted) return res.destroy();
+            return error(res, 502, 'camera-unavailable');
+          }
+          return;
+        }
         const identify = machine.kind === 'elegoo' ? identifyCC2 : elegooReaders.get(machine.kind);
         const identity = await identify(machine, { signal: controller.signal });
         if (controller.signal.aborted) return res.destroy();

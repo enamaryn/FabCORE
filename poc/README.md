@@ -146,13 +146,17 @@ Pour un **serveur existant**, indiquer l’URL HTTPS, le sujet et le mode d’au
 
 [Dépôt APT ntfy](https://docs.ntfy.sh/install/) · [Accès aux sujets ntfy](https://docs.ntfy.sh/config/#access-control)
 
+## Caméra Bambu Lab P2S
+
+FabCore relaie la vidéo RTSPS de la P2S au navigateur sous forme de MJPEG. Vérifier que le port local TCP 322 est joignable et que la caméra est annoncée dans les réglages de diffusion locale de la P2S. Le LXC FabCore doit disposer de FFmpeg, par exemple via le paquet `ffmpeg` de Debian. Le flux s’ouvre sur la fiche de la P2S et utilise le code d’accès LAN déjà enregistré.
+
 ## Fonctionnement et limites
 
 - Pour la télémétrie, l’adaptateur interroge `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.
 - Le navigateur actualise la télémétrie toutes les deux secondes pendant une session de supervision. Les requêtes concurrentes partagent un résultat par machine et les erreurs de transport sont visibles.
 - Le POC prend en charge un administrateur local, jusqu’à seize observateurs et jusqu’à huit machines Klipper, Bambu P2S ou Elegoo CC1/CC2. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
 - Le fichier `.fabcore/state.json` est créé avec les droits `0600`. Il contient les clés API Moonraker et les codes d’accès LAN nécessaires à la reconnexion. Protéger le répertoire et ses sauvegardes comme des secrets. Exécuter une seule instance par répertoire de données.
-- Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes sur les autres modèles, la caméra Bambu, les alertes automatiques et les autres constructeurs restent pour les jalons suivants.
+- Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes sur les autres modèles, les alertes automatiques et les autres constructeurs restent pour les jalons suivants.
 
 ## Paramètres d’exécution
 
