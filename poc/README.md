@@ -32,10 +32,10 @@ npm --version
 
 ### 3. Télécharger et démarrer FabCore
 
-Le POC de découverte est disponible sur la branche `poc/04-discovery`. Si le dépôt demande une authentification GitHub, utiliser un compte autorisé à lire le dépôt.
+Le POC caméra est disponible sur la branche `poc/05-cameras`. Si le dépôt demande une authentification GitHub, utiliser un compte autorisé à lire le dépôt.
 
 ```bash
-git clone --branch poc/04-discovery --single-branch https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
+git clone --branch poc/05-cameras --single-branch https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
 cd "$HOME/FabCORE"
 npm ci
 npm test
@@ -94,13 +94,19 @@ Dans **Ajouter une machine → Détecter sur le réseau**, sélectionner un sous
 
 Le scan est réservé à l’administrateur connecté et limité à une tranche IPv4 privée de 254 hôtes maximum. Il utilise les réponses Moonraker sur le port 7125, la découverte SDCP en UDP, le certificat MQTT Bambu et les métadonnées publiques du point d’entrée CC2. La détection CC2 dépend du firmware et peut être absente lorsque les informations exigent le code LAN. L’ajout manuel couvre aussi les machines hors du sous-réseau scanné et les instances Moonraker configurées sur un port non standard.
 
+## POC-05 · Caméras Elegoo
+
+Sur la fiche d’une **Centauri Carbon** ou d’une **Centauri Carbon 2**, cliquer sur **Ouvrir le flux**. Le serveur vérifie l’identité de l’imprimante et relaie son flux MJPEG via la session FabCore. Le LXC doit atteindre le port caméra de chaque imprimante, 3031 pour la CC1 et 8080 pour la CC2. Référence de protocole [pycentauri](https://github.com/bjan/pycentauri/blob/main/docs/PROTOCOL.md).
+
+Ouvrir une CC2 différente dans chacun de deux onglets, vérifier les images, puis fermer le premier flux et constater que le second continue. Refaire l’essai en éteignant la première machine hors impression. Le flux est ouvert à la demande et reste réservé à la session authentifiée. Ce jalon couvre la visualisation en direct sur les deux modèles Elegoo.
+
 ## Fonctionnement et limites
 
 - L’adaptateur interroge exclusivement `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.
 - Le navigateur actualise la télémétrie toutes les deux secondes pendant une session de supervision. Les requêtes concurrentes partagent un résultat par machine et les erreurs de transport sont visibles.
 - Le POC prend en charge un administrateur local et jusqu’à huit machines Klipper, Bambu P2S ou Elegoo CC1/CC2. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
 - Le fichier `.fabcore/state.json` est créé avec les droits `0600`. Il contient les clés API Moonraker et les codes d’accès LAN nécessaires à la reconnexion. Protéger le répertoire et ses sauvegardes comme des secrets. Exécuter une seule instance par répertoire de données.
-- Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes de fabrication, les caméras, Pocket ID, SMTP et les autres constructeurs restent pour les jalons suivants.
+- Le POC couvre l’ajout et la supervision Klipper, Bambu P2S et Elegoo CC1/CC2. Les commandes de fabrication, la caméra Bambu, Pocket ID, SMTP et les autres constructeurs restent pour les jalons suivants.
 
 ## Paramètres d’exécution
 
