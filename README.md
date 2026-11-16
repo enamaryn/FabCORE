@@ -1,8 +1,24 @@
 # FabCore
 
-FabCore est un tableau de bord auto-hébergeable pour suivre des imprimantes 3D sur le réseau local. Il affiche l’état, les températures et la progression des machines et permet d’ouvrir la caméra des Elegoo compatibles.
+FabCore est un tableau de bord auto-hébergeable pour gérer un parc d’imprimantes 3D multimarque sur le réseau local.
 
 **Machines prises en charge** · Klipper/Moonraker, Bambu Lab P2S, Elegoo Centauri Carbon et Centauri Carbon 2.
+
+## Fonctionnalités
+
+**Disponibles**
+
+- Découvrir les imprimantes sur le réseau local, tester leur connexion et gérer leurs fiches.
+- Suivre l’état, les températures et la progression des impressions.
+- Ouvrir les caméras en direct sur les Elegoo Centauri Carbon et Centauri Carbon 2 compatibles.
+- Se connecter avec un compte administrateur local.
+
+**Prévues**
+
+- **Accès et utilisateurs** · Comptes multiples, rôles et permissions, connexion unique via OIDC (par exemple Pocket ID).
+- **Notifications** · Alertes de fin d’impression, d’erreur ou de perte de connexion par e-mail via SMTP, via ntfy ou via Web Push.
+- **Fichiers d’impression** · Bibliothèque de fichiers, import et transfert vers les imprimantes compatibles.
+- **Suivi et pilotage** · Historique des impressions, ouverture des caméras d’autres modèles et commandes comme la pause et la reprise, selon les capacités de l’imprimante.
 
 ## Installation
 
