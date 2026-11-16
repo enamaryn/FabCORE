@@ -1,21 +1,63 @@
 # POC-01 · Activation locale et supervision Klipper
 
-## Démarrer
+## Installer sur un serveur ou un LXC Proxmox
 
-FabCore utilise Node.js 24 et ses modules intégrés. Depuis le dépôt :
+### 1. Préparer le serveur
+
+Sur Proxmox, utiliser un LXC Debian ou Ubuntu. Depuis la console du conteneur, ou après avoir exécuté `pct enter ID_DU_LXC` sur l’hôte Proxmox en remplaçant l’identifiant, installer les paquets suivants en root. Sur un serveur Debian ou Ubuntu, les mêmes commandes s’exécutent dans le terminal du serveur.
 
 ```bash
+apt update
+apt install -y git curl ca-certificates
+```
+
+Utiliser ensuite un compte non root dans le LXC ou sur le serveur. Pour créer un compte dédié depuis la session root, si nécessaire :
+
+```bash
+adduser fabcore
+su - fabcore
+```
+
+### 2. Installer Node.js 24
+
+Dans la session du compte qui exécutera FabCore, installer Node.js 24 avec [nvm](https://nodejs.org/fr/download). Si Node.js 24 et npm sont déjà disponibles pour ce compte, passer directement au clonage.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.6/install.sh | bash
+. "$HOME/.nvm/nvm.sh"
+nvm install 24
+node --version
+npm --version
+```
+
+### 3. Télécharger et démarrer FabCore
+
+Pendant la PR #2, le POC est disponible sur la branche `poc/01-klipper`. Si le dépôt demande une authentification GitHub, utiliser un compte autorisé à lire le dépôt.
+
+```bash
+git clone --branch poc/01-klipper --single-branch https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
+cd "$HOME/FabCORE"
 npm test
 npm start
 ```
 
-Ouvrir [127.0.0.1:3000](http://127.0.0.1:3000). Le serveur écoute en local par défaut. Pour un essai dans un LXC depuis un autre poste, lorsque SSH est disponible sur le LXC, ouvrir un tunnel puis utiliser la même URL dans le navigateur.
+FabCore utilise les modules intégrés de Node.js. Aucun `npm install` n’est nécessaire. Laisser ce terminal ouvert et récupérer le jeton d’activation affiché au premier démarrage.
+
+### 4. Ouvrir l’interface
+
+FabCore écoute par défaut uniquement dans le serveur, sur `127.0.0.1:3000`. Depuis un autre poste, ouvrir un tunnel SSH dans un second terminal en remplaçant l’utilisateur et l’adresse par ceux du LXC ou du serveur. La connexion SSH doit déjà fonctionner pour ce compte.
 
 ```bash
 ssh -N -L 3000:127.0.0.1:3000 utilisateur@IP_DU_LXC
 ```
 
-Si le port local 3000 est déjà occupé, choisir un autre port via `FABCORE_PORT` sur le serveur et dans le tunnel. Le LXC doit pouvoir joindre Moonraker.
+Ouvrir [127.0.0.1:3000](http://127.0.0.1:3000) dans le navigateur et saisir le jeton du premier démarrage. Si le port 3000 est déjà occupé sur le poste, conserver le numéro de port côté FabCore et ouvrir le tunnel avec `ssh -N -L 3001:127.0.0.1:3000 utilisateur@IP_DU_LXC`. Dans ce cas, redémarrer FabCore avec `FABCORE_ORIGIN=http://127.0.0.1:3001 npm start`, puis ouvrir [127.0.0.1:3001](http://127.0.0.1:3001).
+
+Le LXC doit pouvoir joindre Moonraker sur le réseau local. Pour vérifier l’accès, remplacer l’adresse par celle de l’imprimante et exécuter la commande depuis le LXC. Une réponse HTTP 401 ou 403 confirme que le service répond et que l’accès à ce point d’entrée est refusé.
+
+```bash
+curl -i --max-time 5 http://192.168.1.50:7125/server/info
+```
 
 ## Essai sur l’Ender 3
 
