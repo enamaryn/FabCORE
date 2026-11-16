@@ -2,7 +2,7 @@
 
 FabCore est un tableau de bord auto-hébergeable pour gérer un parc d’imprimantes 3D multimarque sur le réseau local.
 
-**Machines prises en charge** · Klipper/Moonraker, Bambu Lab P2S, Elegoo Centauri Carbon et Centauri Carbon 2.
+**Machines prises en charge** · Klipper/Moonraker, Bambu Lab P2S, Elegoo Centauri Carbon et Centauri Carbon 2, xTool M2 (supervision).
 
 ## Fonctionnalités
 
@@ -10,7 +10,7 @@ FabCore est un tableau de bord auto-hébergeable pour gérer un parc d’imprima
 
 - Découvrir les imprimantes sur le réseau local, tester leur connexion et gérer leurs fiches.
 - Suivre l’état, les températures et la progression des impressions.
-- Ouvrir les caméras en direct sur les Elegoo Centauri Carbon et Centauri Carbon 2 compatibles.
+- Ouvrir les caméras en direct sur les Bambu Lab P2S et Elegoo Centauri Carbon et Centauri Carbon 2 compatibles.
 - Administrer le parc avec un compte local et créer des comptes Observateur en lecture seule.
 - Se connecter via [Pocket ID avec OIDC](poc/README.md#connexion-oidc-avec-pocket-id), avec un rôle attribué par groupe.
 - Configurer [ntfy interne ou externe et SMTP](poc/README.md#notifications-ntfy-et-smtp), et envoyer une notification de test.
@@ -25,16 +25,16 @@ FabCore est un tableau de bord auto-hébergeable pour gérer un parc d’imprima
 
 ## Installation
 
-Prérequis · Linux ou LXC, Git, **Node.js 24** et npm. Pour démarrer sur un serveur personnel, prévoir **1 vCPU, 512 Mo de RAM et 1 Go d’espace disque libre** en plus du système. Ces ressources sont indicatives pour un petit parc. Chaque flux caméra ouvert utilise de la bande passante. Le serveur doit pouvoir joindre les imprimantes sur le réseau local.
+Sur Debian ou Ubuntu, y compris dans un LXC Proxmox, l’installateur prépare Node.js 24, npm et FFmpeg si nécessaire, installe les dépendances et démarre FabCore. Pour démarrer sur un serveur personnel, prévoir **1 vCPU, 512 Mo de RAM et 1 Go d’espace disque libre** en plus du système. Ces ressources sont indicatives pour un petit parc. Chaque flux caméra ouvert utilise de la bande passante. Le serveur doit pouvoir joindre les imprimantes sur le réseau local.
 
 ```bash
+sudo apt-get update && sudo apt-get install -y git ca-certificates
 git clone https://github.com/enamaryn/FabCORE.git
 cd FabCORE
-npm ci
-npm start
+bash scripts/install.sh
 ```
 
-Ouvrir <http://127.0.0.1:3000> et créer le compte administrateur avec le jeton affiché dans le terminal. Pour un serveur distant ou un LXC, utiliser un [tunnel SSH ou un reverse proxy HTTPS](poc/README.md#4-ouvrir-linterface). Les données sont conservées dans `.fabcore/` par défaut.
+Dans une console LXC déjà ouverte en root, retirer `sudo` de la première ligne. Garder le terminal ouvert et ouvrir <http://127.0.0.1:3000> pour créer le compte administrateur avec le jeton affiché dans le terminal. Pour un serveur distant ou un LXC, utiliser un [tunnel SSH ou un reverse proxy HTTPS](poc/README.md#4-ouvrir-linterface). Les données sont conservées dans `.fabcore/` par défaut.
 
 ## Aperçu
 

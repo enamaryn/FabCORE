@@ -2,47 +2,7 @@
 
 ## Installer sur un serveur ou un LXC Proxmox
 
-### 1. Préparer le serveur
-
-Sur Proxmox, utiliser un LXC Debian ou Ubuntu. Depuis la console du conteneur, ou après avoir exécuté `pct enter ID_DU_LXC` sur l’hôte Proxmox en remplaçant l’identifiant, installer les paquets suivants en root. Sur un serveur Debian ou Ubuntu, les mêmes commandes s’exécutent dans le terminal du serveur.
-
-```bash
-apt update
-apt install -y git curl ca-certificates
-```
-
-Utiliser ensuite un compte non root dans le LXC ou sur le serveur. Pour créer un compte dédié depuis la session root, si nécessaire :
-
-```bash
-adduser fabcore
-su - fabcore
-```
-
-### 2. Installer Node.js 24
-
-Dans la session du compte qui exécutera FabCore, installer Node.js 24 avec [nvm](https://nodejs.org/fr/download). Si Node.js 24 et npm sont déjà disponibles pour ce compte, passer directement au clonage.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.6/install.sh | bash
-. "$HOME/.nvm/nvm.sh"
-nvm install 24
-node --version
-npm --version
-```
-
-### 3. Télécharger et démarrer FabCore
-
-Cloner la branche principale depuis GitHub.
-
-```bash
-git clone https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
-cd "$HOME/FabCORE"
-npm ci
-npm test
-npm start
-```
-
-Laisser ce terminal ouvert et récupérer le jeton d’activation affiché au premier démarrage.
+Dans le terminal du serveur ou du LXC Debian ou Ubuntu, suivre les [quatre commandes d’installation](../README.md#installation). Garder le terminal ouvert pour récupérer le jeton du premier démarrage. Pour démarrer FabCore sous un compte dédié, lancer le script depuis ce compte. L’installation des paquets système utilise root ou sudo.
 
 ### 4. Ouvrir l’interface
 
@@ -52,7 +12,7 @@ FabCore écoute par défaut uniquement dans le serveur, sur `127.0.0.1:3000`. De
 ssh -N -L 3000:127.0.0.1:3000 utilisateur@IP_DU_LXC
 ```
 
-Ouvrir [127.0.0.1:3000](http://127.0.0.1:3000) dans le navigateur et saisir le jeton du premier démarrage. Si le port 3000 est déjà occupé sur le poste, conserver le numéro de port côté FabCore et ouvrir le tunnel avec `ssh -N -L 3001:127.0.0.1:3000 utilisateur@IP_DU_LXC`. Dans ce cas, redémarrer FabCore avec `FABCORE_ORIGIN=http://127.0.0.1:3001 npm start`, puis ouvrir [127.0.0.1:3001](http://127.0.0.1:3001).
+Ouvrir [127.0.0.1:3000](http://127.0.0.1:3000) dans le navigateur et saisir le jeton du premier démarrage. Si le port 3000 est déjà occupé sur le poste, conserver le numéro de port côté FabCore et ouvrir le tunnel avec `ssh -N -L 3001:127.0.0.1:3000 utilisateur@IP_DU_LXC`. Dans ce cas, redémarrer FabCore avec `FABCORE_ORIGIN=http://127.0.0.1:3001 bash scripts/install.sh`, puis ouvrir [127.0.0.1:3001](http://127.0.0.1:3001).
 
 Le LXC doit pouvoir joindre Moonraker sur le réseau local. Pour vérifier l’accès, remplacer l’adresse par celle de l’imprimante et exécuter la commande depuis le LXC. Une réponse HTTP 401 ou 403 confirme que le service répond et que l’accès à ce point d’entrée est refusé.
 
@@ -148,7 +108,7 @@ Pour un **serveur existant**, indiquer l’URL HTTPS, le sujet et le mode d’au
 
 ## Caméra Bambu Lab P2S
 
-FabCore relaie la vidéo RTSPS de la P2S au navigateur sous forme de MJPEG. Vérifier que le port local TCP 322 est joignable et que la caméra est annoncée dans les réglages de diffusion locale de la P2S. Le LXC FabCore doit disposer de FFmpeg, par exemple via le paquet `ffmpeg` de Debian. Le flux s’ouvre sur la fiche de la P2S et utilise le code d’accès LAN déjà enregistré.
+FabCore relaie la vidéo RTSPS de la P2S au navigateur sous forme de MJPEG. Vérifier que le port local TCP 322 est joignable et que la caméra est annoncée dans les réglages de diffusion locale de la P2S. L’installateur FabCore installe FFmpeg depuis les dépôts du système. Sur une installation existante faite à la main, installer le paquet `ffmpeg`. Le flux s’ouvre sur la fiche de la P2S et utilise le code d’accès LAN déjà enregistré.
 
 ## Fonctionnement et limites
 
