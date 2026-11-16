@@ -89,6 +89,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
       assert.equal(network.cidr, '192.168.1.0/24');
       return [{ kind: 'elegoo', host: '192.168.1.55', serial: 'CC2TEST01' }];
     },
+    readOcto: async () => ({ status: 'ready', issue: null, nozzle: 30, bed: 20, progress: 0, file: '' }),
     identifyCC2: async (machine) => ({ serial: machine.serial }),
     openCamera: async (url) => {
       assert.equal(url.port, '8080');
@@ -312,6 +313,18 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.deepEqual(await (await call('/api/discovery', { body: scan, cookie })).json(), {
     devices: [{ kind: 'elegoo', host: '192.168.1.55', serial: 'CC2TEST01', registered: true }]
   });
+  const octo = { kind: 'octoprint', name: 'OctoPrint', origin: 'http://192.168.1.67:5000', apiKey: 'test-octo-key' };
+  assert.equal((await call('/api/machines', { body: { ...octo, apiKey: '' }, cookie })).status, 400);
+  assert.deepEqual(await (await call('/api/machines/test', { body: octo, cookie })).json(), { ok: true, issue: null });
+  const octoCreated = await call('/api/machines', { body: octo, cookie });
+  assert.equal(octoCreated.status, 201);
+  const { id: octoId } = await octoCreated.json();
+  await call('/api/machines', { cookie });
+  const { machines: octoFleet } = await (await call('/api/machines', { cookie })).json();
+  const octoView = octoFleet.find(({ id }) => id === octoId);
+  assert.equal(octoView.nozzle, 30);
+  assert.equal(octoView.apiKey, undefined);
+  assert.equal((await call('/api/machines/edit', { body: { ...octo, id: octoId, origin: 'http://192.168.1.68', apiKey: '' }, cookie })).status, 400);
   const file = join(directory, 'state.json');
   const text = await readFile(file, 'utf8');
   assert.ok(!text.includes(credentials.password) && !text.includes(token));

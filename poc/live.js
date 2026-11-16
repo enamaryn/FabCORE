@@ -34,6 +34,11 @@ const problem = (code) => ({
 
 function liveIssue(issue) {
   return ({
+    'octoprint-access': t('Accès refusé. Vérifiez la clé API OctoPrint et ses permissions.', 'Access denied. Check the OctoPrint API key and its permissions.'),
+    'octoprint-response': t('L’API OctoPrint ne renvoie pas un état exploitable.', 'The OctoPrint API did not return usable status.'),
+    'octoprint-connection': t('FabCore ne parvient pas à joindre OctoPrint.', 'FabCore cannot reach OctoPrint.'),
+    'octoprint-disconnected': t('OctoPrint répond, mais l’imprimante est déconnectée.', 'OctoPrint is reachable, but the printer is disconnected.'),
+    'octoprint-printer-error': t('OctoPrint signale une erreur de l’imprimante.', 'OctoPrint reports a printer error.'),
     'xtool-connection': t('FabCore ne peut pas joindre la M2 sur le port 28900.', 'FabCore cannot reach the M2 on port 28900.'),
     'xtool-protocol': t('La M2 n’a pas renvoyé un état compatible WS-V2.', 'The M2 did not return a compatible WS-V2 status.'),
     'xtool-identity': t('Le certificat ou le numéro de série de la M2 a changé.', 'The M2 certificate or serial number changed.'),
@@ -563,6 +568,7 @@ async function loadSession() {
 }
 
 function openMachineForm(kind = 'klipper', name = '', existing = null, detected = null) {
+  const isOcto = kind === 'octoprint';
   const isBambu = kind === 'bambu';
   const isElegoo = kind === 'elegoo';
   const isCC1 = kind === 'elegoo-cc1';
@@ -572,7 +578,7 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
     ${existing ? `<input type="hidden" name="id" value="${esc(existing.id)}"><input type="hidden" name="kind" value="${kind}">` : ''}
     ${existing ? '' : btn('discover',t('Détecter sur le réseau','Discover on network'))}
     <div class="fields">
-      ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind"><option value="klipper" ${kind === 'klipper' ? 'selected' : ''}>Klipper · Moonraker</option><option value="bambu" ${isBambu ? 'selected' : ''}>Bambu Lab · P2S</option><option value="elegoo" ${isElegoo ? 'selected' : ''}>Elegoo · Centauri Carbon 2</option><option value="elegoo-cc1" ${isCC1 ? 'selected' : ''}>Elegoo · Centauri Carbon</option><option value="xtool-m2" ${isM2 ? 'selected' : ''}>xTool · M2</option></select></label>`}
+      ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind"><option value="klipper" ${kind === 'klipper' ? 'selected' : ''}>Klipper · Moonraker</option><option value="octoprint" ${isOcto ? 'selected' : ''}>OctoPrint</option><option value="bambu" ${isBambu ? 'selected' : ''}>Bambu Lab · P2S</option><option value="elegoo" ${isElegoo ? 'selected' : ''}>Elegoo · Centauri Carbon 2</option><option value="elegoo-cc1" ${isCC1 ? 'selected' : ''}>Elegoo · Centauri Carbon</option><option value="xtool-m2" ${isM2 ? 'selected' : ''}>xTool · M2</option></select></label>`}
       <label>${t('Nom de la machine','Machine name')}<input name="name" required maxlength="80" value="${esc(name)}"></label>
       ${isBambu || isElegoo || isCC1 || isM2 ? `
       <label>${t('Adresse IPv4 locale','Local IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : esc(detected?.host ?? '')}"></label>
@@ -580,8 +586,8 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
       ${isCC1 && !existing ? `<label>${t('MainboardID (facultatif)', 'MainboardID (optional)')}<input name="serial" maxlength="64" value="${esc(detected?.serial ?? '')}"></label>` : ''}
       ${isCC1 || isM2 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
       ` : `
-      <label>${t('Adresse Moonraker','Moonraker address')}<input name="origin" type="url" placeholder="http://192.168.1.50:7125" required maxlength="200" value="${esc(existing?.origin ?? detected?.origin ?? '')}"></label>
-      <label>${t('Clé API Moonraker (facultative)','Moonraker API key (optional)')}<input name="apiKey" type="password" maxlength="256" autocomplete="new-password"></label>
+      <label>${isOcto ? t('Adresse OctoPrint','OctoPrint address') : t('Adresse Moonraker','Moonraker address')}<input name="origin" type="url" placeholder="${isOcto ? 'http://192.168.1.50:5000' : 'http://192.168.1.50:7125'}" required maxlength="200" value="${esc(existing?.origin ?? detected?.origin ?? '')}"></label>
+      <label>${isOcto ? t('Clé API OctoPrint','OctoPrint API key') : t('Clé API Moonraker (facultative)','Moonraker API key (optional)')}<input name="apiKey" type="password" ${isOcto && !existing ? 'required' : ''} maxlength="256" autocomplete="new-password"></label>
       `}
     </div>
     ${existing && !isCC1 && !isM2 ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
@@ -825,7 +831,7 @@ document.addEventListener('submit', async (event) => {
         status.textContent = t('Test en cours…', 'Testing connection…');
         const result = await api('machines/test', data);
         status.hidden = !result.ok;
-        status.textContent = result.ok ? t('Connexion réussie. Télémétrie reçue.', 'Connection successful. Telemetry received.') : '';
+        status.textContent = result.ok ? liveIssue(result.issue) || t('Connexion réussie. Télémétrie reçue.', 'Connection successful. Telemetry received.') : '';
         if (!result.ok) errorText.textContent = liveIssue(result.issue) || problem(result.issue);
         return;
       }
