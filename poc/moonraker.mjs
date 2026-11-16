@@ -6,13 +6,17 @@ const statuses = new Map([
   ['complete', 'done'], ['cancelled', 'ready'], ['error', 'error']
 ]);
 
+export function privateIPv4(host) {
+  if (!isIPv4(host)) return false;
+  const [a, b] = host.split('.').map(Number);
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
 export function moonrakerOrigin(input) {
   let url;
   try { url = new URL(input); } catch { return null; }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
-      url.pathname !== '/' || url.search || url.hash || url.port === '0' || !isIPv4(url.hostname)) return null;
-  const [a, b] = url.hostname.split('.').map(Number);
-  if (!(a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168))) return null;
+      url.pathname !== '/' || url.search || url.hash || url.port === '0' || !privateIPv4(url.hostname)) return null;
   return url.origin;
 }
 

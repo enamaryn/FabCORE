@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
-import { moonrakerOrigin, readMoonraker } from './moonraker.mjs';
+import { moonrakerOrigin, privateIPv4, readMoonraker } from './moonraker.mjs';
+import { createBambuMonitor } from './bambu.mjs';
 import { openStore } from './store.mjs';
 
 const derive = promisify(scrypt);
@@ -56,7 +57,7 @@ function value(data, key, max) {
 
 function monitor(readPrinter) {
   const cache = new Map();
-  return function snapshot(machine) {
+  function snapshot(machine) {
     let entry = cache.get(machine.id);
     if (!entry) {
       entry = { current: { status: 'connecting', issue: null, progress: 0, nozzle: null, bed: null, file: '' }, next: 0 };
@@ -73,10 +74,12 @@ function monitor(readPrinter) {
       });
     }
     return { ...entry.current, checkedAt: entry.checkedAt ?? null };
-  };
+  }
+  snapshot.forget = (id) => cache.delete(id);
+  return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter = readMoonraker, activationToken } = {}) {
+export function createFabCore({ directory, origin, readPrinter = readMoonraker, bambu = createBambuMonitor(), activationToken } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -89,6 +92,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
   const sessions = new Map();
   const attempts = new Map();
   const snapshot = monitor(readPrinter);
+  let probes = 0;
   function cookie(value, age) {
     return `fabcore_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${secure ? '; Secure' : ''}`;
   }
@@ -150,11 +154,11 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
     if (req.method === 'GET' && path === '/api/machines') {
       if (!activeSession) return error(res, 401, 'sign-in');
       return answer(res, 200, { machines: store.state.machines.map((machine) => ({
-        id: machine.id, name: machine.name, origin: machine.origin, model: 'Klipper · Moonraker',
-        ...snapshot(machine)
+        id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial, model: machine.kind === 'bambu' ? 'Bambu Lab · P2S' : 'Klipper · Moonraker',
+        ...(machine.kind === 'bambu' ? bambu.read(machine) : snapshot(machine))
       })) });
     }
-    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines'].includes(path)) {
+    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/edit'].includes(path)) {
       return error(res, 404, 'missing');
     }
     if (!requireJson(req, res)) return;
@@ -162,21 +166,59 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       if (activeSession) sessions.delete(activeSession);
       return answer(res, 200, { authenticated: false }, { 'Set-Cookie': cookie('', 0) });
     }
-    if (path === '/api/machines' && !activeSession) return error(res, 401, 'sign-in');
+    if (path.startsWith('/api/machines') && !activeSession) return error(res, 401, 'sign-in');
     if (path === '/api/setup' && store.state.admin) return error(res, 409, 'installed');
     if ((path === '/api/setup' || path === '/api/login') && !withinLimit(path)) return error(res, 429, 'rate');
     let data;
     try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
-    if (path === '/api/machines') {
+    if (path.startsWith('/api/machines')) {
+      const existing = store.state.machines.find((machine) => machine.id === data.id);
+      if ((path === '/api/machines/edit' || data.id) && !existing) return error(res, 404, 'missing');
       const name = value(data, 'name', 80).trim();
-      const origin = moonrakerOrigin(value(data, 'origin', 200).trim());
-      const apiKey = value(data, 'apiKey', 256).trim();
-      if (!name || !origin || (data.apiKey && (!apiKey || !/^[!-~]+$/.test(apiKey)))) return error(res, 400, 'machine-invalid');
-      if (store.state.machines.some((machine) => machine.origin === origin)) return error(res, 409, 'machine-duplicate');
-      if (store.state.machines.length >= 8) return error(res, 409, 'machine-limit');
-      const id = randomUUID();
-      store.save({ ...store.state, machines: [...store.state.machines, { id, name, origin, apiKey }] });
-      return answer(res, 201, { id });
+      const kind = data.kind ?? 'klipper';
+      if (existing && kind !== (existing.kind ?? 'klipper')) return error(res, 400, 'machine-invalid');
+      let connection;
+      if (kind === 'bambu') {
+        const host = value(data, 'host', 15).trim();
+        const serial = value(data, 'serial', 32).trim().toUpperCase();
+        const accessCode = value(data, 'accessCode', 8).trim() || (data.accessCode === '' ? existing?.accessCode ?? '' : '');
+        if (privateIPv4(host) && /^[A-Z0-9]{8,32}$/.test(serial) && /^[A-Za-z0-9]{8}$/.test(accessCode)) {
+          connection = { origin: `mqtts://${host}:8883`, serial, accessCode };
+        }
+      } else if (kind === 'klipper') {
+        const origin = moonrakerOrigin(value(data, 'origin', 200).trim());
+        const apiKey = value(data, 'apiKey', 256).trim() || (data.apiKey === '' ? existing?.apiKey ?? '' : '');
+        if (origin && (!data.apiKey || /^[!-~]+$/.test(apiKey))) connection = { origin, apiKey };
+      }
+      if (!name || !connection) return error(res, 400, 'machine-invalid');
+      if (store.state.machines.some((machine) => machine.id !== existing?.id &&
+          (machine.origin === connection.origin || (connection.serial && machine.serial === connection.serial)))) {
+        return error(res, 409, 'machine-duplicate');
+      }
+      const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
+      if (path === '/api/machines/test') {
+        if (probes >= 2) return error(res, 429, 'probe-busy');
+        probes++;
+        const abort = new AbortController();
+        res.once('close', () => abort.abort());
+        try {
+          if (kind === 'bambu') return answer(res, 200, await bambu.probe(machine, abort.signal));
+          const result = await readPrinter(machine);
+          const ok = !result.issue || result.issue === 'print';
+          return answer(res, 200, { ok, issue: ok ? null : result.issue });
+        } finally {
+          probes--;
+        }
+      }
+      if (!existing && store.state.machines.length >= 8) return error(res, 409, 'machine-limit');
+      const machines = existing ? store.state.machines.map((entry) => entry.id === machine.id ? machine : entry)
+        : [...store.state.machines, machine];
+      store.save({ ...store.state, machines });
+      if (existing) {
+        snapshot.forget(machine.id);
+        bambu.forget(machine.id);
+      }
+      return answer(res, existing ? 200 : 201, { id: machine.id });
     }
     const username = value(data, 'username', 40).trim();
     const password = value(data, 'password', 128);
@@ -204,6 +246,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       else res.end();
     });
   });
+  server.on('close', () => bambu.close());
   return { server, token };
 }
 

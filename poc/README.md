@@ -32,16 +32,17 @@ npm --version
 
 ### 3. Télécharger et démarrer FabCore
 
-Pendant la PR #2, le POC est disponible sur la branche `poc/01-klipper`. Si le dépôt demande une authentification GitHub, utiliser un compte autorisé à lire le dépôt.
+Le POC Bambu est disponible sur la branche `poc/02-bambu`. Si le dépôt demande une authentification GitHub, utiliser un compte autorisé à lire le dépôt.
 
 ```bash
-git clone --branch poc/01-klipper --single-branch https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
+git clone --branch poc/02-bambu --single-branch https://github.com/enamaryn/FabCORE.git "$HOME/FabCORE"
 cd "$HOME/FabCORE"
+npm ci
 npm test
 npm start
 ```
 
-FabCore utilise les modules intégrés de Node.js. Aucun `npm install` n’est nécessaire. Laisser ce terminal ouvert et récupérer le jeton d’activation affiché au premier démarrage.
+Laisser ce terminal ouvert et récupérer le jeton d’activation affiché au premier démarrage.
 
 ### 4. Ouvrir l’interface
 
@@ -70,13 +71,23 @@ curl -i --max-time 5 http://192.168.1.50:7125/server/info
 
 Les tests reproduisent la suite activation → connexion → ajout → impression → hors ligne → reconnexion. Ils utilisent un simulateur au niveau du transport HTTP Moonraker. Les mesures sur l’Ender 3 sont à confirmer sur le matériel.
 
+## POC-02 · Essai sur une Bambu Lab P2S
+
+Dans **Ajouter une machine**, choisir **Bambu Lab · P2S**, saisir son IPv4 locale, son numéro de série et son code d’accès LAN. Saisir le code dans FabCore uniquement. Essayer avec les réglages actuels avant de modifier la configuration de l’imprimante. Le bouton **Tester la connexion** attend un premier rapport MQTT sans enregistrer la machine. Dans la fiche machine, **Modifier la machine** permet de corriger l’adresse ou le code LAN. Laisser le code vide conserve le code déjà enregistré.
+
+Le LXC doit pouvoir joindre le port TCP 8883 de la P2S. FabCore ouvre une connexion MQTT chiffrée en TLS 1.2 et vérifie la chaîne Bambu ainsi que l’identité de l’imprimante à partir du numéro de série. Les certificats publics proviennent de [ha-bambulab](https://github.com/greghesp/ha-bambulab/tree/a939068e7cb32cfa555a8304ac52f968cccc95f7/custom_components/bambu_lab/pybambu/certs). Le seul message émis vers la P2S demande un rapport d’état.
+
+Comparer l’état et les températures avec Bambu Studio. Pendant une impression, comparer la progression. Hors impression, éteindre puis rallumer la P2S, puis observer le retour de la télémétrie sur la même fiche.
+
+Si MQTT ne répond pas ou ne renvoie aucun rapport, vérifier la version du micrologiciel et les paramètres LAN de la P2S. Le [manuel P2S](https://csm.bblcdn.cn/hub/79f028a6cf6f429b9f09ef91f41a85c3.pdf) décrit le mode LAN uniquement, qui coupe l’accès via Bambu Handy, et le réglage du mode développeur.
+
 ## Fonctionnement et limites
 
 - L’adaptateur interroge exclusivement `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.
 - Le navigateur actualise la télémétrie toutes les deux secondes pendant une session de supervision. Les requêtes concurrentes partagent un résultat par machine et les erreurs de transport sont visibles.
-- Le POC prend en charge un administrateur local et jusqu’à huit origines Moonraker distinctes. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
-- Le fichier `.fabcore/state.json` est créé avec les droits `0600`. Il contient les clés API Moonraker nécessaires à la reconnexion. Protéger le répertoire et ses sauvegardes comme des secrets. Exécuter une seule instance par répertoire de données.
-- Le POC couvre l’ajout et la supervision Klipper. Les commandes de fabrication, les caméras, Pocket ID, SMTP et les autres constructeurs restent pour les jalons suivants.
+- Le POC prend en charge un administrateur local et jusqu’à huit machines Klipper ou Bambu P2S. Les sessions et l’activité récente sont en mémoire. Le registre et le hachage de mot de passe sont persistés.
+- Le fichier `.fabcore/state.json` est créé avec les droits `0600`. Il contient les clés API Moonraker et les codes d’accès LAN nécessaires à la reconnexion. Protéger le répertoire et ses sauvegardes comme des secrets. Exécuter une seule instance par répertoire de données.
+- Le POC couvre l’ajout et la supervision Klipper et Bambu P2S. Les commandes de fabrication, les caméras, Pocket ID, SMTP et les autres constructeurs restent pour les jalons suivants.
 
 ## Paramètres d’exécution
 
