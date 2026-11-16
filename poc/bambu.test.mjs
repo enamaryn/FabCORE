@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import { test } from 'node:test';
+import { createBambuMonitor } from './bambu.mjs';
+
+test('P2S lit le rapport MQTT, fusionne les mises à jour et se reconnecte sans état périmé', () => {
+  const machine = { id: 'test', origin: 'mqtts://192.168.1.50:8883', serial: 'TESTP2S123', accessCode: '12345678' };
+  const report = 'device/TESTP2S123/report';
+  const client = new EventEmitter();
+  client.subscribe = (topic, done) => {
+    assert.equal(topic, report);
+    done(null, [{ qos: 0 }]);
+  };
+  client.publish = (topic, message) => {
+    assert.equal(topic, 'device/TESTP2S123/request');
+    assert.deepEqual(JSON.parse(message), { pushing: { sequence_id: '0', command: 'pushall' } });
+  };
+  let closed = false;
+  client.end = () => { closed = true; };
+  const monitor = createBambuMonitor((origin, options) => {
+    assert.equal(origin, machine.origin);
+    assert.equal(options.username, 'bblp');
+    assert.equal(options.password, machine.accessCode);
+    assert.equal(options.rejectUnauthorized, true);
+    assert.equal(options.maxVersion, 'TLSv1.2');
+    assert.equal(options.checkServerIdentity('', { subject: { CN: machine.serial } }), undefined);
+    assert.ok(options.checkServerIdentity('', { subject: { CN: 'ANOTHERP2S' } }));
+    return client;
+  });
+  const send = (payload, topic = report) => client.emit('message', topic, Buffer.from(JSON.stringify({
+    print: { command: 'push_status', ...payload }
+  })));
+
+  assert.equal(monitor.read(machine).status, 'connecting');
+  client.emit('connect');
+  send({ gcode_state: 'RUNNING', nozzle_temper: 254, bed_temper: 70, mc_percent: 64, subtask_name: 'Pièce' });
+  const { checkedAt, ...telemetry } = monitor.read(machine);
+  assert.ok(checkedAt);
+  assert.deepEqual(telemetry, { status: 'printing', issue: null, nozzle: 254, bed: 70, progress: 64, file: 'Pièce' });
+  send({ mc_percent: 65 });
+  send({ mc_percent: 99 }, 'device/other/report');
+  assert.equal(monitor.read(machine).progress, 65);
+  assert.equal(monitor.read(machine).nozzle, 254);
+  client.emit('close');
+  assert.equal(monitor.read(machine).status, 'offline');
+  client.emit('connect');
+  send({ gcode_state: 'IDLE' });
+  assert.equal(monitor.read(machine).status, 'ready');
+  assert.equal(monitor.read(machine).nozzle, null);
+  monitor.close();
+  assert.ok(closed);
+});

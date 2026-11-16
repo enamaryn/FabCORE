@@ -9,14 +9,20 @@ const problem = (code) => ({
   credentials: t('Vérifiez vos identifiants. À l’installation, le mot de passe doit contenir au moins 12 caractères.', 'Check your credentials. Setup requires a password of at least 12 characters.'),
   rate: t('Trop de tentatives. Réessayez dans une minute.', 'Too many attempts. Try again in a minute.'),
   installed: t('FabCore est déjà activé. Connectez-vous.', 'FabCore is already activated. Sign in.'),
-  'machine-invalid': t('Indiquez un nom, une URL Moonraker sur une IPv4 privée et une clé API valide si nécessaire.', 'Enter a name, a Moonraker URL on a private IPv4 address, and a valid API key if required.'),
-  'machine-duplicate': t('Cette adresse Moonraker est déjà enregistrée.', 'This Moonraker address is already registered.'),
+  'probe-busy': t('Un test est déjà en cours. Réessayez dans quelques secondes.', 'A test is already running. Try again in a few seconds.'),
+  'machine-invalid': t('Vérifiez le nom, l’adresse IPv4 privée et les identifiants de la machine.', 'Check the machine name, private IPv4 address and credentials.'),
+  'machine-duplicate': t('Cette machine est déjà enregistrée.', 'This machine is already registered.'),
   'machine-limit': t('Le POC accepte jusqu’à huit machines.', 'This POC supports up to eight machines.'),
   'sign-in': t('Session expirée. Connectez-vous.', 'Your session expired. Sign in.')
 })[code] || t('La requête a échoué. Réessayez.', 'The request failed. Try again.');
 
 function liveIssue(issue) {
   return ({
+    'bambu-access': t('Accès MQTT refusé. Vérifiez le code d’accès LAN.', 'MQTT access denied. Check the LAN access code.'),
+    'bambu-tls': t('Le certificat de la P2S ne correspond pas au numéro de série ou à l’autorité attendue.', 'The P2S certificate does not match the serial number or expected authority.'),
+    'bambu-report': t('La P2S est connectée, mais aucun état exploitable n’a été reçu. Vérifiez le numéro de série et les réglages LAN.', 'The P2S connected but sent no usable status. Check its serial number and LAN settings.'),
+    'bambu-print': t('La P2S signale une erreur de fabrication.', 'The P2S reports a print error.'),
+    'bambu-connection': t('FabCore ne parvient pas à joindre la P2S sur le port MQTT 8883.', 'FabCore cannot reach the P2S on MQTT port 8883.'),
     access: t('Accès Moonraker refusé. Vérifiez la clé API ou l’autorisation réseau.', 'Moonraker access denied. Check the API key or network authorization.'),
     moonraker: t('Moonraker a renvoyé une erreur.', 'Moonraker returned an error.'),
     klippy: t('Klippy est indisponible ou en cours de démarrage.', 'Klippy is unavailable or starting.'),
@@ -28,7 +34,7 @@ function liveIssue(issue) {
 
 async function api(path, data) {
   const response = await fetch('/api/' + path, data === undefined ? { signal: AbortSignal.timeout(5000) } : {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(5000)
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(path === 'machines/test' ? 18000 : 5000)
   });
   const payload = await response.json();
   if (!response.ok) throw Object.assign(new Error(payload.error), { code: payload.error });
@@ -64,7 +70,7 @@ function credentialsPage() {
 
 function liveFleet() {
   const list = state.machines;
-  return title(t('Machines','Machines'), t('Parc Klipper en lecture seule.','Read-only Klipper fleet.'), btn('add',t('Ajouter une machine','Add machine'),'plus','primary')) +
+  return title(t('Machines','Machines'), t('Parc de machines en lecture seule.','Read-only machine fleet.'), btn('add',t('Ajouter une machine','Add machine'),'plus','primary')) +
     (list.length ? `<div class="cards">${list.map(card).join('')}</div>` :
       `<p class="notice">${t('Ajoute une adresse Moonraker pour commencer.','Add a Moonraker address to get started.')}</p>`);
 }
@@ -75,7 +81,7 @@ function liveDetail() {
   const translatableTime = m.checkedAt ? new Date(m.checkedAt).toLocaleTimeString(state.lang) : '—';
   return title(esc(m.name), esc(m.model + ' · ' + m.origin), btn('nav:machines',t('Retour au parc','Back to fleet'),'grid','ghost')) +
     `<div class="main-grid"><section class="panel stack">
-      <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2>${badge(m.status)}</div>
+      <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2><div class="row wrap">${badge(m.status)}${btn('edit',t('Modifier la machine','Edit machine'))}</div></div>
       ${m.issue?`<p class="notice">${liveIssue(m.issue)}</p>`:''}
       <div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
       <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>
@@ -183,18 +189,29 @@ async function loadSession() {
   renderLive();
 }
 
-function openMachineForm() {
-  dialog.innerHTML = `<form id="add-klipper" class="stack" autocomplete="off">
-    <h2>${t('Ajouter une machine Klipper','Add a Klipper machine')}</h2>
+function openMachineForm(kind = 'klipper', name = '', existing = null) {
+  const isBambu = kind === 'bambu';
+  dialog.innerHTML = `<form id="add-machine" class="stack" autocomplete="off">
+    <h2>${existing ? t('Modifier une machine','Edit a machine') : t('Ajouter une machine','Add a machine')}</h2>
+    ${existing ? `<input type="hidden" name="id" value="${esc(existing.id)}"><input type="hidden" name="kind" value="${kind}">` : ''}
     <div class="fields">
-      <label>${t('Nom de la machine','Machine name')}<input name="name" required maxlength="80"></label>
-      <label>${t('Adresse Moonraker','Moonraker address')}<input name="origin" type="url" placeholder="http://192.168.1.50:7125" required maxlength="200"></label>
+      ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind"><option value="klipper" ${isBambu ? '' : 'selected'}>Klipper · Moonraker</option><option value="bambu" ${isBambu ? 'selected' : ''}>Bambu Lab · P2S</option></select></label>`}
+      <label>${t('Nom de la machine','Machine name')}<input name="name" required maxlength="80" value="${esc(name)}"></label>
+      ${isBambu ? `
+      <label>${t('Adresse IPv4 de la P2S','P2S IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : ''}"></label>
+      <label>${t('Numéro de série','Serial number')}<input name="serial" required maxlength="32" value="${esc(existing?.serial ?? '')}"></label>
+      <label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="8" maxlength="8" autocomplete="new-password"></label>
+      ` : `
+      <label>${t('Adresse Moonraker','Moonraker address')}<input name="origin" type="url" placeholder="http://192.168.1.50:7125" required maxlength="200" value="${esc(existing?.origin ?? '')}"></label>
       <label>${t('Clé API Moonraker (facultative)','Moonraker API key (optional)')}<input name="apiKey" type="password" maxlength="256" autocomplete="new-password"></label>
+      `}
     </div>
+    ${existing ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
     <p class="error" role="alert"></p>
-    <div class="row wrap">${btn('close',t('Annuler','Cancel'))}<button class="primary" type="submit">${t('Ajouter','Add')}</button></div>
+    <p role="status" hidden></p>
+    <div class="row wrap">${btn('close',t('Annuler','Cancel'))}<button type="submit" value="test">${t('Tester la connexion','Test connection')}</button><button class="primary" type="submit" value="save">${existing ? t('Enregistrer','Save') : t('Ajouter','Add')}</button></div>
   </form>`;
-  dialog.showModal();
+  if (!dialog.open) dialog.showModal();
 }
 
 document.addEventListener('click', async (event) => {
@@ -234,6 +251,10 @@ document.addEventListener('click', async (event) => {
     app.querySelector('h1')?.focus();
   }
   if (action === 'add') openMachineForm();
+  if (action === 'edit') {
+    const current = machine(state.machine);
+    if (current) openMachineForm(current.kind, current.name, current);
+  }
   if (action === 'logout') {
     try {
       await api('logout', {});
@@ -249,9 +270,20 @@ document.addEventListener('click', async (event) => {
   }
 });
 
+dialog.addEventListener('input', (event) => {
+  const status = event.target.form?.querySelector('[role="status"]');
+  if (status) status.hidden = true;
+});
+
+dialog.addEventListener('change', (event) => {
+  if (!event.target.matches('#add-machine select[name="kind"]')) return;
+  openMachineForm(event.target.value, event.target.form.elements.name.value);
+  dialog.querySelector('select[name="kind"]').focus();
+});
+
 document.addEventListener('submit', async (event) => {
   const form = event.target;
-  if (!['credentials','add-klipper'].includes(form.id)) return;
+  if (!['credentials','add-machine'].includes(form.id)) return;
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form));
   const errorText = form.querySelector('.error');
@@ -260,11 +292,22 @@ document.addEventListener('submit', async (event) => {
     return;
   }
   delete data.confirm;
-  const submit = form.querySelector('button[type="submit"]');
-  submit.disabled = true;
+  const controls = [...form.elements].filter((element) => !element.disabled);
+  controls.forEach((element) => { element.disabled = true; });
+  errorText.textContent = '';
   try {
-    if (form.id === 'add-klipper') {
-      const { id } = await api('machines', data);
+    if (form.id === 'add-machine') {
+      if (event.submitter?.value === 'test') {
+        const status = form.querySelector('[role="status"]');
+        status.hidden = false;
+        status.textContent = t('Test en cours…', 'Testing connection…');
+        const result = await api('machines/test', data);
+        status.hidden = !result.ok;
+        status.textContent = result.ok ? t('Connexion réussie. Télémétrie reçue.', 'Connection successful. Telemetry received.') : '';
+        if (!result.ok) errorText.textContent = liveIssue(result.issue) || problem(result.issue);
+        return;
+      }
+      const { id } = await api(data.id ? 'machines/edit' : 'machines', data);
       dialog.close();
       live.page = 'machines';
       renderLive();
@@ -284,9 +327,13 @@ document.addEventListener('submit', async (event) => {
       live.phase = 'login';
       live.error = 'installed';
       renderLive();
-    } else errorText.textContent = problem(error.code);
+    } else {
+      const status = form.querySelector('[role="status"]');
+      if (status) status.hidden = true;
+      errorText.textContent = problem(error.code);
+    }
   } finally {
-    submit.disabled = false;
+    controls.forEach((element) => { element.disabled = false; });
   }
 });
 
