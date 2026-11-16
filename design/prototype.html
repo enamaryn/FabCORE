@@ -16,6 +16,7 @@
 </head>
 <body><div id="app"></div><dialog id="dialog"></dialog><div id="status" role="status" aria-live="polite"></div>
 <script>
+const liveMode=document.documentElement.hasAttribute('data-live');
 const t=(fr,en)=>state.lang==='fr'?fr:en;
 const icons={
  grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -90,7 +91,7 @@ function card(m){
  return `<article class="machine"><div class="row between"><div class="row"><span class="machine-mark">${icon('machine')}</span><div><h3>${esc(m.name)}</h3><small>${esc(m.model)}</small></div></div>${badge(m.status)}</div>
  <div class="row between job"><span>${esc(m.file)||t('Aucune fabrication','No job')}</span><strong>${isActive?m.progress+' %':(m.status==='done'?'100 %':'')}</strong></div>
  <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>
- <div class="row between"><small>${m.eta?esc(m.eta)+' · ':''}${m.nozzle===null?t('Dernière liaison perdue','Connection lost'):m.nozzle+' °C · '+m.bed+' °C'}</small><small>${esc(m.id)}</small></div>
+ <div class="row between"><small>${m.eta?esc(m.eta)+' · ':''}${m.status==='offline'?t('Dernière liaison perdue','Connection lost'):[m.nozzle,m.bed].map(v=>v===null?'—':v+' °C').join(' · ')}</small><small>${esc(m.id)}</small></div>
  ${btn('machine:'+m.id,t('Ouvrir','Open')+' '+esc(m.name),'arrow','ghost')}</article>`;
 }
 function dashboard(){
@@ -241,6 +242,7 @@ function command(value){
  else{apply();render()}
 }
 document.addEventListener('click',e=>{
+ if(liveMode)return;
  const button=e.target.closest('[data-action]');if(!button)return;
  const [action,value]=button.dataset.action.split(':');
  if(action==='nav')go(value);
@@ -277,6 +279,7 @@ document.addEventListener('click',e=>{
  if(action==='connector')modal(t('Capacités à valider','Capabilities to validate'),`<p>${Number(value)<6?t('Télémétrie, fichiers, commandes et caméra — validation distincte par modèle et firmware.','Telemetry, files, controls and camera — validate per model and firmware.'):t('Aperçu du catalogue : résine, laser ou CNC. Le pilotage sera défini selon la famille de machines.','Catalog preview: resin, laser or CNC. Controls will depend on the machine family.')}</p>${state.role==='admin'?`<div class="fields"><label>${t('Machine de démonstration','Demo machine')}<select name="machine">${options(Object.fromEntries(state.machines.map(m=>[m.id,m.name])))}</select></label></div>`:''}`,state.role==='admin'?t('Associer','Assign'):'',state.role==='admin'?data=>{const m=machine(data.get('machine'));if(!m)return t('Ajoutez une machine avant de l’associer.','Add a machine before assigning a connector.');event(m.id,'info','Connecteur associé (simulé)','Connector assigned (simulated)');toast(t('Association simulée enregistrée.','Simulated assignment saved.'))}:null);
 });
 document.addEventListener('change',e=>{
+ if(liveMode)return;
  const el=e.target;
  if(el.id==='filter'){state.filter=el.value;render();app.querySelector('#filter').focus()}
  if(el.id==='role'){state.role=el.value;render();app.querySelector('#role').focus()}
@@ -292,12 +295,13 @@ document.addEventListener('change',e=>{
  }
 });
 document.addEventListener('submit',e=>{
+ if(liveMode)return;
  if(e.target.id==='setup-form'){e.preventDefault();const error=submitSetup(e.target);if(error)e.target.querySelector('#form-error').textContent=error}
  if(e.target.id==='services-form'){e.preventDefault();toast(t('Configuration simulée enregistrée.','Simulated settings saved.'))}
  if(e.target.id==='login-form'){e.preventDefault();go('home');toast(t('Connexion simulée.','Simulated sign-in.'))}
 });
-addEventListener('popstate',fromHash);
-addEventListener('hashchange',()=>{if(location.hash!=='#content')fromHash()});
+if(!liveMode)addEventListener('popstate',fromHash);
+addEventListener('hashchange',()=>{if(!liveMode&&location.hash!=='#content')fromHash()});
 media.addEventListener('change',()=>{if(state.theme==='system'){document.documentElement.dataset.theme=media.matches?'light':'dark'}});
 const reviewGroups=()=>[
  [t('Installation et accès','Setup and access'),[
@@ -425,6 +429,6 @@ function discoveryPage(){
 }
 
 const reviewSeed=structuredClone(state);
-fromHash();
+if(!liveMode)fromHash();
 </script>
 </body></html>
