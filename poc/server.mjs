@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { commandMoonraker, moonrakerOrigin, privateIPv4, readMoonraker } from './moonraker.mjs';
+import { readOctoPrint } from './octoprint.mjs';
 import { createBambuMonitor } from './bambu.mjs';
 import { createElegooMonitor, identifyElegoo, readElegoo } from './elegoo.mjs';
 import { readElegooCC1 } from './elegoo-cc1.mjs';
@@ -20,6 +21,7 @@ import { openStore } from './store.mjs';
 
 const machineModels = {
   klipper: 'Klipper · Moonraker',
+  octoprint: 'OctoPrint',
   bambu: 'Bambu Lab · P2S',
   elegoo: 'Elegoo · Centauri Carbon 2',
   'elegoo-cc1': 'Elegoo · Centauri Carbon',
@@ -87,7 +89,7 @@ function monitor(readPrinter) {
         () => { entry.current = { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' }; }
       ).finally(() => {
         entry.checkedAt = new Date().toISOString();
-        entry.next = Date.now() + (machine.kind === 'xtool-m2' ? 15000 : machine.kind?.startsWith('elegoo') ? 7000 : 1000);
+        entry.next = Date.now() + (machine.kind === 'octoprint' ? 5000 : machine.kind === 'xtool-m2' ? 15000 : machine.kind?.startsWith('elegoo') ? 7000 : 1000);
         entry.pending = null;
       });
     }
@@ -97,7 +99,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter = readMoonraker, sendCommand = commandMoonraker, readCC2, identifyCC2 = identifyElegoo, readCC1 = readElegooCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter = readMoonraker, readOcto = readOctoPrint, sendCommand = commandMoonraker, readCC2, identifyCC2 = identifyElegoo, readCC1 = readElegooCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -115,6 +117,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
   const cc2 = createElegooMonitor({ diagnostics });
   const elegooReaders = new Map([['elegoo', readCC2 ?? readElegoo], ['elegoo-cc1', readCC1]]);
   const snapshot = monitor(async (machine) => {
+    if (machine.kind === 'octoprint') return readOcto(machine);
     if (machine.kind === 'xtool-m2') {
       const { serial, fingerprint, ...telemetry } = await readXTool(machine);
       return telemetry;
@@ -445,10 +448,12 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       } else if (kind === 'xtool-m2') {
         const host = value(data, 'host', 15).trim();
         if (privateIPv4(host)) connection = { origin: `wss://${host}:28900`, serial: existing?.serial, fingerprint: existing?.fingerprint };
-      } else if (kind === 'klipper') {
+      } else if (kind === 'klipper' || kind === 'octoprint') {
         const origin = moonrakerOrigin(value(data, 'origin', 200).trim());
-        const apiKey = value(data, 'apiKey', 256).trim() || (data.apiKey === '' ? existing?.apiKey ?? '' : '');
-        if (origin && (!data.apiKey || /^[!-~]+$/.test(apiKey))) connection = { origin, apiKey };
+        const keepKey = data.apiKey === '' && (kind === 'klipper' || origin === existing?.origin);
+        const apiKey = value(data, 'apiKey', 256).trim() || (keepKey ? existing?.apiKey ?? '' : '');
+        const validKey = kind === 'octoprint' ? /^[!-~]{1,256}$/.test(apiKey) : !data.apiKey || /^[!-~]+$/.test(apiKey);
+        if (origin && validKey) connection = { origin, apiKey };
       }
       if (!name || !connection) return error(res, 400, 'machine-invalid');
       const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
@@ -461,6 +466,12 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         res.once('close', () => abort.abort());
         try {
           if (testing && kind === 'bambu') return answer(res, 200, await bambu.probe(machine, abort.signal));
+          if (testing && kind === 'octoprint') {
+            const result = await readOcto(machine, { signal: abort.signal });
+            if (abort.signal.aborted) return;
+            const ok = !result.issue || ['octoprint-disconnected', 'octoprint-printer-error'].includes(result.issue);
+            return answer(res, 200, { ok, issue: result.issue });
+          }
           const sameCC2 = kind === 'elegoo' && existing && existing.origin === machine.origin && existing.accessCode === machine.accessCode && !readCC2;
           let result;
           if (sameCC2) {
