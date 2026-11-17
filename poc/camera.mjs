@@ -1,7 +1,7 @@
 import { get } from 'node:http';
 import { pipeline } from 'node:stream/promises';
 import { observeImages } from './diagnostics.mjs';
-import { privateIPv4 } from './moonraker.mjs';
+import { privateIPv4 } from './connector-http.mjs';
 
 const ports = new Map([['elegoo-cc1', 3031], ['elegoo', 8080]]);
 

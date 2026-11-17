@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { setMaxListeners } from 'node:events';
 import { networkInterfaces } from 'node:os';
 import { connect } from 'node:tls';
-import { privateIPv4, readResponse } from './moonraker.mjs';
+import { privateIPv4, readResponse } from './connector-http.mjs';
 
 const ca = readFileSync(new URL('./certs/bambu-p2s.pem', import.meta.url));
 const toNumber = (ip) => ip.split('.').reduce((number, octet) => number * 256 + Number(octet), 0);

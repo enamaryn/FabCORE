@@ -34,6 +34,10 @@ const problem = (code) => ({
 
 function liveIssue(issue) {
   return ({
+    'prusalink-access': t('Accès refusé. Vérifiez la clé API PrusaLink.', 'Access denied. Check the PrusaLink API key.'),
+    'prusalink-response': t('PrusaLink ne renvoie pas un état exploitable.', 'PrusaLink did not return usable status.'),
+    'prusalink-connection': t('FabCore ne parvient pas à joindre PrusaLink.', 'FabCore cannot reach PrusaLink.'),
+    'prusalink-printer-error': t('PrusaLink signale une erreur de l’imprimante.', 'PrusaLink reports a printer error.'),
     'octoprint-access': t('Accès refusé. Vérifiez la clé API OctoPrint et ses permissions.', 'Access denied. Check the OctoPrint API key and its permissions.'),
     'octoprint-response': t('L’API OctoPrint ne renvoie pas un état exploitable.', 'The OctoPrint API did not return usable status.'),
     'octoprint-connection': t('FabCore ne parvient pas à joindre OctoPrint.', 'FabCore cannot reach OctoPrint.'),
@@ -193,14 +197,14 @@ function liveFleet() {
 function liveFabrication(m) {
   const translatableTime = m.checkedAt ? new Date(m.checkedAt).toLocaleTimeString(state.lang) : '—';
   const canManage = state.role === 'admin';
-  const action = m.kind === 'klipper' && (m.status === 'printing' ? 'pause' : m.status === 'paused' ? 'resume' : null);
+  const action = machineConnectors[m.kind]?.commands && (m.status === 'printing' ? 'pause' : m.status === 'paused' ? 'resume' : null);
   const controls = canManage && action ? btn('print-command:' + action,
     action === 'pause' ? t('Mettre en pause','Pause print') : t('Reprendre','Resume print'),
     '', 'primary', pendingPrintCommands.has(m.id) ? 'disabled' : '') : '';
   return `<section class="panel stack">
       <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2><div class="row wrap">${badge(m.status)}${controls}${canManage ? btn('edit',t('Modifier la machine','Edit machine')) : ''}</div></div>
       ${m.issue?`<p class="notice">${liveIssue(m.issue)}</p>`:''}
-      ${m.kind === 'xtool-m2' ? '' : `<div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
+      ${machineConnectors[m.kind]?.printJob === false ? '' : `<div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
       <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>`}
       <small>${t('Dernière vérification','Last check')} · <span id="last-check">${esc(translatableTime)}</span></small>
     </section>`;
@@ -281,7 +285,7 @@ function temperatureReadings(machine) {
 }
 
 function liveTemperatures(machine) {
-  if (machine.kind === 'xtool-m2') return '';
+  if (machineConnectors[machine.kind]?.temperatures === false) return '';
   return `<section class="panel stack machine-temperature">
     <h2>${t('Télémétrie','Telemetry')}</h2>
     <div class="machine-readings" data-temperature-readings>${temperatureReadings(machine)}</div>
@@ -290,8 +294,8 @@ function liveTemperatures(machine) {
 }
 
 function liveFilaments(machine) {
-  if (!['bambu', 'elegoo'].includes(machine.kind) || machine.filaments?.length === 0) return '';
-  const system = machine.kind === 'bambu' ? 'AMS' : 'CANVAS';
+  const system = machineConnectors[machine.kind]?.filaments;
+  if (!system || machine.filaments?.length === 0) return '';
   const missing = t('Données des emplacements indisponibles.', 'Slot information is unavailable.');
   const units = machine.filaments?.map(({ id, variant, slots }) => {
     const unit = variant === 'ht' ? 'AMS HT ' + (id - 3) : system + ' ' + (id + 1);
@@ -347,7 +351,7 @@ function liveFilaments(machine) {
 function liveDetail() {
   const m = machine(state.machine);
   if (!m) return liveFleet();
-  const camera = ['bambu', 'elegoo', 'elegoo-cc1'].includes(m.kind)
+  const camera = machineConnectors[m.kind]?.camera
     ? `<section class="panel stack machine-camera" data-camera-panel>
       <style>[data-camera-panel] [hidden]{display:none!important}</style>
       <h2>${t('Caméra en direct','Live camera')}</h2>
@@ -600,26 +604,28 @@ async function loadSession() {
 }
 
 function openMachineForm(kind = 'klipper', name = '', existing = null, detected = null) {
-  const isOcto = kind === 'octoprint';
-  const isBambu = kind === 'bambu';
-  const isElegoo = kind === 'elegoo';
-  const isCC1 = kind === 'elegoo-cc1';
-  const isM2 = kind === 'xtool-m2';
+  const connector = machineConnectors[kind] ?? machineConnectors.klipper;
+  const { form, port, required } = connector;
+  const isBambu = form === 'bambu';
+  const isCC1 = form === 'elegoo-cc1';
+  const isM2 = form === 'xtool-m2';
+  const addressLabel = kind === 'klipper' ? 'Moonraker' : connector.model;
   dialog.innerHTML = `<form id="add-machine" class="stack" autocomplete="off">
     <h2>${existing ? t('Modifier une machine','Edit a machine') : t('Ajouter une machine','Add a machine')}</h2>
     ${existing ? `<input type="hidden" name="id" value="${esc(existing.id)}"><input type="hidden" name="kind" value="${kind}">` : ''}
     ${existing ? '' : btn('discover',t('Détecter sur le réseau','Discover on network'))}
     <div class="fields">
-      ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind"><option value="klipper" ${kind === 'klipper' ? 'selected' : ''}>Klipper · Moonraker</option><option value="octoprint" ${isOcto ? 'selected' : ''}>OctoPrint</option><option value="bambu" ${isBambu ? 'selected' : ''}>Bambu Lab · P2S</option><option value="elegoo" ${isElegoo ? 'selected' : ''}>Elegoo · Centauri Carbon 2</option><option value="elegoo-cc1" ${isCC1 ? 'selected' : ''}>Elegoo · Centauri Carbon</option><option value="xtool-m2" ${isM2 ? 'selected' : ''}>xTool · M2</option></select></label>`}
+      ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind">${Object.entries(machineConnectors).map(([id, entry]) =>
+        `<option value="${esc(id)}" ${id === kind ? 'selected' : ''}>${esc(entry.model)}</option>`).join('')}</select></label>`}
       <label>${t('Nom de la machine','Machine name')}<input name="name" required maxlength="80" value="${esc(name)}"></label>
-      ${isBambu || isElegoo || isCC1 || isM2 ? `
+      ${form !== 'http' ? `
       <label>${t('Adresse IPv4 locale','Local IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : esc(detected?.host ?? '')}"></label>
       ${isBambu ? `<label>${t('Numéro de série','Serial number')}<input name="serial" required maxlength="32" value="${esc(existing?.serial ?? detected?.serial ?? '')}"></label>` : ''}
       ${isCC1 && !existing ? `<label>${t('MainboardID (facultatif)', 'MainboardID (optional)')}<input name="serial" maxlength="64" value="${esc(detected?.serial ?? '')}"></label>` : ''}
       ${isCC1 || isM2 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
       ` : `
-      <label>${isOcto ? t('Adresse OctoPrint','OctoPrint address') : t('Adresse Moonraker','Moonraker address')}<input name="origin" type="url" placeholder="${isOcto ? 'http://192.168.1.50:5000' : 'http://192.168.1.50:7125'}" required maxlength="200" value="${esc(existing?.origin ?? detected?.origin ?? '')}"></label>
-      <label>${isOcto ? t('Clé API OctoPrint','OctoPrint API key') : t('Clé API Moonraker (facultative)','Moonraker API key (optional)')}<input name="apiKey" type="password" ${isOcto && !existing ? 'required' : ''} maxlength="256" autocomplete="new-password"></label>
+      <label>${t('Adresse ', 'Address for ')}${esc(addressLabel)}<input name="origin" type="url" placeholder="http://192.168.1.50${port === 80 ? '' : ':' + port}" required maxlength="200" value="${esc(existing?.origin ?? detected?.origin ?? '')}"></label>
+      <label>${t('Clé API', 'API key')}${required ? '' : ' ' + t('(facultative)', '(optional)')}<input name="apiKey" type="password" ${required && !existing ? 'required' : ''} maxlength="256" autocomplete="new-password"></label>
       `}
     </div>
     ${existing && !isCC1 && !isM2 ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
@@ -674,8 +680,7 @@ async function scanFromForm(form) {
     discoveredDevices = devices;
     status.textContent = devices.length ? t('Choisissez une machine à ajouter.', 'Choose a machine to add.')
       : t('Aucune machine identifiée. L’ajout manuel reste disponible.', 'No printer identified. You can still add it manually.');
-    const models = { klipper: 'Klipper · Moonraker', bambu: 'Bambu Lab · P2S', elegoo: 'Elegoo · Centauri Carbon 2', 'elegoo-cc1': 'Elegoo · Centauri Carbon' };
-    results.innerHTML = devices.map((device, index) => `<div class="row between wrap"><span>${esc(models[device.kind])} · ${esc(device.host)}</span>
+    results.innerHTML = devices.map((device, index) => `<div class="row between wrap"><span>${esc(machineConnectors[device.kind]?.model ?? device.kind)} · ${esc(device.host)}</span>
       ${device.registered ? `<small>${t('Déjà ajoutée','Already added')}</small>`
         : btn('detected:' + index, t('Configurer','Configure'))}</div>`).join('');
   } catch (error) {

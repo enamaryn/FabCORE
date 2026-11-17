@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
-import { privateIPv4 } from './moonraker.mjs';
+import { privateIPv4 } from './connector-http.mjs';
 
 const maxFrame = 65536;
 const states = new Map([

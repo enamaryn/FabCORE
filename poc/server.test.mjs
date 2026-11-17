@@ -89,6 +89,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
       assert.equal(network.cidr, '192.168.1.0/24');
       return [{ kind: 'elegoo', host: '192.168.1.55', serial: 'CC2TEST01' }];
     },
+    readPrusa: async () => ({ status: 'printing', issue: null, nozzle: 210, bed: 60, progress: 37, file: 'support.bgcode' }),
     readOcto: async () => ({ status: 'ready', issue: null, nozzle: 30, bed: 20, progress: 0, file: '' }),
     identifyCC2: async (machine) => ({ serial: machine.serial }),
     openCamera: async (url) => {
@@ -344,6 +345,17 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.equal(octoView.nozzle, 30);
   assert.equal(octoView.apiKey, undefined);
   assert.equal((await call('/api/machines/edit', { body: { ...octo, id: octoId, origin: 'http://192.168.1.68', apiKey: '' }, cookie })).status, 400);
+  const prusa = { kind: 'prusalink', name: 'Prusa', origin: 'http://192.168.1.69', apiKey: 'test-prusa-key' };
+  assert.deepEqual(await (await call('/api/machines/test', { body: prusa, cookie })).json(), { ok: true, issue: null });
+  const prusaAdded = await call('/api/machines', { body: prusa, cookie });
+  assert.equal(prusaAdded.status, 201);
+  const { id: prusaId } = await prusaAdded.json();
+  await call('/api/machines', { cookie });
+  const { machines: prusaFleet } = await (await call('/api/machines', { cookie })).json();
+  const prusaView = prusaFleet.find(({ id }) => id === prusaId);
+  assert.equal(prusaView.progress, 37);
+  assert.equal(prusaView.model, 'PrusaLink');
+  assert.equal(prusaView.apiKey, undefined);
   const file = join(directory, 'state.json');
   const text = await readFile(file, 'utf8');
   assert.ok(!text.includes(credentials.password) && !text.includes(token));

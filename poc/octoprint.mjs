@@ -1,4 +1,4 @@
-import { moonrakerOrigin, readResponse } from './moonraker.mjs';
+import { moonrakerOrigin, readResponse } from './connector-http.mjs';
 
 const states = new Map([
   ['operational', 'ready'], ['printing', 'printing'], ['paused', 'paused'], ['pausing', 'paused'],

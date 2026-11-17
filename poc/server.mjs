@@ -5,29 +5,13 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import { commandMoonraker, moonrakerOrigin, privateIPv4, readMoonraker } from './moonraker.mjs';
-import { readOctoPrint } from './octoprint.mjs';
-import { createBambuMonitor } from './bambu.mjs';
-import { createElegooMonitor, identifyElegoo, readElegoo } from './elegoo.mjs';
-import { readElegooCC1 } from './elegoo-cc1.mjs';
 import { discoveryNetworks, scanNetwork } from './discovery.mjs';
+import { connectorCatalog, connectorDefinition, createConnectorRegistry } from './connectors.mjs';
 import { createDiagnostics } from './diagnostics.mjs';
 import { cameraRelay } from './camera-viewers.mjs';
-import { streamBambuCamera } from './bambu-camera.mjs';
-import { cameraURL, streamCamera } from './camera.mjs';
 import { createOidc } from './oidc.mjs';
 import { internalNtfy, notificationSettings, publicNotifications, sendNotification } from './notifications.mjs';
-import { readXTool } from './xtool.mjs';
 import { openStore } from './store.mjs';
-
-const machineModels = {
-  klipper: 'Klipper · Moonraker',
-  octoprint: 'OctoPrint',
-  bambu: 'Bambu Lab · P2S',
-  elegoo: 'Elegoo · Centauri Carbon 2',
-  'elegoo-cc1': 'Elegoo · Centauri Carbon',
-  'xtool-m2': 'xTool · M2'
-};
 
 const derive = promisify(scrypt);
 const digest = (secret) => createHash('sha256').update(secret).digest();
@@ -43,7 +27,7 @@ const liveHtml = shared
 const assets = new Map([
   ['/', ['text/html; charset=utf-8', liveHtml]],
   ['/shared.js', ['text/javascript; charset=utf-8', sharedScript]],
-  ['/live.js', ['text/javascript; charset=utf-8', readFileSync(new URL('./live.js', import.meta.url))]],
+  ['/live.js', ['text/javascript; charset=utf-8', `const machineConnectors = ${JSON.stringify(connectorCatalog)};\n` + readFileSync(new URL('./live.js', import.meta.url), 'utf8')]],
   ['/favicon.svg', ['image/svg+xml', readFileSync(new URL('../design/brand/favicon.svg', import.meta.url))]]
 ]);
 
@@ -90,7 +74,7 @@ function monitor(readPrinter) {
         () => { entry.current = { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' }; }
       ).finally(() => {
         entry.checkedAt = new Date().toISOString();
-        entry.next = Date.now() + (machine.kind === 'octoprint' ? 5000 : machine.kind === 'xtool-m2' ? 15000 : machine.kind?.startsWith('elegoo') ? 7000 : 1000);
+        entry.next = Date.now() + (connectorDefinition(machine.kind ?? 'klipper')?.interval ?? 1000);
         entry.pending = null;
       });
     }
@@ -100,7 +84,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter = readMoonraker, readOcto = readOctoPrint, sendCommand = commandMoonraker, readCC2, identifyCC2 = identifyElegoo, readCC1 = readElegooCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -114,18 +98,10 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
   const attempts = new Map();
   const diagnostics = createDiagnostics();
   diagnostics.record('server', 'started');
-  bambu ??= createBambuMonitor(undefined, diagnostics);
-  const cc2 = createElegooMonitor({ diagnostics });
-  const elegooReaders = new Map([['elegoo', readCC2 ?? readElegoo], ['elegoo-cc1', readCC1]]);
+  const connectors = createConnectorRegistry({ readPrinter, readOcto, readPrusa, sendCommand, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera });
   const snapshot = monitor(async (machine) => {
-    if (machine.kind === 'octoprint') return readOcto(machine);
-    if (machine.kind === 'xtool-m2') {
-      const { serial, fingerprint, ...telemetry } = await readXTool(machine);
-      return telemetry;
-    }
-    const reader = elegooReaders.get(machine.kind);
-    if (!reader) return readPrinter(machine);
-    const { serial, ...telemetry } = await (machine.kind === 'elegoo' && !readCC2 ? cc2.read(machine) : reader(machine));
+    const connector = await connectors.get(machine.kind ?? 'klipper');
+    const { serial, fingerprint, ...telemetry } = await connector.read(machine);
     return telemetry;
   });
   const pendingCommands = new Set();
@@ -243,9 +219,8 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
     if (req.method === 'GET' && camera) {
       if (!activeSession) return error(res, 401, 'sign-in');
       const machine = store.state.machines.find(({ id }) => id === camera[1]);
-      const isBambu = machine?.kind === 'bambu';
-      const url = machine && !isBambu && cameraURL(machine);
-      if (!isBambu && !url) return error(res, 404, 'camera-unsupported');
+      const definition = connectorDefinition(machine?.kind);
+      if (!definition?.camera) return error(res, 404, 'camera-unsupported');
       let relay = cameraStreams.get(machine.id);
       const viewerCount = [...cameraStreams.values()].reduce((count, stream) => count + stream.viewers.size, 0);
       if (viewerCount >= 32 || (!relay && cameraStreams.size >= 8)) return error(res, 429, 'camera-busy');
@@ -267,16 +242,8 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       };
       let failure;
       try {
-        if (isBambu) {
-          if (!(await streamBambuCamera(machine, output, controller.signal, onFrame))) failure = 'no-stream';
-        } else {
-          const identify = machine.kind === 'elegoo' ? identifyCC2 : elegooReaders.get(machine.kind);
-          const identity = await identify(machine, { signal: controller.signal });
-          if (!controller.signal.aborted) {
-            if (identity.serial !== machine.serial || (identity.issue && identity.issue !== 'elegoo-print')) failure = 'identity';
-            else if (!(await streamCamera(url, output, controller.signal, openCamera, onFrame))) failure = 'invalid-stream';
-          }
-        }
+        const connector = await connectors.get(machine.kind);
+        if (!controller.signal.aborted) failure = await connector.camera(machine, output, controller.signal, onFrame);
       } catch {
         failure = 'interrupted';
       } finally {
@@ -353,16 +320,20 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
     }
     if (req.method === 'GET' && path === '/api/machines') {
       if (!activeSession) return error(res, 401, 'sign-in');
-      return answer(res, 200, { machines: store.state.machines.map((machine) => {
-        const telemetry = machine.kind === 'bambu' ? bambu.read(machine) : snapshot(machine);
+      const machines = await Promise.all(store.state.machines.map(async (machine) => {
+        const definition = connectorDefinition(machine.kind ?? 'klipper');
+        const connector = definition?.live ? await connectors.get(machine.kind) : null;
+        if (!store.state.machines.includes(machine)) return null;
+        const telemetry = connector ? connector.read(machine) : snapshot(machine);
         diagnostics.status(machine.id, telemetry);
         return {
           id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial,
-          model: machineModels[machine.kind] ?? machineModels.klipper,
+          model: definition?.model ?? connectorCatalog.klipper.model,
           cameraOpen: [...(cameraStreams.get(machine.id)?.viewers.values() ?? [])].some(({ owner }) => owner === activeSession),
           ...telemetry
         };
-      }) });
+      }));
+      return answer(res, 200, { machines: machines.filter(Boolean) });
     }
     const command = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/command$/);
     if (req.method === 'POST' && command) {
@@ -374,19 +345,20 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       const action = data.action;
       if (action !== 'pause' && action !== 'resume') return error(res, 400, 'invalid');
       const machine = store.state.machines.find(({ id }) => id === command[1]);
-      if (!machine || (machine.kind ?? 'klipper') !== 'klipper') return error(res, 404, 'missing');
+      if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.commands) return error(res, 404, 'missing');
       if (pendingCommands.has(machine.id)) return error(res, 409, 'command-busy');
       const before = action === 'pause' ? 'printing' : 'paused';
       const after = action === 'pause' ? 'paused' : 'printing';
       pendingCommands.add(machine.id);
       try {
-        if ((await readPrinter(machine)).status !== before) return error(res, 409, 'command-state');
+        const connector = await connectors.get(machine.kind ?? 'klipper');
+        if ((await connector.read(machine)).status !== before) return error(res, 409, 'command-state');
         if (res.destroyed) return;
         if (!session(req)) return error(res, 401, 'sign-in');
         try {
-          if (!(await sendCommand(machine, action))) return error(res, 502, 'command-rejected');
+          if (!(await connector.command(machine, action))) return error(res, 502, 'command-rejected');
           for (let attempt = 0; attempt < 4; attempt++) {
-            if ((await readPrinter(machine)).status === after) return answer(res, 200, { status: after });
+            if ((await connector.read(machine)).status === after) return answer(res, 200, { status: after });
             if (attempt < 3) await delay(350);
           }
         } catch { /* The request may have reached the printer. Never retry it automatically. */ }
@@ -422,67 +394,26 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       const name = value(data, 'name', 80).trim();
       const kind = data.kind ?? 'klipper';
       if (existing && kind !== (existing.kind ?? 'klipper')) return error(res, 400, 'machine-invalid');
-      let connection;
-      if (kind === 'bambu') {
-        const host = value(data, 'host', 15).trim();
-        const serial = value(data, 'serial', 32).trim().toUpperCase();
-        const accessCode = value(data, 'accessCode', 8).trim() || (data.accessCode === '' ? existing?.accessCode ?? '' : '');
-        if (privateIPv4(host) && /^[A-Z0-9]{8,32}$/.test(serial) && /^[A-Za-z0-9]{8}$/.test(accessCode)) {
-          connection = { origin: `mqtts://${host}:8883`, serial, accessCode };
-        }
-      } else if (kind === 'elegoo') {
-        const host = value(data, 'host', 15).trim();
-        const accessCode = value(data, 'accessCode', 64).trim() || (data.accessCode === '' ? existing?.accessCode ?? '' : '');
-        if (privateIPv4(host) && /^[!-~]{1,64}$/.test(accessCode)) {
-          connection = { origin: `mqtt://${host}:1883`, serial: existing?.serial, accessCode };
-        }
-      } else if (kind === 'elegoo-cc1') {
-        const host = value(data, 'host', 15).trim();
-        const serial = existing?.serial ?? value(data, 'serial', 64).trim();
-        if (privateIPv4(host) && (!serial || /^[a-zA-Z0-9_-]{6,64}$/.test(serial))) {
-          connection = { origin: `ws://${host}:3030`, serial: serial || undefined };
-        }
-      } else if (kind === 'xtool-m2') {
-        const host = value(data, 'host', 15).trim();
-        if (privateIPv4(host)) connection = { origin: `wss://${host}:28900`, serial: existing?.serial, fingerprint: existing?.fingerprint };
-      } else if (kind === 'klipper' || kind === 'octoprint') {
-        const origin = moonrakerOrigin(value(data, 'origin', 200).trim());
-        const keepKey = data.apiKey === '' && (kind === 'klipper' || origin === existing?.origin);
-        const apiKey = value(data, 'apiKey', 256).trim() || (keepKey ? existing?.apiKey ?? '' : '');
-        const validKey = kind === 'octoprint' ? /^[!-~]{1,256}$/.test(apiKey) : !data.apiKey || /^[!-~]+$/.test(apiKey);
-        if (origin && validKey) connection = { origin, apiKey };
-      }
+      const definition = connectorDefinition(kind);
+      const connection = definition?.configure(data, existing);
       if (!name || !connection) return error(res, 400, 'machine-invalid');
       const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
       const testing = path === '/api/machines/test';
-      const elegooReader = kind === 'xtool-m2' ? readXTool : elegooReaders.get(kind);
-      if (testing || elegooReader) {
+      if (testing || definition.verify) {
         if (probes >= 2) return error(res, 429, 'probe-busy');
         probes++;
         const abort = new AbortController();
         res.once('close', () => abort.abort());
         try {
-          if (testing && kind === 'bambu') return answer(res, 200, await bambu.probe(machine, abort.signal));
-          if (testing && kind === 'octoprint') {
-            const result = await readOcto(machine, { signal: abort.signal });
-            if (abort.signal.aborted) return;
-            const ok = !result.issue || ['octoprint-disconnected', 'octoprint-printer-error'].includes(result.issue);
-            return answer(res, 200, { ok, issue: result.issue });
-          }
-          const sameCC2 = kind === 'elegoo' && existing && existing.origin === machine.origin && existing.accessCode === machine.accessCode && !readCC2;
-          let result;
-          if (sameCC2) {
-            result = await identifyCC2(machine, { signal: abort.signal });
-            if (testing && result.serial) result = await cc2.read(machine);
-          } else result = elegooReader ? await elegooReader(machine, { signal: abort.signal }) : await readPrinter(machine);
+          const connector = await connectors.get(kind);
           if (abort.signal.aborted) return;
-          const ok = elegooReader
-            ? Boolean(result.serial && (!result.issue || result.issue === 'elegoo-print' || result.issue === 'xtool-device'))
-            : !result.issue || result.issue === 'print';
-          if (testing) return answer(res, 200, { ok, issue: ok ? null : result.issue ?? 'elegoo-report' });
-          if (!ok) return error(res, 422, result.issue ?? 'elegoo-info');
+          const sameConnection = existing && existing.origin === machine.origin && existing.accessCode === machine.accessCode;
+          const result = await connector.probe(machine, { signal: abort.signal, testing, sameConnection });
+          if (abort.signal.aborted) return;
+          if (testing) return answer(res, 200, { ok: result.ok, issue: result.issue ?? (result.ok ? null : 'elegoo-report') });
+          if (!result.ok) return error(res, 422, result.issue ?? 'elegoo-info');
           machine.serial = result.serial;
-          if (kind === 'xtool-m2') machine.fingerprint = result.fingerprint;
+          if (result.fingerprint) machine.fingerprint = result.fingerprint;
           if (existing && !store.state.machines.includes(existing)) return error(res, 409, 'machine-changed');
         } finally {
           probes--;
@@ -498,8 +429,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       store.save({ ...store.state, machines });
       if (existing) {
         snapshot.forget(machine.id);
-        bambu.forget(machine.id);
-        if (existing.origin !== machine.origin || existing.accessCode !== machine.accessCode) cc2.forget(machine.id);
+        connectors.forget(kind, machine.id, existing.origin !== machine.origin || existing.accessCode !== machine.accessCode);
         cameraStreams.get(machine.id)?.controller.abort();
       }
       return answer(res, existing ? 200 : 201, { id: machine.id });
@@ -549,7 +479,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       else res.end();
     });
   });
-  server.on('close', () => { bambu.close(); cc2.close(); });
+  server.on('close', () => connectors.close());
   return { server, token };
 }
 
