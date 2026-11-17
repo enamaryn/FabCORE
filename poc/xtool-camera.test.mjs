@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import { streamXToolCamera } from './xtool-camera.mjs';
+import { snapshotXToolCamera } from './xtool-camera.mjs';
 
 function crc16(bytes) {
   let crc = 0;
@@ -73,27 +73,17 @@ test('la caméra M2 partage la session et vérifie le transfert de son JPEG', as
       return {};
     }
   };
-  const chunks = [];
-  const output = {
-    writeHead(status, headers) {
-      assert.equal(status, 200);
-      assert.match(headers['Content-Type'], /multipart/);
-    },
-    write(chunk) { chunks.push(chunk); }
-  };
-  await streamXToolCamera(() => session, output, controller.signal, () => controller.abort());
+  assert.deepEqual(await snapshotXToolCamera(() => session, controller.signal), image.subarray(0, image.length - 4));
   assert.equal(downloads, 1);
   assert.equal(finishes, 1);
-  assert.ok(Buffer.concat(chunks).includes(image.subarray(0, image.length - 4)));
   for (const view of ['far', 'near']) {
     expectedView = view;
-    controller = new AbortController();
-    await streamXToolCamera(() => session, output, controller.signal, () => controller.abort(), view);
+    await snapshotXToolCamera(() => session, controller.signal, view);
   }
   assert.equal(downloads, 3);
   assert.equal(finishes, 3);
   expectedView = 'side';
   badDigest = true;
-  assert.equal(await streamXToolCamera(() => session, output, new AbortController().signal, assert.fail), 'invalid-stream');
+  await assert.rejects(snapshotXToolCamera(() => session, controller.signal), /invalid-image/);
   assert.equal(finishes, 3);
 });
