@@ -12,6 +12,7 @@ import { createElegooMonitor, identifyElegoo, readElegoo } from './elegoo.mjs';
 import { readElegooCC1 } from './elegoo-cc1.mjs';
 import { discoveryNetworks, scanNetwork } from './discovery.mjs';
 import { createDiagnostics } from './diagnostics.mjs';
+import { cameraRelay } from './camera-viewers.mjs';
 import { streamBambuCamera } from './bambu-camera.mjs';
 import { cameraURL, streamCamera } from './camera.mjs';
 import { createOidc } from './oidc.mjs';
@@ -133,8 +134,10 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
   const notificationTests = new Set();
   const cameraStreams = new Map();
   const stopCameraStreams = (sessionId) => {
-    for (const [controller, { owner }] of cameraStreams) {
-      if (owner === sessionId) controller.abort();
+    for (const relay of cameraStreams.values()) {
+      for (const [res, viewer] of relay.viewers) {
+        if (viewer.owner === sessionId) res.destroy();
+      }
     }
   };
   function cookie(value, age) {
@@ -243,19 +246,18 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
       const isBambu = machine?.kind === 'bambu';
       const url = machine && !isBambu && cameraURL(machine);
       if (!isBambu && !url) return error(res, 404, 'camera-unsupported');
-      const existingStream = [...cameraStreams].find(([, stream]) => stream.id === machine.id && !stream.signal.aborted);
-      if (existingStream && existingStream[1].owner !== activeSession) return error(res, 429, 'camera-busy');
-      if (!existingStream && cameraStreams.size >= 8) return error(res, 429, 'camera-busy');
-      if (existingStream) {
-        const [previous] = existingStream;
-        previous.abort();
-        cameraStreams.delete(previous);
+      let relay = cameraStreams.get(machine.id);
+      const viewerCount = [...cameraStreams.values()].reduce((count, stream) => count + stream.viewers.size, 0);
+      if (viewerCount >= 32 || (!relay && cameraStreams.size >= 8)) return error(res, 429, 'camera-busy');
+      if (relay) {
+        if (relay.controller.signal.aborted) return error(res, 503, 'camera-unavailable');
+        relay.subscribe(res, activeSession, viewer.expires);
+        return;
       }
-      const controller = new AbortController();
-      const stop = () => controller.abort();
-      const expires = setTimeout(stop, Math.max(0, viewer.expires - Date.now()));
-      cameraStreams.set(controller, { owner: activeSession, id: machine.id, signal: controller.signal });
-      res.once('close', stop);
+      relay = cameraRelay();
+      cameraStreams.set(machine.id, relay);
+      relay.subscribe(res, activeSession, viewer.expires);
+      const { controller, output } = relay;
       diagnostics.record('camera', 'opening', machine.id);
       let firstFrame = true;
       const onFrame = () => {
@@ -263,34 +265,29 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         firstFrame = false;
         diagnostics.frame(machine.id);
       };
-      const unavailable = (code) => {
-        diagnostics.record('camera', code, machine.id);
-        return error(res, 502, 'camera-unavailable');
-      };
+      let failure;
       try {
         if (isBambu) {
-          if (!(await streamBambuCamera(machine, res, controller.signal, onFrame))) {
-            if (controller.signal.aborted) return res.destroy();
-            return unavailable('no-stream');
+          if (!(await streamBambuCamera(machine, output, controller.signal, onFrame))) failure = 'no-stream';
+        } else {
+          const identify = machine.kind === 'elegoo' ? identifyCC2 : elegooReaders.get(machine.kind);
+          const identity = await identify(machine, { signal: controller.signal });
+          if (!controller.signal.aborted) {
+            if (identity.serial !== machine.serial || (identity.issue && identity.issue !== 'elegoo-print')) failure = 'identity';
+            else if (!(await streamCamera(url, output, controller.signal, openCamera, onFrame))) failure = 'invalid-stream';
           }
-          return;
         }
-        const identify = machine.kind === 'elegoo' ? identifyCC2 : elegooReaders.get(machine.kind);
-        const identity = await identify(machine, { signal: controller.signal });
-        if (controller.signal.aborted) return res.destroy();
-        if (identity.serial !== machine.serial || (identity.issue && identity.issue !== 'elegoo-print')) {
-          return unavailable('identity');
-        }
-        if (!(await streamCamera(url, res, controller.signal, openCamera, onFrame))) return unavailable('invalid-stream');
       } catch {
-        if (!controller.signal.aborted) diagnostics.record('camera', 'interrupted', machine.id);
-        if (controller.signal.aborted || res.headersSent) res.destroy();
-        else error(res, 502, 'camera-unavailable');
+        failure = 'interrupted';
       } finally {
-        clearTimeout(expires);
-        res.off('close', stop);
-        cameraStreams.delete(controller);
+        cameraStreams.delete(machine.id);
+        if (failure && !controller.signal.aborted) diagnostics.record('camera', failure, machine.id);
         if (!firstFrame) diagnostics.record('camera', 'closed', machine.id);
+        for (const viewerResponse of relay.viewers.keys()) {
+          if (controller.signal.aborted || (failure && viewerResponse.headersSent)) viewerResponse.destroy();
+          else if (failure) error(viewerResponse, 502, 'camera-unavailable');
+          else viewerResponse.end();
+        }
       }
       return;
     }
@@ -362,7 +359,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         return {
           id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial,
           model: machineModels[machine.kind] ?? machineModels.klipper,
-          cameraOpen: [...cameraStreams.values()].some(({ owner, id }) => owner === activeSession && id === machine.id),
+          cameraOpen: [...(cameraStreams.get(machine.id)?.viewers.values() ?? [])].some(({ owner }) => owner === activeSession),
           ...telemetry
         };
       }) });
@@ -503,9 +500,7 @@ export function createFabCore({ directory, origin, readPrinter = readMoonraker, 
         snapshot.forget(machine.id);
         bambu.forget(machine.id);
         if (existing.origin !== machine.origin || existing.accessCode !== machine.accessCode) cc2.forget(machine.id);
-        for (const [controller, { id }] of cameraStreams) {
-          if (id === machine.id) controller.abort();
-        }
+        cameraStreams.get(machine.id)?.controller.abort();
       }
       return answer(res, existing ? 200 : 201, { id: machine.id });
     }

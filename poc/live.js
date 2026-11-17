@@ -190,7 +190,7 @@ function liveFleet() {
       `<p class="notice">${t('Ajoute une adresse Moonraker pour commencer.','Add a Moonraker address to get started.')}</p>`);
 }
 
-function liveTelemetry(m) {
+function liveFabrication(m) {
   const translatableTime = m.checkedAt ? new Date(m.checkedAt).toLocaleTimeString(state.lang) : '—';
   const canManage = state.role === 'admin';
   const action = m.kind === 'klipper' && (m.status === 'printing' ? 'pause' : m.status === 'paused' ? 'resume' : null);
@@ -203,11 +203,7 @@ function liveTelemetry(m) {
       ${m.kind === 'xtool-m2' ? '' : `<div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
       <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>`}
       <small>${t('Dernière vérification','Last check')} · <span id="last-check">${esc(translatableTime)}</span></small>
-    </section>${m.kind === 'xtool-m2' ? '' : `<section class="panel stack">
-      <h2>${t('Télémétrie','Telemetry')}</h2>
-      <div class="row between"><span>${t('Buse','Nozzle')}</span><strong>${m.nozzle===null?'—':m.nozzle+' °C'}</strong></div>
-      <div class="row between"><span>${t('Plateau','Bed')}</span><strong>${m.bed===null?'—':m.bed+' °C'}</strong></div>
-    </section>`}`;
+    </section>`;
 }
 
 const temperatureHistory = new Map();
@@ -233,88 +229,102 @@ function temperaturePlot(machine) {
   const now = samples.at(-1).at;
   const start = Math.min(samples[0].at, now - temperatureInterval);
   const values = samples.flatMap(({ nozzle, bed }) => [nozzle, bed].filter(Number.isFinite));
-  const low = Math.min(0, ...values);
-  const high = Math.max(40, Math.ceil(Math.max(...values) / 40) * 40);
-  const x = (at) => 54 + (at - start) / (now - start) * 644;
-  const y = (degrees) => 170 - (degrees - low) / (high - low) * 154;
-  const time = (at) => new Date(at).toLocaleTimeString(state.lang, { hour: '2-digit', minute: '2-digit' });
-  const series = [
-    ['nozzle', '#ea8a42', t('Buse', 'Nozzle')],
-    ['bed', '#4aa9d6', t('Plateau', 'Bed')]
-  ];
-  return `<div class="row wrap">${series.map(([key, color, label]) =>
-    `<small><span aria-hidden="true" style="color:${color}">●</span> ${label} · ${Number.isFinite(samples.at(-1)[key]) ? samples.at(-1)[key] + ' °C' : '—'}</small>`
-  ).join('')}</div>
-  <svg viewBox="0 0 720 198" width="100%" role="img" aria-label="${t('Historique des températures de la buse et du plateau en degrés Celsius', 'Nozzle and bed temperatures over time in degrees Celsius')}">
-    ${[0, 1, 2, 3, 4].map((step) => {
-      const value = low + (high - low) * step / 4;
-      return `<line x1="54" x2="698" y1="${y(value)}" y2="${y(value)}" stroke="currentColor" opacity=".18"/>
-      <text x="44" y="${y(value) + 4}" text-anchor="end" fill="currentColor" font-size="12">${Math.round(value)}°</text>`;
+  const min = Math.min(0, ...values);
+  const max = Math.max(0, ...values);
+  const step = [10, 20, 25, 50, 100].find(size => max - min <= size * 6)
+    ?? Math.ceil((max - min) / 600) * 100;
+  const low = Math.floor(min / step) * step;
+  const high = Math.max(low + 3 * step, Math.ceil(max / step) * step);
+  const x = at => 38 + (at - start) / (now - start) * 388;
+  const y = degrees => 122 - (degrees - low) / (high - low) * 108;
+  const point = (sample, key) => `${x(sample.at).toFixed(2)},${y(sample[key]).toFixed(2)}`;
+  const time = at => new Date(at).toLocaleTimeString(state.lang, { hour: '2-digit', minute: '2-digit' });
+  const series = [['nozzle', '#ea8a42'], ['bed', '#4aa9d6']];
+  let hasGaps = false;
+  const lines = series.map(([key, color]) => {
+    let previous = null;
+    let path = '';
+    let gaps = '';
+    for (const sample of samples) {
+      if (!Number.isFinite(sample[key])) continue;
+      if (previous && sample.at - previous.at > 25_000) {
+        hasGaps = true;
+        gaps += `M${point(previous, key)}L${point(sample, key)}`;
+        path += `M${point(sample, key)}`;
+      } else {
+        path += (previous ? 'L' : 'M') + point(sample, key);
+      }
+      previous = sample;
+    }
+    const latest = samples.at(-1);
+    return `<path d="${gaps}" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="3 4" opacity=".55"/>
+      <path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${Number.isFinite(latest[key]) ? `<circle cx="${x(latest.at)}" cy="${y(latest[key])}" r="3" fill="${color}"/>` : ''}`;
+  }).join('');
+  return `<svg viewBox="0 0 438 146" width="100%" role="img" aria-label="${t('Historique des températures de la buse et du plateau en degrés Celsius', 'Nozzle and bed temperatures over time in degrees Celsius')}">
+    ${Array.from({ length: Math.floor((high - low) / step) + 1 }, (_, index) => {
+      const value = low + index * step;
+      return `<line x1="38" x2="426" y1="${y(value)}" y2="${y(value)}" stroke="currentColor" opacity=".14"/>
+      <text x="30" y="${y(value) + 3}" text-anchor="end" fill="currentColor" font-size="10">${Math.round(value)}°</text>`;
     }).join('')}
-    ${series.map(([key, color]) => {
-      let previous = null;
-      const path = samples.map((point) => {
-        if (!Number.isFinite(point[key])) { previous = null; return ''; }
-        const command = previous === null || point.at - previous > 25_000 ? 'M' : 'L';
-        previous = point.at;
-        return `${command}${x(point.at).toFixed(2)},${y(point[key]).toFixed(2)}`;
-      }).join(' ');
-      const latest = samples.at(-1);
-      return `<path d="${path}" fill="none" stroke="${color}" stroke-width="2.5"/>
-        ${Number.isFinite(latest[key]) ? `<circle cx="${x(latest.at)}" cy="${y(latest[key])}" r="3" fill="${color}"/>` : ''}`;
-    }).join('')}
-    <text x="54" y="191" fill="currentColor" font-size="12">${esc(time(start))}</text>
-    <text x="698" y="191" text-anchor="end" fill="currentColor" font-size="12">${esc(time(now))}</text>
-  </svg>`;
+    ${lines}
+    <text x="38" y="141" fill="currentColor" font-size="10">${esc(time(start))}</text>
+    <text x="426" y="141" text-anchor="end" fill="currentColor" font-size="10">${esc(time(now))}</text>
+  </svg>${hasGaps ? `<small class="muted">${t('Pointillés · relevés espacés', 'Dashed · gaps between readings')}</small>` : ''}`;
+}
+
+function temperatureReadings(machine) {
+  return [['nozzle', '#ea8a42', t('Buse', 'Nozzle')], ['bed', '#4aa9d6', t('Plateau', 'Bed')]].map(([key, color, label]) =>
+    `<div><span style="color:${color}" aria-hidden="true">●</span> ${label}
+      <strong>${Number.isFinite(machine[key]) ? machine[key] + ' °C' : '—'}</strong></div>`
+  ).join('');
 }
 
 function liveTemperatures(machine) {
   if (machine.kind === 'xtool-m2') return '';
-  return `<section class="panel stack" style="margin-top:1rem">
-    <h2>${t('Historique des températures', 'Temperature history')}</h2>
+  return `<section class="panel stack machine-temperature">
+    <h2>${t('Télémétrie','Telemetry')}</h2>
+    <div class="machine-readings" data-temperature-readings>${temperatureReadings(machine)}</div>
     <div class="stack" data-temperature-plot>${temperaturePlot(machine)}</div>
   </section>`;
 }
 
 function liveFilaments(machine) {
-  if (!['bambu', 'elegoo'].includes(machine.kind)) return '';
+  if (!['bambu', 'elegoo'].includes(machine.kind) || machine.filaments?.length === 0) return '';
   const system = machine.kind === 'bambu' ? 'AMS' : 'CANVAS';
-  const missing = Array.isArray(machine.filaments)
-    ? t('Aucun module connecté.', 'No unit connected.')
-    : t('Données des emplacements indisponibles.', 'Slot information is unavailable.');
+  const missing = t('Données des emplacements indisponibles.', 'Slot information is unavailable.');
   const units = machine.filaments?.map(({ id, variant, slots }) => {
     const unit = variant === 'ht' ? 'AMS HT ' + (id - 3) : system + ' ' + (id + 1);
     return `<div class="filament-module">
-      <h3>${unit}</h3>
+      ${machine.filaments.length > 1 ? `<h3>${unit}</h3>` : ''}
       <ul class="filament-rack" style="--slots:${slots.length}">
         ${slots.map((slot) => {
           const position = system === 'AMS' && !variant ? String.fromCharCode(65 + id) + (slot.id + 1) : String(slot.id + 1);
           const occupation = slot.occupied === null ? t('Inconnu', 'Unknown')
             : slot.occupied ? t('Chargé', 'Loaded') : t('Vide', 'Empty');
           const shade = /^#[A-Fa-f0-9]{6}$/.test(slot.color) ? slot.color : 'var(--dim)';
-          const label = slot.material || slot.name || occupation;
+          const label = slot.name || slot.material || occupation;
           return `<li class="filament-slot" data-occupied="${slot.occupied}" data-active="${slot.active}" style="--filament:${esc(shade)}">
-            <strong class="filament-material">${esc(label)}</strong>
             <span class="filament-spool" aria-hidden="true"><i></i></span>
             <span class="filament-position" aria-label="${t('Emplacement', 'Slot')} ${position}">${position}</span>
-            ${slot.name && slot.name !== label ? `<small class="filament-name">${esc(slot.name)}</small>` : ''}
+            <small class="filament-material">${esc(label)}</small>
             ${slot.active ? `<small class="filament-active">${t('Actif', 'Active')}</small>` : ''}
           </li>`;
         }).join('')}
       </ul>
     </div>`;
   }).join('');
-  return `<section class="panel stack" style="margin-top:1rem">
+  return `<section class="panel stack">
     <style>
       .filament-module{display:grid;gap:.65rem}
-      .filament-rack{display:grid;grid-template-columns:repeat(var(--slots),minmax(0,1fr));gap:clamp(.25rem,2vw,1.2rem);
-        width:100%;max-width:38rem;margin:0;padding:.75rem .5rem .95rem;list-style:none;
+      .filament-rack{display:grid;grid-template-columns:repeat(var(--slots),minmax(0,1fr));gap:.35rem;
+        width:calc(var(--slots) * 3.2rem + .8rem);max-width:100%;margin:0;padding:.65rem;list-style:none;
         border:1px solid var(--line);border-radius:1rem;background:var(--bg)}
-      .filament-slot{position:relative;min-width:0;display:grid;grid-template-rows:2.4em auto auto auto auto;
+      .filament-slot{position:relative;min-width:0;display:grid;grid-template-rows:auto auto auto auto;
         align-items:center;justify-items:center;gap:.3rem;text-align:center}
       .filament-material,.filament-name{overflow-wrap:anywhere;line-height:1.1}
       .filament-material{font-size:clamp(.65rem,2vw,.9rem)}
-      .filament-spool{position:relative;width:82%;max-width:5.7rem;aspect-ratio:1.4;display:block}
+      .filament-spool{position:relative;width:min(100%, 1.9rem);height:2.85rem;display:block}
       .filament-spool i{position:absolute;inset:7% 13%;border-radius:29% 22% 22% 29%;
         background:repeating-linear-gradient(90deg,transparent 0 2px,#0001 3px 4px),var(--filament);
         box-shadow:inset 0 5px 7px #fff2,inset 0 -6px 8px #0004}
@@ -330,7 +340,7 @@ function liveFilaments(machine) {
       .filament-active{color:var(--accent);font-weight:700}
       .filament-slot[data-active=true]:after{content:'';position:absolute;height:.65rem;top:100%;border-left:2px solid var(--accent)}
     </style>
-    <h2>${t('Filaments', 'Filaments')} · ${system}</h2>${units || `<p>${missing}</p>`}
+    <h2>${system}</h2>${units || `<p>${missing}</p>`}
   </section>`;
 }
 
@@ -338,16 +348,35 @@ function liveDetail() {
   const m = machine(state.machine);
   if (!m) return liveFleet();
   const camera = ['bambu', 'elegoo', 'elegoo-cc1'].includes(m.kind)
-    ? `<section class="panel stack" style="margin-top:1rem" data-camera-panel>
+    ? `<section class="panel stack machine-camera" data-camera-panel>
       <style>[data-camera-panel] [hidden]{display:none!important}</style>
       <h2>${t('Caméra en direct','Live camera')}</h2>
       <div data-live-camera></div>
+      <div class="machine-camera-idle" data-camera-placeholder>${icon('camera')}<p>${t('Flux fermé','Stream closed')}</p></div>
       <p data-camera-status role="status" hidden></p>
       <div class="row wrap">${btn('camera-start',t('Ouvrir le flux','Open stream'))}
       ${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
     </section>` : '';
   return title(esc(m.name), esc(m.model + ' · ' + m.origin), btn('nav:machines',t('Retour au parc','Back to fleet'),'grid','ghost')) +
-    `<div class="main-grid" data-live-telemetry>${liveTelemetry(m)}</div><div data-live-filaments>${liveFilaments(m)}</div>${liveTemperatures(m)}${camera}`;
+    `<style>
+      .machine-detail{display:grid;gap:1rem}
+      .machine-detail-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+      .machine-detail-row > *{min-width:0}
+      .machine-detail-row > :only-child,.machine-detail-row > :first-child:has(+ :empty){grid-column:1/-1}
+      .machine-detail-row > div:empty,.machine-detail-row:empty{display:none}
+      .machine-detail-row > div > .panel{height:100%}
+      .machine-temperature,.machine-camera{align-content:start}
+      .machine-readings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
+      .machine-readings strong{display:block;font-size:1.35rem;margin-top:.2rem}
+      .machine-temperature [data-temperature-plot] svg{display:block;max-height:12rem}
+      .machine-camera-idle{min-height:7rem;display:grid;justify-items:center;align-content:center;gap:.45rem;color:var(--dim)}
+      .machine-camera-idle svg{width:2rem;height:2rem}
+      @media(max-width:700px){.machine-detail-row{grid-template-columns:minmax(0,1fr)}}
+    </style>
+    <div class="machine-detail">
+      <div class="machine-detail-row">${camera}${liveTemperatures(m)}</div>
+      <div class="machine-detail-row"><div data-live-telemetry>${liveFabrication(m)}</div><div data-live-filaments>${liveFilaments(m)}</div></div>
+    </div>`;
 }
 
 function showCamera(open, failed = false) {
@@ -363,6 +392,7 @@ function showCamera(open, failed = false) {
     ? t('Flux indisponible. Vérifiez la caméra de cette imprimante, puis réessayez.',
         'Stream unavailable. Check this printer’s camera, then retry.') : '';
   status.hidden = !failed;
+  app.querySelector('[data-camera-placeholder]').hidden = open || failed;
   start.hidden = open;
   stop.hidden = !open;
   if (!open) {
@@ -512,8 +542,10 @@ async function refresh() {
     if ((changed || hadRefreshError) && !dialog.open && !['notifications', 'diagnostics'].includes(live.page)) {
       const action = document.activeElement?.dataset.action;
       const telemetry = app.querySelector('[data-live-telemetry]');
-      if (!hadRefreshError && telemetry && current && (cameraImage || app.querySelector('[data-camera-status]:not([hidden])'))) {
-        telemetry.innerHTML = liveTelemetry(current);
+      if (!hadRefreshError && telemetry && current) {
+        telemetry.innerHTML = liveFabrication(current);
+        const readings = app.querySelector('[data-temperature-readings]');
+        if (readings) readings.innerHTML = temperatureReadings(current);
         const filaments = app.querySelector('[data-live-filaments]');
         if (filaments) filaments.innerHTML = liveFilaments(current);
       } else renderLive();
