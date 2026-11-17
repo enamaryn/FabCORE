@@ -10,6 +10,7 @@ import { discoveryNetworks, reconcileDiscovery, scanNetwork } from './discovery.
 import { connectorCatalog, connectorDefinition, createConnectorRegistry } from './connectors.mjs';
 import { createDiagnostics } from './diagnostics.mjs';
 import { cameraRelay } from './camera-viewers.mjs';
+import { cameraPreview } from './camera-preview.mjs';
 import { createOidc } from './oidc.mjs';
 import { internalNtfy, notificationSettings, publicNotifications, sendNotification } from './notifications.mjs';
 import { openStore } from './store.mjs';
@@ -222,7 +223,8 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         fleet: store.state.machines.map(({ id, name }) => ({ id, name }))
       });
     }
-    const camera = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera(?:\/(side|far|near))?$/);
+    const preview = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera\/preview(?:\/(side|far|near))?$/);
+    const camera = preview ?? path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera(?:\/(side|far|near))?$/);
     if (req.method === 'GET' && camera) {
       if (!activeSession) return error(res, 401, 'sign-in');
       const machine = store.state.machines.find(({ id }) => id === camera[1]);
@@ -231,18 +233,34 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (camera[2] && machine.kind !== 'xtool-m2') return error(res, 404, 'camera-unsupported');
       const cameraView = machine.kind === 'xtool-m2' ? camera[2] ?? 'side' : undefined;
       const streamKey = cameraView ? machine.id + '/' + cameraView : machine.id;
+      if (preview && machine.kind === 'xtool-m2' && !cameraStreams.has(streamKey)) {
+        const abort = new AbortController();
+        const timeout = setTimeout(() => abort.abort(), 15_000);
+        res.once('close', () => abort.abort());
+        try {
+          const connector = await connectors.get(machine.kind);
+          const image = await connector.preview(machine, abort.signal, cameraView);
+          if (abort.signal.aborted) return error(res, 504, 'camera-unavailable');
+          res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+          res.end(image);
+        } catch {
+          if (!res.destroyed) error(res, 502, 'camera-unavailable');
+        } finally { clearTimeout(timeout); }
+        return;
+      }
+      const cameraResponse = preview ? cameraPreview(res) : res;
       let relay = cameraStreams.get(streamKey);
       const viewerCount = [...cameraStreams.values()].reduce((count, stream) => count + stream.viewers.size, 0);
       if (viewerCount >= 32 || (!relay && cameraStreams.size >= 8)) return error(res, 429, 'camera-busy');
       if (relay) {
         if (relay.controller.signal.aborted) return error(res, 503, 'camera-unavailable');
-        relay.subscribe(res, activeSession, viewer.expires);
+        relay.subscribe(cameraResponse, activeSession, viewer.expires);
         return;
       }
       relay = cameraRelay();
       relay.machineId = machine.id;
       cameraStreams.set(streamKey, relay);
-      relay.subscribe(res, activeSession, viewer.expires);
+      relay.subscribe(cameraResponse, activeSession, viewer.expires);
       const { controller, output } = relay;
       diagnostics.record('camera', 'opening', machine.id);
       let firstFrame = true;
