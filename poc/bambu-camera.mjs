@@ -8,7 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import { checkServerIdentity, connect, createServer } from 'node:tls';
 import { promisify } from 'node:util';
 import { observeImages } from './diagnostics.mjs';
-import { privateIPv4 } from './moonraker.mjs';
+import { privateIPv4 } from './connector-http.mjs';
 
 const ca = readFileSync(new URL('./certs/bambu-p2s.pem', import.meta.url));
 const ffmpegArgs = [

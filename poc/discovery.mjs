@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { setMaxListeners } from 'node:events';
 import { networkInterfaces } from 'node:os';
 import { connect } from 'node:tls';
-import { privateIPv4, readResponse } from './moonraker.mjs';
+import { privateIPv4, readResponse } from './connector-http.mjs';
 
 const ca = readFileSync(new URL('./certs/bambu-p2s.pem', import.meta.url));
 const toNumber = (ip) => ip.split('.').reduce((number, octet) => number * 256 + Number(octet), 0);
@@ -103,11 +103,52 @@ function detectCC1(network, signal) {
   });
 }
 
+export async function detectOctoPrint(host, signal, fetcher = fetch) {
+  if (!privateIPv4(host)) return [];
+  const origins = [`http://${host}:5000`, `http://${host}`];
+  const checks = await Promise.all(origins.map(async origin => {
+    try {
+      const response = await fetcher(origin + '/login/', {
+        redirect: 'error',
+        signal: AbortSignal.any([signal, AbortSignal.timeout(550)])
+      });
+      if (!response.ok || !response.headers.get('content-type')?.toLowerCase().startsWith('text/html')) {
+        await response.body?.cancel();
+        return null;
+      }
+      const reader = response.body?.getReader();
+      if (!reader) return null;
+      const decoder = new TextDecoder();
+      let prefix = '';
+      let remaining = 16 * 1024;
+      try {
+        while (remaining > 0) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const chunk = value.subarray(0, remaining);
+          remaining -= chunk.byteLength;
+          prefix += decoder.decode(chunk, { stream: true });
+          const title = /<title>\s*([^<]+?)\s*<\/title>/i.exec(prefix)?.[1];
+          if (title) {
+            return /^(?:.+\s[-–·]\s)?OctoPrint Login$/i.test(title)
+              ? { kind: 'octoprint', host, origin } : null;
+          }
+        }
+      } finally {
+        await reader.cancel().catch(() => {});
+      }
+    } catch { /* An unavailable or unrelated service is skipped. */ }
+    return null;
+  }));
+  return checks.filter(Boolean);
+}
+
 async function detectHost(host, signal) {
-  const [moonraker, elegoo, bambu] = await Promise.all([
+  const [moonraker, elegoo, bambu, octoprint] = await Promise.all([
     httpJSON(`http://${host}:7125/server/info`, signal),
     httpJSON(`http://${host}/system/info`, signal),
-    detectBambu(host, signal)
+    detectBambu(host, signal),
+    detectOctoPrint(host, signal)
   ]);
   const found = [];
   if (typeof moonraker?.result?.moonraker_version === 'string') {
@@ -119,7 +160,7 @@ async function detectHost(host, signal) {
     found.push({ kind: 'elegoo', host, serial: info.sn });
   }
   if (bambu) found.push(bambu);
-  return found;
+  return [...found, ...octoprint];
 }
 
 export async function scanNetwork(network, signal, { inspectHost = detectHost, broadcast = detectCC1 } = {}) {
@@ -136,4 +177,28 @@ export async function scanNetwork(network, signal, { inspectHost = detectHost, b
   await Promise.all(Array.from({ length: 20 }, worker));
   found.push(...await discovery);
   return found.sort((a, b) => toNumber(a.host) - toNumber(b.host) || a.kind.localeCompare(b.kind));
+}
+
+
+export function reconcileDiscovery(network, found, machines) {
+  const registered = machines.flatMap(machine => {
+    const host = URL.parse(machine.origin)?.hostname;
+    return privateIPv4(host) ? [{ machine, host }] : [];
+  });
+  const matched = new Set();
+  const devices = found.map(device => {
+    const match = registered.find(({ machine, host }) => {
+      if ((machine.kind ?? 'klipper') !== device.kind) return false;
+      if (device.serial && machine.serial) return device.serial.toUpperCase() === machine.serial.toUpperCase();
+      return device.origin ? device.origin === machine.origin : device.host === host;
+    });
+    if (match) matched.add(match.machine.id);
+    return { ...device, registered: Boolean(match), ...(match ? { name: match.machine.name } : {}) };
+  });
+  for (const { machine, host } of registered) {
+    const address = toNumber(host);
+    if (matched.has(machine.id) || !(address > network.start && address < network.end)) continue;
+    devices.push({ kind: machine.kind ?? 'klipper', host, name: machine.name, registered: true, detected: false });
+  }
+  return devices.sort((a, b) => toNumber(a.host) - toNumber(b.host) || a.kind.localeCompare(b.kind));
 }

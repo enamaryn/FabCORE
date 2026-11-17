@@ -29,6 +29,7 @@ Gardez un œil sur vos fabrications, ouvrez les caméras en direct et voyez quel
 | --- | --- | --- | --- | --- |
 | Klipper avec Moonraker | Oui | — | — | Pause et reprise |
 | OctoPrint | Oui | — | — | — |
+| PrusaLink (API v1 avec clé) | Oui | — | — | — |
 | Bambu Lab P2S | Oui | Oui | AMS | — |
 | Elegoo Centauri Carbon (CC1) | Oui | Oui | — | — |
 | Elegoo Centauri Carbon 2 (CC2) | Oui | Oui | CANVAS | — |

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { connect } from 'mqtt';
 import { canvasFilaments } from './filaments.mjs';
-import { readResponse } from './moonraker.mjs';
+import { readResponse } from './connector-http.mjs';
 
 const states = new Map([[0, 'connecting'], [1, 'ready'], [2, 'printing'], [3, 'ready'], [4, 'ready'], [5, 'connecting'], [6, 'error']]);
 const printStates = new Map([[2501, 'paused'], [2502, 'paused'], [2505, 'paused'], [2504, 'ready'], [2077, 'done']]);
