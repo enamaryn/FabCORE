@@ -202,7 +202,7 @@ function liveFabrication(m) {
     action === 'pause' ? t('Mettre en pause','Pause print') : t('Reprendre','Resume print'),
     '', 'primary', pendingPrintCommands.has(m.id) ? 'disabled' : '') : '';
   return `<section class="panel stack">
-      <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2><div class="row wrap">${badge(m.status)}${controls}${canManage ? btn('edit',t('Modifier la machine','Edit machine')) : ''}</div></div>
+      <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2><div class="row wrap">${badge(m.status)}${controls}</div></div>
       ${m.issue?`<p class="notice">${liveIssue(m.issue)}</p>`:''}
       ${machineConnectors[m.kind]?.printJob === false ? '' : `<div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
       <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>`}
@@ -361,7 +361,8 @@ function liveDetail() {
       <div class="row wrap">${btn('camera-start',t('Ouvrir le flux','Open stream'))}
       ${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
     </section>` : '';
-  return title(esc(m.name), esc(m.model + ' · ' + m.origin), btn('nav:machines',t('Retour au parc','Back to fleet'),'grid','ghost')) +
+  const edit = state.role === 'admin' ? btn('edit',t('Modifier la machine','Edit machine')) : '';
+  return title(esc(m.name), esc(m.model + ' · ' + m.origin), `<div class="row wrap">${btn('nav:machines',t('Retour au parc','Back to fleet'),'grid','ghost')}${edit}</div>`) +
     `<style>
       .machine-detail{display:grid;gap:1rem}
       .machine-detail-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}

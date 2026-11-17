@@ -6,7 +6,7 @@ Finaliser la recette de découverte réseau sur le LXC. Vérifier qu’OctoPrint
 
 ## Gestion du parc
 
-La suppression d’une machine et le correctif d’accès à `fabcore-update` dans les LXC sont fusionnés dans la [PR #35](https://github.com/enamaryn/FabCORE/pull/35). Le parcours HTTP couvre les droits Observateur, la suppression persistante et le réajout. La suppression depuis le navigateur sur le LXC reste à confirmer.
+La suppression d’une machine et le correctif d’accès à `fabcore-update` dans les LXC sont fusionnés dans la [PR #35](https://github.com/enamaryn/FabCORE/pull/35). Le parcours HTTP couvre les droits Observateur, la suppression persistante et le réajout. Le bouton « Modifier la machine » est dans l’en-tête de la fiche, à côté de « Retour au parc ». La suppression se fait depuis cette fenêtre de modification. La suppression depuis le navigateur sur le LXC reste à confirmer.
 
 ## Ensuite
 
