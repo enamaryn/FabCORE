@@ -1,6 +1,6 @@
 # Phase 3 · Développement complet — écosystème FabCore
 
-**État : à cadrer après le [MVP](MVP.md#mvp-13--bêta-et-recette-de-sortie).**
+**État : à cadrer après le [MVP](MVP.md#mvp-14--bêta-et-recette-de-sortie).**
 Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-fulldev--plateforme-complète)) : étendre FabCore en réutilisant le socle du MVP, sans réécriture globale.
 
 Même convention que le [POC](POC.md#lire-ce-plan) : étapes `FD-xx`, sous-étapes `FD-xx.y`. Les étapes sont indépendantes. Leur ordre sera fixé au bilan du MVP selon les retours de la bêta et le matériel disponible.
@@ -29,8 +29,8 @@ Même convention que le [POC](POC.md#lire-ce-plan) : étapes `FD-xx`, sous-étap
 
 ## FD-01 · SDK de connecteurs et plugins
 
-- [ ] FD-01.1 SDK documenté à partir du contrat stabilisé en [MVP-04.2](MVP.md#mvp-04--connecteurs-p0-validés-modèle-par-modèle).
-- [ ] FD-01.2 Simulateur générique ouvert aux contributeurs, à partir des simulateurs du [MVP-04.11](MVP.md#mvp-04--connecteurs-p0-validés-modèle-par-modèle).
+- [ ] FD-01.1 SDK documenté à partir du contrat stabilisé en [MVP-05.2](MVP.md#mvp-05--connecteurs-p0-validés-modèle-par-modèle).
+- [ ] FD-01.2 Simulateur générique ouvert aux contributeurs, à partir des simulateurs du [MVP-05.11](MVP.md#mvp-05--connecteurs-p0-validés-modèle-par-modèle).
 - [ ] FD-01.3 Plugins communautaires chargés à la demande, avec déclaration des capacités et de la maturité.
 - [ ] FD-01.4 Processus de revue et de publication des connecteurs contribués.
 
@@ -47,7 +47,7 @@ Aucun lancement forcé à distance. Les sécurités constructeur, les confirmati
 
 - [ ] FD-03.1 xTool : modèles supplémentaires, étudiés un par un, en plus de la M2 supervisée au POC.
 - [ ] FD-03.2 GRBL.
-- [ ] FD-03.3 Longer : pilotage au-delà de la supervision livrée en MVP-04.10. Ortur, Sculpfun, Atomstack.
+- [ ] FD-03.3 Longer : pilotage au-delà de la supervision livrée en MVP-05.10. Ortur, Sculpfun, Atomstack.
 - [ ] FD-03.4 Ruida.
 
 ## FD-04 · CNC

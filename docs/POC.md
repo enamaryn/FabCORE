@@ -113,7 +113,7 @@ PR [#11](https://github.com/enamaryn/FabCORE/pull/11) · Fusionné.
 
 - [x] POC-08.1 ntfy interne (installé avec FabCore) ou externe.
 - [x] POC-08.2 SMTP avec STARTTLS ou TLS.
-- [x] POC-08.3 Notification de test. Les alertes automatiques de fabrication relèvent du MVP ([MVP-07](MVP.md#mvp-07--notifications-et-alertes)).
+- [x] POC-08.3 Notification de test. Les alertes automatiques de fabrication relèvent du MVP ([MVP-08](MVP.md#mvp-08--notifications-et-alertes)).
 
 ## POC-08b · Connecteurs supplémentaires et gestion du parc
 
@@ -162,8 +162,8 @@ En cours. Chaque sous-étape passe à `Testé matériel` une fois vérifiée sur
 - [ ] POC-11.5 Commandes fiables : pause, reprise, terminal, lancement, sans renvoi automatique.
 - [ ] POC-11.6 Erreurs détectables : hors ligne, accès refusé, firmware en erreur.
 - [ ] POC-11.7 Authentification locale et OIDC fonctionnelles.
-- [ ] POC-11.8 Limites documentées dans le [guide](../poc/README.md) et la [matrice de compatibilité](MVP.md#mvp-04--connecteurs-p0-validés-modèle-par-modèle).
-- [x] POC-11.9 Simulateurs et connecteurs des autres marques : **décidé**, reportés au [MVP-04](MVP.md#mvp-04--connecteurs-p0-validés-modèle-par-modèle) (17 novembre 2026).
+- [ ] POC-11.8 Limites documentées dans le [guide](../poc/README.md) et la [matrice de compatibilité](MVP.md#mvp-05--connecteurs-p0-validés-modèle-par-modèle).
+- [x] POC-11.9 Simulateurs et connecteurs des autres marques : **décidé**, reportés au [MVP-05](MVP.md#mvp-05--connecteurs-p0-validés-modèle-par-modèle) (17 novembre 2026).
 - [ ] POC-11.10 Bilan technique et décisions d’architecture pour [MVP-00](MVP.md#mvp-00--cadrage).
 
 [Guide d’exploitation et de configuration](../poc/README.md)
