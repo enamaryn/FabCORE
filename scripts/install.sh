@@ -92,7 +92,14 @@ chmod 0755 "$launcher"
 mv -Tf -- "$launcher" "$update_bin/fabcore-update"
 trap - EXIT
 
-if [[ :$PATH: == *:"$update_bin":* ]]; then
+# Proxmox can enter a minimal LXC with /usr/bin but without /usr/local/bin.
+if (( EUID == 0 )) && [[ :$PATH: != *:"$update_bin":* && :$PATH: == *:/usr/bin:* &&
+    ! -e /usr/bin/fabcore-update && ! -L /usr/bin/fabcore-update ]]; then
+  ln -s -- "$update_bin/fabcore-update" /usr/bin/fabcore-update
+fi
+
+if [[ $(command -v fabcore-update) == "$update_bin/fabcore-update" ||
+    $(readlink -f -- "$(command -v fabcore-update || true)") == "$update_bin/fabcore-update" ]]; then
   echo 'Pour mettre FabCore à jour : fabcore-update'
 else
   printf 'Pour mettre FabCore à jour : %q\n' "$update_bin/fabcore-update"
