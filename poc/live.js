@@ -367,6 +367,11 @@ function liveDetail() {
     ? `<section class="panel stack machine-camera" data-camera-panel>
       <style>[data-camera-panel] [hidden]{display:none!important}</style>
       <h2>${t('Caméra en direct','Live camera')}</h2>
+      ${m.kind === 'xtool-m2' ? `<label>${t('Vue', 'View')}<select data-camera-view>
+        <option value="side">${t('Caméra d’angle', 'Corner camera')}</option>
+        <option value="far">${t('Caméra centrale', 'Central camera')}</option>
+        <option value="near">${t('Caméra de l’outil', 'Tool camera')}</option>
+      </select></label>` : ''}
       <div data-live-camera></div>
       <div class="machine-camera-idle" data-camera-placeholder>${icon('camera')}<p>${t('Flux fermé','Stream closed')}</p></div>
       <p data-camera-status role="status" hidden></p>
@@ -424,7 +429,8 @@ function showCamera(open, failed = false) {
     if (image.isConnected) showCamera(false, true);
   }, { once: true });
   camera.append(image);
-  image.src = '/api/machines/' + encodeURIComponent(m.id) + '/camera';
+  const view = app.querySelector('[data-camera-view]')?.value;
+  image.src = '/api/machines/' + encodeURIComponent(m.id) + '/camera' + (view ? '/' + view : '');
   stop.focus();
 }
 
@@ -852,6 +858,14 @@ document.addEventListener('click', async (event) => {
 dialog.addEventListener('input', (event) => {
   const status = event.target.form?.querySelector('[role="status"]');
   if (status) status.hidden = true;
+});
+
+app.addEventListener('change', event => {
+  if (!event.target.matches('[data-camera-view]')) return;
+  if (app.querySelector('[data-live-camera] img')) {
+    showCamera(true);
+    event.target.focus();
+  }
 });
 
 dialog.addEventListener('change', (event) => {
