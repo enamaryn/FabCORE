@@ -198,6 +198,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   const watchLogin = await call('/api/login', { body: observer });
   assert.deepEqual(await watchLogin.json(), { authenticated: true, username: observer.username, role: 'observer' });
   const watchCookie = session(watchLogin);
+  assert.equal((await call('/api/machines/delete', { body: { id }, cookie: watchCookie })).status, 403);
   const diagnosticsPath = '/api/diagnostics';
   assert.equal((await call(diagnosticsPath)).status, 401);
   assert.equal((await call(diagnosticsPath, { cookie: watchCookie })).status, 403);
@@ -361,6 +362,14 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.ok(!text.includes(credentials.password) && !text.includes(token));
   assert.equal(JSON.parse(text).machines[0].apiKey, printer.apiKey);
   assert.equal((await stat(file)).mode & 0o777, 0o600);
+  const deletePath = '/api/machines/delete';
+  const deleteBody = { id: octoId };
+  assert.equal((await call(deletePath, { body: deleteBody })).status, 401);
+  assert.deepEqual(await (await call(deletePath, { body: deleteBody, cookie })).json(), deleteBody);
+  assert.equal((await call(deletePath, { body: deleteBody, cookie })).status, 404);
+  assert.equal((await (await call('/api/machines', { cookie })).json()).machines.some(({ id }) => id === octoId), false);
+  assert.equal(JSON.parse(await readFile(file, 'utf8')).machines.some(({ id }) => id === octoId), false);
+  assert.equal((await call('/api/machines', { body: octo, cookie })).status, 201);
   const reopened = createFabCore({ directory, origin });
   assert.equal(reopened.token, null);
   assert.equal((await call('/api/logout', { body: {}, cookie })).status, 200);
