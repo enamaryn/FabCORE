@@ -363,7 +363,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         pendingCommands.delete(machine.id);
       }
     }
-    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/edit', '/api/observers'].includes(path)) {
+    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/edit', '/api/machines/delete', '/api/observers'].includes(path)) {
       return error(res, 404, 'missing');
     }
     if (!requireJson(req, res)) return;
@@ -385,6 +385,15 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     if (path.startsWith('/api/machines')) {
       const existing = store.state.machines.find((machine) => machine.id === data.id);
       if (existing && pendingCommands.has(existing.id)) return error(res, 409, 'command-busy');
+      if (path === '/api/machines/delete') {
+        if (!existing) return error(res, 404, 'missing');
+        const machines = store.state.machines.filter((machine) => machine !== existing);
+        store.save({ ...store.state, machines });
+        snapshot.forget(existing.id);
+        connectors.forget(existing.kind ?? 'klipper', existing.id, true);
+        cameraStreams.get(existing.id)?.controller.abort();
+        return answer(res, 200, { id: existing.id });
+      }
       if ((path === '/api/machines/edit' || data.id) && !existing) return error(res, 404, 'missing');
       const name = value(data, 'name', 80).trim();
       const kind = data.kind ?? 'klipper';
