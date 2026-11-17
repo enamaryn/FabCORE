@@ -107,9 +107,13 @@ const definitions = {
     origin: `wss://${host}:28900`, serial: existing?.serial, fingerprint: existing?.fingerprint,
     ...(existing?.origin === `wss://${host}:28900` && existing.pairingToken ? { pairingToken: existing.pairingToken } : {})
   }), async () => {
-    const { readXTool } = await import('./xtool.mjs');
-    return { read: readXTool, probe: async (machine, options) => identified(await readXTool(machine, options), ['xtool-device']) };
-  }, { temperatures: false, printJob: false, interval: 15000, verify: true })
+    const { readXTool, createXToolMonitor } = await import('./xtool.mjs');
+    const monitor = createXToolMonitor();
+    return { ...monitor, probe: async (machine, options) => {
+      monitor.forget(machine.id);
+      return identified(await readXTool(machine, options), ['xtool-device']);
+    } };
+  }, { temperatures: false, printJob: false, live: true, verify: true })
 };
 
 function identified(result, tolerated) {
