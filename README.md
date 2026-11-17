@@ -1,6 +1,6 @@
 <h1 align="center">FabCore</h1>
 
-<p align="center"><strong>Suivez vos imprimantes 3D depuis un seul tableau de bord.</strong></p>
+<p align="center"><strong>Suivez votre parc machine depuis un seul tableau de bord.</strong></p>
 
 <p align="center">
 Gardez un œil sur vos fabrications, ouvrez les caméras en direct et voyez quelles bobines sont chargées. FabCore s’installe sur votre serveur et se connecte aux machines de votre atelier.
