@@ -102,7 +102,8 @@ const definitions = {
     };
   }, { camera: true, interval: 7000, verify: true }),
   'xtool-m2': localConnector('xTool · M2', 'xtool-m2', (host, _data, existing) => ({
-    origin: `wss://${host}:28900`, serial: existing?.serial, fingerprint: existing?.fingerprint
+    origin: `wss://${host}:28900`, serial: existing?.serial, fingerprint: existing?.fingerprint,
+    ...(existing?.origin === `wss://${host}:28900` && existing.pairingToken ? { pairingToken: existing.pairingToken } : {})
   }), async () => {
     const { readXTool } = await import('./xtool.mjs');
     return { read: readXTool, probe: async (machine, options) => identified(await readXTool(machine, options), ['xtool-device']) };
@@ -112,7 +113,8 @@ const definitions = {
 function identified(result, tolerated) {
   const ok = Boolean(result.serial && (!result.issue || tolerated.includes(result.issue)));
   return { ok, issue: ok ? null : result.issue, serial: result.serial,
-    ...(result.fingerprint ? { fingerprint: result.fingerprint } : {}) };
+    ...(result.fingerprint ? { fingerprint: result.fingerprint } : {}),
+    ...(result.pairingToken ? { pairingToken: result.pairingToken } : {}) };
 }
 export const connectorDefinition = kind => typeof kind === 'string' && Object.hasOwn(definitions, kind) ? definitions[kind] : null;
 export const connectorCatalog = Object.fromEntries(Object.entries(definitions).map(([kind, {
