@@ -88,7 +88,11 @@ test('M2 attend la confirmation et réutilise le jeton lors de la connexion suiv
           break;
         case '/v1/platform/device/state/sync':
           assert.equal(request.sessionToken, 'temporary-token');
-          data = { curMode: { mode: 'Idle' } };
+          this.emit('message', Buffer.from(JSON.stringify({
+            type: 'request', transactionId: 99999,
+            data: { '/v1/platform/device/state': { curMode: { mode: 'Idle' } } }
+          })), false);
+          data = {};
           break;
         default:
           assert.fail(request.url);
