@@ -178,3 +178,27 @@ export async function scanNetwork(network, signal, { inspectHost = detectHost, b
   found.push(...await discovery);
   return found.sort((a, b) => toNumber(a.host) - toNumber(b.host) || a.kind.localeCompare(b.kind));
 }
+
+
+export function reconcileDiscovery(network, found, machines) {
+  const registered = machines.flatMap(machine => {
+    const host = URL.parse(machine.origin)?.hostname;
+    return privateIPv4(host) ? [{ machine, host }] : [];
+  });
+  const matched = new Set();
+  const devices = found.map(device => {
+    const match = registered.find(({ machine, host }) => {
+      if ((machine.kind ?? 'klipper') !== device.kind) return false;
+      if (device.serial && machine.serial) return device.serial.toUpperCase() === machine.serial.toUpperCase();
+      return device.origin ? device.origin === machine.origin : device.host === host;
+    });
+    if (match) matched.add(match.machine.id);
+    return { ...device, registered: Boolean(match), ...(match ? { name: match.machine.name } : {}) };
+  });
+  for (const { machine, host } of registered) {
+    const address = toNumber(host);
+    if (matched.has(machine.id) || !(address > network.start && address < network.end)) continue;
+    devices.push({ kind: machine.kind ?? 'klipper', host, name: machine.name, registered: true, detected: false });
+  }
+  return devices.sort((a, b) => toNumber(a.host) - toNumber(b.host) || a.kind.localeCompare(b.kind));
+}

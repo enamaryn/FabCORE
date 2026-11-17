@@ -678,10 +678,10 @@ async function scanFromForm(form) {
     const { devices } = await api('discovery', { network }, signal);
     if (signal.aborted) return;
     discoveredDevices = devices;
-    status.textContent = devices.length ? t('Choisissez une machine à ajouter.', 'Choose a machine to add.')
-      : t('Aucune machine identifiée. L’ajout manuel reste disponible.', 'No printer identified. You can still add it manually.');
-    results.innerHTML = devices.map((device, index) => `<div class="row between wrap"><span>${esc(machineConnectors[device.kind]?.model ?? device.kind)} · ${esc(device.host)}</span>
-      ${device.registered ? `<small>${t('Déjà ajoutée','Already added')}</small>`
+    status.textContent = devices.some(device => !device.registered) ? t('Choisissez une machine à ajouter.', 'Choose a machine to add.')
+      : devices.length ? '' : t('Aucune machine identifiée. L’ajout manuel reste disponible.', 'No printer identified. You can still add it manually.');
+    results.innerHTML = devices.map((device, index) => `<div class="row between wrap"><span>${esc(device.name ?? machineConnectors[device.kind]?.model ?? device.kind)} · ${esc(device.host)}</span>
+      ${device.registered ? `<small>${t('Déjà ajoutée','Already added')}${device.detected === false ? ' · ' + t('Non détectée par ce scan', 'Not detected in this scan') : ''}</small>`
         : btn('detected:' + index, t('Configurer','Configure'))}</div>`).join('');
   } catch (error) {
     if (!signal.aborted) status.textContent = problem(error.code);

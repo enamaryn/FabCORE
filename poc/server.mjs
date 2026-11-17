@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import { discoveryNetworks, scanNetwork } from './discovery.mjs';
+import { discoveryNetworks, reconcileDiscovery, scanNetwork } from './discovery.mjs';
 import { connectorCatalog, connectorDefinition, createConnectorRegistry } from './connectors.mjs';
 import { createDiagnostics } from './diagnostics.mjs';
 import { cameraRelay } from './camera-viewers.mjs';
@@ -306,12 +306,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       try {
         const found = await scan(network, abort.signal);
         if (abort.signal.aborted) return;
-        const devices = found.map((device) => ({
-          ...device,
-          registered: store.state.machines.some((machine) => (machine.kind ?? 'klipper') === device.kind &&
-            (device.origin === machine.origin || (device.serial && device.serial === machine.serial) ||
-              (!device.origin && new URL(machine.origin).hostname === device.host)))
-        }));
+        const devices = reconcileDiscovery(network, found, store.state.machines);
         return answer(res, 200, { devices });
       } finally {
         res.off('close', stop);

@@ -331,7 +331,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.equal((await call('/api/discovery', { body: scan, cookie, requestOrigin: 'http://other.test' })).status, 403);
   assert.equal((await call('/api/discovery', { body: { network: '192.168.2.0/24' }, cookie })).status, 400);
   assert.deepEqual(await (await call('/api/discovery', { body: scan, cookie })).json(), {
-    devices: [{ kind: 'elegoo', host: '192.168.1.55', serial: 'CC2TEST01', registered: true }]
+    devices: [{ kind: 'elegoo', host: '192.168.1.55', serial: 'CC2TEST01', registered: true, name: cc2.name }]
   });
   const octo = { kind: 'octoprint', name: 'OctoPrint', origin: 'http://192.168.1.67:5000', apiKey: 'test-octo-key' };
   assert.equal((await call('/api/machines', { body: { ...octo, apiKey: '' }, cookie })).status, 400);

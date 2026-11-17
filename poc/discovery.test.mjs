@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detectOctoPrint, discoveryNetworks, scanNetwork } from './discovery.mjs';
+import { detectOctoPrint, discoveryNetworks, reconcileDiscovery, scanNetwork } from './discovery.mjs';
 
 test('les réseaux sont locaux, privés, et plafonnés à une tranche /24', () => {
   const ipv4 = (address, cidr, internal = false) => ({ address, cidr, internal, family: 'IPv4' });
@@ -44,4 +44,18 @@ test('le scan reconnaît OctoPrint au login sans clé ni imprimante connectée',
   ]);
   assert.deepEqual(addresses, ['http://192.168.1.85:5000/login/', 'http://192.168.1.85/login/']);
   assert.deepEqual(await detectOctoPrint('1.1.1.1', signal, assert.fail), []);
+});
+
+test('le scan distingue les machines reconnues des machines déjà ajoutées non détectées', () => {
+  const [network] = discoveryNetworks({ eth0: [{ family: 'IPv4', address: '192.168.1.10', cidr: '192.168.1.10/24' }] });
+  const machines = [
+    { id: '1', kind: 'bambu', name: 'P2S', origin: 'mqtts://192.168.1.21:8883', serial: 'BAMBUSERIAL', accessCode: 'secret' },
+    { id: '2', kind: 'elegoo', name: 'CC2', origin: 'mqtt://192.168.1.22:1883', apiKey: 'secret' },
+    { id: '3', kind: 'octoprint', name: 'Autre réseau', origin: 'http://192.168.2.20:5000' }
+  ];
+  const found = [{ kind: 'bambu', host: '192.168.1.23', serial: 'bambuserial' }];
+  assert.deepEqual(reconcileDiscovery(network, found, machines), [
+    { kind: 'elegoo', host: '192.168.1.22', name: 'CC2', registered: true, detected: false },
+    { ...found[0], registered: true, name: 'P2S' }
+  ]);
 });
