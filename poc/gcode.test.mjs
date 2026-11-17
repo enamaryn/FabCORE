@@ -60,3 +60,17 @@ test('le lecteur incrémental donne le même résultat quel que soit le découpa
   assert.deepEqual([...chunked.segments], [...whole.segments]);
   assert.equal(whole.lines, 200);
 });
+
+test('la position dans le fichier (octets) donne les segments imprimés et la couche en cours', async () => {
+  const { printedSegments, layerOfSegment } = await import('./gcode.mjs');
+  const lines = ['; é accentué', 'M83', 'G1 Z0.2', 'G1 X10 E1', 'G1 X20 E1', 'G1 Z0.4', 'G1 X10 E1'];
+  const text = lines.join('\n');
+  const result = parseGcode(text);
+  const at = (index) => Buffer.byteLength(lines.slice(0, index).join('\n') + '\n');
+  assert.deepEqual([...result.offsets], [at(3), at(4), at(6)]);
+  assert.equal(printedSegments(result, 0), 0);
+  assert.equal(printedSegments(result, at(4)), 1, 'la ligne 5 n’est pas encore lue');
+  assert.equal(printedSegments(result, at(5)), 2);
+  assert.equal(printedSegments(result, Buffer.byteLength(text)), 3);
+  assert.deepEqual([0, 1, 2].map(index => layerOfSegment(result, index)), [0, 0, 1]);
+});

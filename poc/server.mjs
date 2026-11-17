@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { once } from 'node:events';
 import { randomBytes, randomUUID, createHash, scrypt, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -12,12 +13,14 @@ import { cameraRelay } from './camera-viewers.mjs';
 import { createOidc } from './oidc.mjs';
 import { internalNtfy, notificationSettings, publicNotifications, sendNotification } from './notifications.mjs';
 import { openStore } from './store.mjs';
+import { filePath } from './connector-http.mjs';
 
 const derive = promisify(scrypt);
 const digest = (secret) => createHash('sha256').update(secret).digest();
 const sessionAge = 8 * 60 * 60 * 1000;
 const activationAge = 15 * 60 * 1000;
 const minute = 60_000;
+const fileLimit = 512 * 1024 * 1024;
 const shared = readFileSync(new URL('../design/prototype.html', import.meta.url), 'utf8');
 const sharedScript = shared.match(/<script>([\s\S]+)<\/script>/)[1];
 const liveHtml = shared
@@ -85,7 +88,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, fetchFiles, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -99,13 +102,14 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const attempts = new Map();
   const diagnostics = createDiagnostics();
   diagnostics.record('server', 'started');
-  const connectors = createConnectorRegistry({ readPrinter, readOcto, readPrusa, sendCommand, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera });
+  const connectors = createConnectorRegistry({ readPrinter, readOcto, readPrusa, sendCommand, fetchFiles, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera });
   const snapshot = monitor(async (machine) => {
     const connector = await connectors.get(machine.kind ?? 'klipper');
     const { serial, fingerprint, ...telemetry } = await connector.read(machine);
     return telemetry;
   });
   const pendingCommands = new Set();
+  const pendingUploads = new Set();
   let probes = 0;
   let discoveryActive = false;
   const notificationTests = new Set();
@@ -363,6 +367,98 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         snapshot.forget(machine.id);
         pendingCommands.delete(machine.id);
       }
+    }
+    const fileRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/(files|file|print)(?:\?(.*))?$/);
+    if (fileRoute) {
+      if (!viewer) return error(res, 401, 'sign-in');
+      const [, id, route, query = ''] = fileRoute;
+      const machine = store.state.machines.find(entry => entry.id === id);
+      if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.files) return error(res, 404, 'missing');
+      const files = (await connectors.get(machine.kind ?? 'klipper')).files;
+      const params = new URLSearchParams(query);
+      if (req.method === 'GET' && route === 'files') {
+        try {
+          const list = await files.list(machine);
+          return answer(res, 200, { files: list.sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0)).slice(0, 300) });
+        } catch { return error(res, 502, 'files-unavailable'); }
+      }
+      if (req.method === 'GET' && route === 'file') {
+        const target = filePath(params.get('path'));
+        if (!target) return error(res, 400, 'invalid');
+        const controller = new AbortController();
+        res.once('close', () => controller.abort());
+        let response;
+        try { response = await files.download(machine, target, controller.signal); } catch { return error(res, 502, 'files-unavailable'); }
+        if (!response.ok || !response.body) {
+          await response.body?.cancel();
+          return response.status === 404 ? error(res, 404, 'missing') : error(res, 502, 'files-unavailable');
+        }
+        const length = Number(response.headers.get('content-length'));
+        if (length > fileLimit) {
+          await response.body.cancel();
+          return error(res, 413, 'file-too-large');
+        }
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', ...(length > 0 ? { 'Content-Length': String(length) } : {}) });
+        let sent = 0;
+        try {
+          for await (const chunk of response.body) {
+            sent += chunk.length;
+            if (sent > fileLimit) throw new Error('file too large');
+            if (!res.write(chunk)) await once(res, 'drain');
+          }
+          return res.end();
+        } catch { return res.destroy(); }
+      }
+      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+      if (req.headers.origin !== publicUrl.origin) return error(res, 403, 'origin');
+      if (req.method === 'POST' && route === 'files') {
+        const name = params.get('name');
+        const size = Number(req.headers['content-length']);
+        if (req.headers['content-type'] !== 'application/octet-stream' || !filePath(name) || name.includes('/')) return error(res, 400, 'invalid');
+        if (!Number.isSafeInteger(size) || size < 1) return error(res, 411, 'invalid');
+        if (size > fileLimit) return error(res, 413, 'file-too-large');
+        if (pendingUploads.has(machine.id)) return error(res, 409, 'upload-busy');
+        pendingUploads.add(machine.id);
+        try {
+          const stored = await files.upload(machine, name, req, size);
+          if (!stored) return error(res, 502, 'upload-rejected');
+          diagnostics.record('files', 'uploaded', machine.id);
+          return answer(res, 201, { path: stored });
+        } catch {
+          if (!res.headersSent) return error(res, 502, 'upload-failed');
+          return res.destroy();
+        } finally {
+          pendingUploads.delete(machine.id);
+        }
+      }
+      if (req.method === 'POST' && route === 'print') {
+        if (!requireJson(req, res)) return;
+        let data;
+        try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+        const target = filePath(data.path);
+        if (!target || data.confirm !== true) return error(res, 400, 'invalid');
+        if (pendingCommands.has(machine.id)) return error(res, 409, 'command-busy');
+        pendingCommands.add(machine.id);
+        try {
+          const connector = await connectors.get(machine.kind ?? 'klipper');
+          if (!['ready', 'done'].includes((await connector.read(machine)).status)) return error(res, 409, 'command-state');
+          if (res.destroyed) return;
+          if (!session(req)) return error(res, 401, 'sign-in');
+          try {
+            if (!(await files.start(machine, target))) return error(res, 502, 'command-rejected');
+            diagnostics.record('files', 'print-started', machine.id);
+            for (let attempt = 0; attempt < 6; attempt++) {
+              if ((await connector.read(machine)).status === 'printing') return answer(res, 200, { status: 'printing' });
+              if (attempt < 5) await delay(500);
+            }
+          } catch { /* La demande a pu atteindre la machine : ne jamais la renvoyer automatiquement. */ }
+          return error(res, 504, 'command-unconfirmed');
+        } finally {
+          snapshot.forget(machine.id);
+          pendingCommands.delete(machine.id);
+        }
+      }
+      return error(res, 404, 'missing');
     }
     if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/edit', '/api/machines/delete', '/api/observers'].includes(path)) {
       return error(res, 404, 'missing');

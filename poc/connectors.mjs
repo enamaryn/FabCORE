@@ -41,15 +41,17 @@ async function elegooCamera(machine, output, signal, onFrame, openCamera, identi
 }
 
 const definitions = {
-  klipper: httpConnector('Klipper · Moonraker', 7125, false, async ({ readPrinter, sendCommand }) => {
+  klipper: httpConnector('Klipper · Moonraker', 7125, false, async ({ readPrinter, sendCommand, fetchFiles }) => {
     const mod = await import('./moonraker.mjs');
     const read = readPrinter ?? mod.readMoonraker;
-    return { read: machine => read(machine), probe: probeStatus(machine => read(machine), ['print']), command: sendCommand ?? mod.commandMoonraker };
-  }, { commands: true }),
-  octoprint: httpConnector('OctoPrint', 5000, true, async ({ readOcto }) => {
-    const read = readOcto ?? (await import('./octoprint.mjs')).readOctoPrint;
-    return { read, probe: probeStatus(read, ['octoprint-disconnected', 'octoprint-printer-error'], true) };
-  }, { interval: 5000 }),
+    return { read: machine => read(machine), probe: probeStatus(machine => read(machine), ['print']), command: sendCommand ?? mod.commandMoonraker,
+      files: mod.createMoonrakerFiles(fetchFiles) };
+  }, { commands: true, files: true }),
+  octoprint: httpConnector('OctoPrint', 5000, true, async ({ readOcto, fetchFiles }) => {
+    const mod = await import('./octoprint.mjs');
+    const read = readOcto ?? mod.readOctoPrint;
+    return { read, probe: probeStatus(read, ['octoprint-disconnected', 'octoprint-printer-error'], true), files: mod.createOctoPrintFiles(fetchFiles) };
+  }, { interval: 5000, files: true }),
   prusalink: httpConnector('PrusaLink', 80, true, async ({ readPrusa }) => {
     const read = readPrusa ?? (await import('./prusalink.mjs')).readPrusaLink;
     return { read, probe: probeStatus(read, ['prusalink-printer-error'], true) };
@@ -116,8 +118,8 @@ function identified(result, tolerated) {
 }
 export const connectorDefinition = kind => typeof kind === 'string' && Object.hasOwn(definitions, kind) ? definitions[kind] : null;
 export const connectorCatalog = Object.fromEntries(Object.entries(definitions).map(([kind, {
-  model, form, port, required, camera = false, commands = false, filaments = null, temperatures = true, printJob = true
-}]) => [kind, { model, form, port, required, camera, commands, filaments, temperatures, printJob }]));
+  model, form, port, required, camera = false, commands = false, files = false, filaments = null, temperatures = true, printJob = true
+}]) => [kind, { model, form, port, required, camera, commands, files, filaments, temperatures, printJob }]));
 
 export function createConnectorRegistry(options, definition = connectorDefinition) {
   const pending = new Map();

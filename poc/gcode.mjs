@@ -24,7 +24,10 @@ function words(code) {
 export function createGcodeParser() {
   let segments = new Float32Array(4096 * 4);
   let types = new Uint8Array(4096);
+  let offsets = new Float64Array(4096);
   let count = 0;
+  let lineOffset = 0;
+  let byteOffset = 0;
   const layers = [];
   const unsupported = new Map();
   const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
@@ -60,7 +63,11 @@ export function createGcodeParser() {
       const nextTypes = new Uint8Array(types.length * 2);
       nextTypes.set(types);
       types = nextTypes;
+      const nextOffsets = new Float64Array(offsets.length * 2);
+      nextOffsets.set(offsets);
+      offsets = nextOffsets;
     }
+    offsets[count] = lineOffset;
     const at = count * 4;
     segments[at] = x0;
     segments[at + 1] = y0;
@@ -150,8 +157,12 @@ export function createGcodeParser() {
     position.E += delta;
   };
 
+  // Position en octets de chaque ligne : Klipper et OctoPrint donnent l’avancement de l’impression dans cette unité.
+  const encoder = new TextEncoder();
   const line = (text) => {
     lineNumber++;
+    lineOffset = byteOffset;
+    byteOffset += (/[^\x00-\x7f]/.test(text) ? encoder.encode(text).length : text.length) + 1;
     let code = text;
     const comment = code.indexOf(';');
     if (comment !== -1) code = code.slice(0, comment);
@@ -216,6 +227,7 @@ export function createGcodeParser() {
     return {
       segments: segments.subarray(0, count * 4),
       types: types.subarray(0, count),
+      offsets: offsets.subarray(0, count),
       layers: layers.map(({ z, start, end, extrusions }) => ({ z, start, end, extrusions })),
       bounds: area.minX <= area.maxX ? { ...area } : null,
       unsupported: [...unsupported].map(([command, { count, line }]) => ({ command, count, line })),
@@ -231,4 +243,30 @@ export function parseGcode(text) {
   const parser = createGcodeParser();
   parser.write(text);
   return parser.finish();
+}
+
+// Nombre de segments déjà lus par la machine pour une position donnée dans le fichier.
+export function printedSegments(result, filePosition) {
+  const { offsets } = result;
+  let low = 0;
+  let high = offsets.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (offsets[middle] < filePosition) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+// Couche qui contient un segment donné.
+export function layerOfSegment(result, index) {
+  const { layers } = result;
+  let low = 0;
+  let high = layers.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if (layers[middle].start <= index) low = middle;
+    else high = middle - 1;
+  }
+  return Math.max(0, low);
 }
