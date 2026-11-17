@@ -70,7 +70,7 @@ test('la caméra M2 partage la session et vérifie le transfert de son JPEG', as
       }
       assert.ok(path.endsWith('/finish'));
       finishes++;
-      return {};
+      throw new Error('failed to finish file transfer');
     }
   };
   assert.deepEqual(await snapshotXToolCamera(() => session, controller.signal), image.subarray(0, image.length - 4));
