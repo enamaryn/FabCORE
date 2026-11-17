@@ -6,7 +6,12 @@ Finaliser la recette de découverte réseau sur le LXC. Vérifier qu’OctoPrint
 
 ## Session xTool
 
-La supervision M2 conserve une session WebSocket et reçoit les rapports d’état. Un heartbeat utilise user/ping. L’ancien chemin ouvrait une nouvelle session toutes les 15 secondes et pouvait provoquer les bips constatés. Les trois vues caméra utilisent camera/snap avec side (angle, par défaut), far (centrale) et near (outil) et le canal file_stream associé à la session persistante. Une seule capture sert d’aperçu à l’ouverture de la fiche. « Voir la caméra » ouvre la vidéo du port 8089 via FFmpeg et le relais multi-spectateurs. Les vues side, far et near sont sélectionnables, avec side par défaut. Les fiches Bambu et Elegoo extraient également un aperçu unique de leur caméra. Validation sur matériel après déploiement.
+Vérification matérielle caméra : aperçu JPEG reçu et trois images vidéo side décodées depuis le LXC. Le firmware testé refuse le port 8089 et fournit le H.264 sur media_stream, protocole 34, avec l’identifiant partagé de la session instruction.
+
+ camera/list associe side à 2, near à 1 et far à 0 sur la M2 testée. Le lecteur utilise l’identifiant renvoyé par cette liste. Le nom et l’action de camera/live sont des paramètres de requête. Un échec de filetransfer/finish ne rejette plus un aperçu dont le transfert et le MD5 sont validés, conformément à ha-xtool.
+
+
+La supervision M2 conserve une session WebSocket et reçoit les rapports d’état. Un heartbeat utilise user/ping. L’ancien chemin ouvrait une nouvelle session toutes les 15 secondes et pouvait provoquer les bips constatés. Les trois vues caméra utilisent camera/snap avec side (angle, par défaut), far (centrale) et near (outil) et le canal file_stream associé à la session persistante. Une seule capture sert d’aperçu à l’ouverture de la fiche. « Voir la caméra » ouvre la vidéo du canal media_stream via FFmpeg et le relais multi-spectateurs. Les vues side, far et near sont sélectionnables, avec side par défaut. Les fiches Bambu et Elegoo extraient également un aperçu unique de leur caméra. Les vues centrale et outil et le parcours navigateur restent à confirmer après déploiement.
 
 ## Gestion du parc
 

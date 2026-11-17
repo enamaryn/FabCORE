@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { subscribeXToolVideo } from './xtool-media.mjs';
 import { observeImages } from './diagnostics.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -96,7 +97,8 @@ async function download(session, filename, signal) {
   if (createHash('md5').update(image).digest('hex') !== info.digestdata.toLowerCase() ||
       image.readUInt16BE(0) !== 0xffd8 || end < 2 ||
       image.subarray(end + 2).some(byte => byte !== 0)) throw new Error('invalid-image');
-  await session.request('PUT', '/v1/filetransfer/finish', { code: 0, message: 'file transfer finish', channel });
+  // ha-xtool treats finish as best effort after the complete file passes MD5.
+  await session.request('PUT', '/v1/filetransfer/finish', { code: 0, message: 'file transfer finish', channel }).catch(() => {});
   return image.subarray(0, end + 2);
 }
 
@@ -132,27 +134,22 @@ export async function snapshotXToolCamera(getSession, signal, view = 'side') {
 export async function streamXToolCamera(getSession, output, signal, onFrame, view = 'side') {
   if (!['side', 'far', 'near'].includes(view)) return 'invalid-stream';
   let session;
-  let ws;
+  let unsubscribe;
   let child;
   let startup;
   let idle;
-  let requested = false;
+
   const stop = () => {
-    ws?.terminate();
+    unsubscribe?.();
     if (child?.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
   };
   signal.addEventListener('abort', stop, { once: true });
   try {
     session = await readySession(getSession, signal);
     signal.throwIfAborted();
-    requested = true;
-    const config = await session.request('POST', '/v1/platform/camera/live', { action: 'start', name: view });
-    signal.throwIfAborted();
-    const url = new URL(session.url);
-    url.protocol = 'ws:';
-    url.port = '8089';
-    url.pathname = '/v1/wsplayer';
-    url.search = new URLSearchParams({ stream: String(config?.cameraId ?? config?.stream ?? view) }).toString();
+    const cameras = await session.request('GET', '/v1/platform/camera/list');
+    const camera = Array.isArray(cameras) ? cameras.find(item => item.name === view) : null;
+    if (!camera || !Number.isSafeInteger(camera.id) || camera.id < 0) return 'invalid-stream';
     child = spawn(process.env.FABCORE_FFMPEG || 'ffmpeg', [
       '-nostdin', '-loglevel', 'error', '-probesize', '65536', '-analyzeduration', '1000000',
       '-i', 'pipe:0', '-an', '-filter_threads', '1', '-vf', 'fps=10,scale=960:-2',
@@ -160,18 +157,13 @@ export async function streamXToolCamera(getSession, output, signal, onFrame, vie
     ], { stdio: ['pipe', 'pipe', 'ignore'] });
     child.on('error', () => child.stdout.destroy());
     child.stdin.on('error', stop);
-    ws = new session.Socket(url, { followRedirects: false, handshakeTimeout: 4000, maxPayload: 2 * 1024 * 1024 });
-    ws.on('error', stop);
-    ws.on('close', stop);
-    ws.on('message', (data, binary) => {
-      if (!binary || signal.aborted || child.stdin.destroyed) return;
+    unsubscribe = await subscribeXToolVideo(session, camera, signal, data => {
+      if (signal.aborted || child.stdin.destroyed) return;
       clearTimeout(idle);
       idle = setTimeout(stop, 15_000);
-      if (!child.stdin.write(data)) {
-        ws.pause();
-        child.stdin.once('drain', () => ws.resume());
-      }
-    });
+      if (child.stdin.writableLength + data.length > 4 * 1024 * 1024) return stop();
+      child.stdin.write(data);
+    }, stop);
     startup = setTimeout(stop, 15_000);
     const chunks = child.stdout[Symbol.asyncIterator]();
     const first = await chunks.next();
@@ -191,8 +183,5 @@ export async function streamXToolCamera(getSession, output, signal, onFrame, vie
     clearTimeout(idle);
     signal.removeEventListener('abort', stop);
     stop();
-    if (requested) {
-      await session.request('POST', '/v1/platform/camera/live', { action: 'stop', name: view }).catch(() => {});
-    }
   }
 }
