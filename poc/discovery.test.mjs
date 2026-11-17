@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { discoveryNetworks, scanNetwork } from './discovery.mjs';
+import { detectOctoPrint, discoveryNetworks, scanNetwork } from './discovery.mjs';
 
 test('les réseaux sont locaux, privés, et plafonnés à une tranche /24', () => {
   const ipv4 = (address, cidr, internal = false) => ({ address, cidr, internal, family: 'IPv4' });
@@ -27,4 +27,21 @@ test('le scan ignore le serveur, l’adresse réseau et le broadcast', async () 
   });
   assert.deepEqual(scanned, [2, 3, 4, 5, 6].map((host) => '192.168.1.' + host));
   assert.deepEqual(devices.map(({ kind }) => kind), ['elegoo-cc1', 'bambu']);
+});
+
+test('le scan reconnaît OctoPrint au login sans clé ni imprimante connectée', async () => {
+  const addresses = [];
+  const fetcher = async (url, options) => {
+    addresses.push(url);
+    assert.equal(options.redirect, 'error');
+    assert.equal(options.headers, undefined);
+    return new Response(url.includes(':5000') ? '<title>OctoPrint Login</title>' : '<title>Connexion</title>',
+      { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  };
+  const signal = new AbortController().signal;
+  assert.deepEqual(await detectOctoPrint('192.168.1.85', signal, fetcher), [
+    { kind: 'octoprint', host: '192.168.1.85', origin: 'http://192.168.1.85:5000' }
+  ]);
+  assert.deepEqual(addresses, ['http://192.168.1.85:5000/login/', 'http://192.168.1.85/login/']);
+  assert.deepEqual(await detectOctoPrint('1.1.1.1', signal, assert.fail), []);
 });

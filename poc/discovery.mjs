@@ -103,11 +103,52 @@ function detectCC1(network, signal) {
   });
 }
 
+export async function detectOctoPrint(host, signal, fetcher = fetch) {
+  if (!privateIPv4(host)) return [];
+  const origins = [`http://${host}:5000`, `http://${host}`];
+  const checks = await Promise.all(origins.map(async origin => {
+    try {
+      const response = await fetcher(origin + '/login/', {
+        redirect: 'error',
+        signal: AbortSignal.any([signal, AbortSignal.timeout(550)])
+      });
+      if (!response.ok || !response.headers.get('content-type')?.toLowerCase().startsWith('text/html')) {
+        await response.body?.cancel();
+        return null;
+      }
+      const reader = response.body?.getReader();
+      if (!reader) return null;
+      const decoder = new TextDecoder();
+      let prefix = '';
+      let remaining = 16 * 1024;
+      try {
+        while (remaining > 0) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const chunk = value.subarray(0, remaining);
+          remaining -= chunk.byteLength;
+          prefix += decoder.decode(chunk, { stream: true });
+          const title = /<title>\s*([^<]+?)\s*<\/title>/i.exec(prefix)?.[1];
+          if (title) {
+            return /^(?:.+\s[-–·]\s)?OctoPrint Login$/i.test(title)
+              ? { kind: 'octoprint', host, origin } : null;
+          }
+        }
+      } finally {
+        await reader.cancel().catch(() => {});
+      }
+    } catch { /* An unavailable or unrelated service is skipped. */ }
+    return null;
+  }));
+  return checks.filter(Boolean);
+}
+
 async function detectHost(host, signal) {
-  const [moonraker, elegoo, bambu] = await Promise.all([
+  const [moonraker, elegoo, bambu, octoprint] = await Promise.all([
     httpJSON(`http://${host}:7125/server/info`, signal),
     httpJSON(`http://${host}/system/info`, signal),
-    detectBambu(host, signal)
+    detectBambu(host, signal),
+    detectOctoPrint(host, signal)
   ]);
   const found = [];
   if (typeof moonraker?.result?.moonraker_version === 'string') {
@@ -119,7 +160,7 @@ async function detectHost(host, signal) {
     found.push({ kind: 'elegoo', host, serial: info.sn });
   }
   if (bambu) found.push(bambu);
-  return found;
+  return [...found, ...octoprint];
 }
 
 export async function scanNetwork(network, signal, { inspectHost = detectHost, broadcast = detectCC1 } = {}) {

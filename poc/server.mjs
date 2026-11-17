@@ -310,7 +310,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
           ...device,
           registered: store.state.machines.some((machine) => (machine.kind ?? 'klipper') === device.kind &&
             (device.origin === machine.origin || (device.serial && device.serial === machine.serial) ||
-              (device.kind !== 'klipper' && new URL(machine.origin).hostname === device.host)))
+              (!device.origin && new URL(machine.origin).hostname === device.host)))
         }));
         return answer(res, 200, { devices });
       } finally {
