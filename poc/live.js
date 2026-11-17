@@ -674,10 +674,11 @@ async function openDiscovery() {
   dialog.innerHTML = `<form id="discover-machines" class="stack">
     <h2>${t('Détecter des machines','Discover machines')}</h2>
     <label>${t('Réseau local du serveur','Server local network')}<select name="network" required disabled></select></label>
-    <div class="row wrap">${btn('add',t('Saisie manuelle','Enter manually'))}<button class="primary" type="submit" disabled>${t('Lancer le scan','Start scan')}</button></div>
+    <div class="row wrap">${btn('add-manual',t('Saisie manuelle','Enter manually'))}<button class="primary" type="submit" disabled>${t('Lancer le scan','Start scan')}</button></div>
     <p role="status">${t('Chargement des réseaux…','Loading networks…')}</p>
     <div class="stack" data-discovery-results></div>
   </form>`;
+  if (!dialog.open) dialog.showModal();
   const form = dialog.querySelector('form');
   const status = form.querySelector('[role="status"]');
   try {
@@ -794,11 +795,11 @@ document.addEventListener('click', async (event) => {
       }
     }
   }
-  if (action === 'add' && state.role === 'admin') {
+  if ((action === 'add' || action === 'discover') && state.role === 'admin') openDiscovery();
+  if (action === 'add-manual' && state.role === 'admin') {
     discoveryCancel?.abort();
     openMachineForm();
   }
-  if (action === 'discover') openDiscovery();
   if (action === 'camera-start') showCamera(true);
   if (action === 'camera-stop') showCamera(false);
   if (action === 'detected') {
