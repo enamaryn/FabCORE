@@ -1,4 +1,8 @@
 import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { observeImages } from './diagnostics.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 
 function crc16(bytes) {
@@ -88,37 +92,107 @@ async function download(session, filename, signal) {
     if (signal.aborted) stop();
     else signal.addEventListener('abort', stop, { once: true });
   });
+  const end = image.lastIndexOf(Buffer.from([0xff, 0xd9]));
   if (createHash('md5').update(image).digest('hex') !== info.digestdata.toLowerCase() ||
-      image.readUInt16BE(0) !== 0xffd8 || image.readUInt16BE(image.length - 2) !== 0xffd9) throw new Error('invalid-image');
+      image.readUInt16BE(0) !== 0xffd8 || end < 2 ||
+      image.subarray(end + 2).some(byte => byte !== 0)) throw new Error('invalid-image');
   await session.request('PUT', '/v1/filetransfer/finish', { code: 0, message: 'file transfer finish', channel });
-  return image;
+  return image.subarray(0, end + 2);
 }
 
-export async function streamXToolCamera(getSession, output, signal, onFrame) {
+const transfers = new WeakMap();
+
+async function capture(session, view, signal) {
+  const previous = transfers.get(session) ?? Promise.resolve();
+  const transfer = previous.catch(() => {}).then(async () => {
+    signal.throwIfAborted();
+    const snap = await session.request('POST', '/v1/platform/camera/snap', {}, { name: view });
+    if (typeof snap?.filename !== 'string' || !snap.filename || snap.filename.length > 512) throw new Error('invalid-stream');
+    return download(session, snap.filename, signal);
+  });
+  transfers.set(session, transfer);
+  try { return await transfer; }
+  finally { if (transfers.get(session) === transfer) transfers.delete(session); }
+}
+
+async function readySession(getSession, signal) {
+  for (let attempt = 0; !getSession() && attempt < 24; attempt++) {
+    await delay(500, undefined, { signal });
+  }
+  const session = getSession();
+  if (!session) throw new Error('xtool-connection');
+  return session;
+}
+
+export async function snapshotXToolCamera(getSession, signal, view = 'side') {
+  if (!['side', 'far', 'near'].includes(view)) throw new Error('invalid-camera');
+  return capture(await readySession(getSession, signal), view, signal);
+}
+
+export async function streamXToolCamera(getSession, output, signal, onFrame, view = 'side') {
+  if (!['side', 'far', 'near'].includes(view)) return 'invalid-stream';
+  let session;
+  let ws;
+  let child;
+  let startup;
+  let idle;
+  let requested = false;
+  const stop = () => {
+    ws?.terminate();
+    if (child?.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  };
+  signal.addEventListener('abort', stop, { once: true });
   try {
-    // A camera viewer shares the existing authenticated instruction session.
-    for (let attempt = 0; !getSession() && attempt < 24; attempt++) {
-      await delay(500, undefined, { signal });
-    }
-    let started = false;
-    while (!signal.aborted) {
-      const session = getSession();
-      if (!session) return 'xtool-connection';
-      const snap = await session.request('POST', '/v1/platform/camera/snap', {}, { name: 'far' });
-      if (typeof snap?.filename !== 'string' || !snap.filename || snap.filename.length > 512) return 'invalid-stream';
-      const image = await download(session, snap.filename, signal);
-      if (signal.aborted) return;
-      if (!started) {
-        output.writeHead(200, { 'Content-Type': 'multipart/x-mixed-replace; boundary=xtool',
-          'Cache-Control': 'no-store' });
-        started = true;
+    session = await readySession(getSession, signal);
+    signal.throwIfAborted();
+    requested = true;
+    const config = await session.request('POST', '/v1/platform/camera/live', { action: 'start', name: view });
+    signal.throwIfAborted();
+    const url = new URL(session.url);
+    url.protocol = 'ws:';
+    url.port = '8089';
+    url.pathname = '/v1/wsplayer';
+    url.search = new URLSearchParams({ stream: String(config?.cameraId ?? config?.stream ?? view) }).toString();
+    child = spawn(process.env.FABCORE_FFMPEG || 'ffmpeg', [
+      '-nostdin', '-loglevel', 'error', '-probesize', '65536', '-analyzeduration', '1000000',
+      '-i', 'pipe:0', '-an', '-filter_threads', '1', '-vf', 'fps=10,scale=960:-2',
+      '-threads', '1', '-c:v', 'mjpeg', '-f', 'mpjpeg', 'pipe:1'
+    ], { stdio: ['pipe', 'pipe', 'ignore'] });
+    child.on('error', () => child.stdout.destroy());
+    child.stdin.on('error', stop);
+    ws = new session.Socket(url, { followRedirects: false, handshakeTimeout: 4000, maxPayload: 2 * 1024 * 1024 });
+    ws.on('error', stop);
+    ws.on('close', stop);
+    ws.on('message', (data, binary) => {
+      if (!binary || signal.aborted || child.stdin.destroyed) return;
+      clearTimeout(idle);
+      idle = setTimeout(stop, 15_000);
+      if (!child.stdin.write(data)) {
+        ws.pause();
+        child.stdin.once('drain', () => ws.resume());
       }
-      output.write(Buffer.concat([Buffer.from('--xtool\r\nContent-Type: image/jpeg\r\nContent-Length: ' +
-        image.length + '\r\n\r\n'), image, Buffer.from('\r\n')]));
-      onFrame();
-      await delay(2000, undefined, { signal });
+    });
+    startup = setTimeout(stop, 15_000);
+    const chunks = child.stdout[Symbol.asyncIterator]();
+    const first = await chunks.next();
+    if (first.done || signal.aborted) return 'invalid-stream';
+    clearTimeout(startup);
+    output.writeHead(200, { 'Content-Type': 'multipart/x-mixed-replace; boundary=ffmpeg',
+      'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+    async function* frames() {
+      yield first.value;
+      yield* { [Symbol.asyncIterator]: () => chunks };
     }
+    await pipeline(Readable.from(observeImages(frames(), onFrame)), output, { signal });
   } catch {
     if (!signal.aborted) return 'invalid-stream';
+  } finally {
+    clearTimeout(startup);
+    clearTimeout(idle);
+    signal.removeEventListener('abort', stop);
+    stop();
+    if (requested) {
+      await session.request('POST', '/v1/platform/camera/live', { action: 'stop', name: view }).catch(() => {});
+    }
   }
 }
