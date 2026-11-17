@@ -44,6 +44,7 @@ function liveIssue(issue) {
     'octoprint-disconnected': t('OctoPrint répond, mais l’imprimante est déconnectée.', 'OctoPrint is reachable, but the printer is disconnected.'),
     'octoprint-printer-error': t('OctoPrint signale une erreur de l’imprimante.', 'OctoPrint reports a printer error.'),
     'xtool-connection': t('FabCore ne peut pas joindre la M2 sur le port 28900.', 'FabCore cannot reach the M2 on port 28900.'),
+    'xtool-authorization': t('La M2 répond, mais refuse l’autorisation de FabCore (406). Si xTool Studio est connecté, déconnectez-le et réessayez.', 'The M2 responded but refused to authorize FabCore (406). If xTool Studio is connected, disconnect it and try again.'),
     'xtool-protocol': t('La M2 n’a pas renvoyé un état compatible WS-V2.', 'The M2 did not return a compatible WS-V2 status.'),
     'xtool-identity': t('Le certificat ou le numéro de série de la M2 a changé.', 'The M2 certificate or serial number changed.'),
     'xtool-device': t('La M2 signale une erreur.', 'The M2 reports an error.'),
@@ -612,6 +613,7 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
   const isBambu = form === 'bambu';
   const isCC1 = form === 'elegoo-cc1';
   const isM2 = form === 'xtool-m2';
+  const xtoolSerial = isM2 ? existing?.serial ?? detected?.serial : null;
   const addressLabel = kind === 'klipper' ? 'Moonraker' : connector.model;
   dialog.innerHTML = `<form id="add-machine" class="stack" autocomplete="off">
     <h2>${existing ? t('Modifier une machine','Edit a machine') : t('Ajouter une machine','Add a machine')}</h2>
@@ -624,6 +626,7 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
       ${form !== 'http' ? `
       <label>${t('Adresse IPv4 locale','Local IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : esc(detected?.host ?? '')}"></label>
       ${isBambu ? `<label>${t('Numéro de série','Serial number')}<input name="serial" required maxlength="32" value="${esc(existing?.serial ?? detected?.serial ?? '')}"></label>` : ''}
+      ${xtoolSerial ? `<label>${t('Numéro de série','Serial number')}<input readonly class="muted" value="${esc(xtoolSerial)}"></label>` : ''}
       ${isCC1 && !existing ? `<label>${t('MainboardID (facultatif)', 'MainboardID (optional)')}<input name="serial" maxlength="64" value="${esc(detected?.serial ?? '')}"></label>` : ''}
       ${isCC1 || isM2 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
       ` : `
