@@ -83,6 +83,9 @@ export function readXTool(machine, { signal, identityOnly = false, Socket = WebS
       let message;
       try { message = JSON.parse(payload); } catch { return finish(result('error', 'xtool-protocol')); }
       if (message?.type !== 'response' || (message.transactionId ?? message.data?.transactionId) !== transaction) return;
+      if (identityOnly && transaction === 1 && message.code === 406 && Object.hasOwn(message.data ?? {}, 'authState')) {
+        return finish({ candidate: true });
+      }
       if (message.code != null && message.code !== 0) return finish(result('error', 'xtool-protocol'));
       if (transaction === 2) {
         serial = message.data?.sn || message.data?.snCode;
