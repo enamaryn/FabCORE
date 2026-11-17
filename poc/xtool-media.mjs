@@ -1,4 +1,15 @@
 const connections = new WeakMap();
+const transitions = new WeakMap();
+
+function transition(session, action) {
+  const previous = transitions.get(session) ?? Promise.resolve();
+  const current = previous.catch(() => {}).then(action);
+  transitions.set(session, current);
+  void current.finally(() => {
+    if (transitions.get(session) === current) transitions.delete(session);
+  }).catch(() => {});
+  return current;
+}
 
 function crc16(bytes) {
   let crc = 0;
@@ -61,35 +72,40 @@ function openMedia(session) {
 }
 
 export async function subscribeXToolVideo(session, camera, signal, write, disconnected) {
-  let media = connections.get(session);
-  if (!media) {
-    media = openMedia(session);
-    connections.set(session, media);
-  }
-  let removed = false;
-  const subscriber = { camera, write, close: () => { stop(); disconnected(); } };
+  let media;
+  let stopping;
+  const subscriber = { camera, write, close: () => { void stop(); disconnected(); } };
   function stop() {
-    if (removed) return;
-    removed = true;
-    signal.removeEventListener('abort', stop);
-    media.subscribers.delete(subscriber);
-    if (![...media.subscribers].some(item => item.camera.id === camera.id)) {
-      void session.request('POST', '/v1/platform/camera/live', {}, { action: 'stop', name: camera.name }).catch(() => {});
-    }
-    if (!media.subscribers.size) media.close();
+    stopping ??= transition(session, async () => {
+      signal.removeEventListener('abort', stop);
+      if (!media || !media.subscribers.delete(subscriber)) return;
+      if (![...media.subscribers].some(item => item.camera.id === camera.id)) {
+        await session.request('POST', '/v1/platform/camera/live', {}, { action: 'stop', name: camera.name }).catch(() => {});
+      }
+      if (!media.subscribers.size) media.close();
+    });
+    return stopping;
   }
-  media.subscribers.add(subscriber);
-  signal.addEventListener('abort', stop, { once: true });
   try {
-    await media.ready;
-    signal.throwIfAborted();
-    if ([...media.subscribers].filter(item => item.camera.id === camera.id).length === 1) {
-      await session.request('POST', '/v1/platform/camera/live', {}, { action: 'start', name: camera.name });
-    }
-    signal.throwIfAborted();
+    await transition(session, async () => {
+      signal.throwIfAborted();
+      media = connections.get(session);
+      if (!media) {
+        media = openMedia(session);
+        connections.set(session, media);
+      }
+      media.subscribers.add(subscriber);
+      signal.addEventListener('abort', stop, { once: true });
+      await media.ready;
+      signal.throwIfAborted();
+      if ([...media.subscribers].filter(item => item.camera.id === camera.id).length === 1) {
+        await session.request('POST', '/v1/platform/camera/live', {}, { action: 'start', name: camera.name });
+      }
+      signal.throwIfAborted();
+    });
     return stop;
   } catch (error) {
-    stop();
+    await stop();
     throw error;
   }
 }

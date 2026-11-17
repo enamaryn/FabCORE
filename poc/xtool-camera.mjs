@@ -140,7 +140,7 @@ export async function streamXToolCamera(getSession, output, signal, onFrame, vie
   let idle;
 
   const stop = () => {
-    unsubscribe?.();
+    void unsubscribe?.();
     if (child?.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
   };
   signal.addEventListener('abort', stop, { once: true });
@@ -150,10 +150,12 @@ export async function streamXToolCamera(getSession, output, signal, onFrame, vie
     const cameras = await session.request('GET', '/v1/platform/camera/list');
     const camera = Array.isArray(cameras) ? cameras.find(item => item.name === view) : null;
     if (!camera || !Number.isSafeInteger(camera.id) || camera.id < 0) return 'invalid-stream';
+    const frameRate = Number.isFinite(camera.fps) && camera.fps >= 1 && camera.fps <= 60 ? camera.fps : 25;
     child = spawn(process.env.FABCORE_FFMPEG || 'ffmpeg', [
-      '-nostdin', '-loglevel', 'error', '-probesize', '65536', '-analyzeduration', '1000000',
-      '-i', 'pipe:0', '-an', '-filter_threads', '1', '-vf', 'fps=10,scale=960:-2',
-      '-threads', '1', '-c:v', 'mjpeg', '-f', 'mpjpeg', 'pipe:1'
+      '-nostdin', '-loglevel', 'error', '-probesize', '32', '-analyzeduration', '0',
+      '-f', 'h264', '-framerate', String(frameRate), '-threads', '1', '-fflags', '+genpts',
+      '-i', 'pipe:0', '-an', '-filter_threads', '1', '-vf', `setpts=N/(${frameRate}*TB),fps=10,scale=960:-2`,
+      '-threads', '1', '-c:v', 'mjpeg', '-f', 'mpjpeg', '-flush_packets', '1', 'pipe:1'
     ], { stdio: ['pipe', 'pipe', 'ignore'] });
     child.on('error', () => child.stdout.destroy());
     child.stdin.on('error', stop);
@@ -183,5 +185,6 @@ export async function streamXToolCamera(getSession, output, signal, onFrame, vie
     clearTimeout(idle);
     signal.removeEventListener('abort', stop);
     stop();
+    await unsubscribe?.();
   }
 }
