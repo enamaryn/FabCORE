@@ -90,7 +90,7 @@ test('M2 attend la confirmation et réutilise le jeton lors de la connexion suiv
           assert.equal(request.sessionToken, 'temporary-token');
           this.emit('message', Buffer.from(JSON.stringify({
             type: 'request', transactionId: 99999,
-            data: { '/v1/platform/device/state': { curMode: { mode: 'Idle' } } }
+            data: { '/v1/platform/device/state': { mode: 'Idle' } }
           })), false);
           data = {};
           break;
