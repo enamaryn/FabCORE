@@ -110,6 +110,17 @@ Pour un **serveur existant**, indiquer l’URL HTTPS, le sujet et le mode d’au
 
 FabCore relaie la vidéo RTSPS de la P2S au navigateur sous forme de MJPEG. Vérifier que le port local TCP 322 est joignable et que la caméra est annoncée dans les réglages de diffusion locale de la P2S. L’installateur FabCore installe FFmpeg depuis les dépôts du système. Sur une installation existante faite à la main, installer le paquet `ffmpeg`. Le flux s’ouvre sur la fiche de la P2S et utilise le code d’accès LAN déjà enregistré.
 
+## Terminal G-code
+
+Sur la fiche d’une machine Klipper (Moonraker) ou OctoPrint, l’administrateur dispose d’un **Terminal G-code**. Saisir une commande sur une ligne (256 caractères ASCII au maximum), puis **Envoyer**.
+
+- **Moonraker** : la commande est marquée **Exécutée** quand Klipper l’a traitée, avec les réponses de la machine. Une erreur Klipper apparaît comme **Refusée** avec son message.
+- **OctoPrint** : l’API ne confirme que la mise en file. La commande est marquée **Acceptée** et la réponse de l’imprimante reste visible dans le terminal d’OctoPrint.
+- Pendant une impression ou une pause, toute commande autre qu’une lecture d’état (`M105`, `M114`, `M115`, `M119`, `M27`, `M31`, `M503`, `STATUS`, `HELP`, `GET_POSITION`, `QUERY_ENDSTOPS`, `QUERY_PROBE`) demande une confirmation. Le serveur refuse l’envoi sans elle.
+- Une machine hors ligne ne reçoit rien. Une commande à la fois par machine, deux par seconde et trente par minute au maximum.
+- Si la réponse n’arrive pas, la commande est marquée **Résultat inconnu** et n’est jamais renvoyée automatiquement. Vérifier la machine avant de la renvoyer.
+- Le journal garde les cinquante dernières commandes de la machine dans l’onglet du navigateur. Le journal de diagnostic note le résultat sans le texte de la commande.
+
 ## Fonctionnement et limites
 
 - Pour la télémétrie, l’adaptateur interroge `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.

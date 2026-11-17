@@ -31,6 +31,10 @@ const assets = new Map([
   ['/favicon.svg', ['image/svg+xml', readFileSync(new URL('../design/brand/favicon.svg', import.meta.url))]]
 ]);
 
+// Commandes de lecture seule autorisées sans confirmation pendant une impression.
+const harmlessCommands = new Set(['M105', 'M114', 'M115', 'M119', 'M27', 'M31', 'M503', 'STATUS', 'HELP', 'GET_POSITION', 'QUERY_ENDSTOPS', 'QUERY_PROBE']);
+export const harmlessGcode = (script) => harmlessCommands.has(script.split(/\s+/)[0].toUpperCase());
+
 function answer(res, status, payload, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...headers });
   res.end(JSON.stringify(payload));
@@ -84,7 +88,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -98,13 +102,14 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const attempts = new Map();
   const diagnostics = createDiagnostics();
   diagnostics.record('server', 'started');
-  const connectors = createConnectorRegistry({ readPrinter, readOcto, readPrusa, sendCommand, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera });
+  const connectors = createConnectorRegistry({ readPrinter, readOcto, readPrusa, sendCommand, sendGcode, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera });
   const snapshot = monitor(async (machine) => {
     const connector = await connectors.get(machine.kind ?? 'klipper');
     const { serial, fingerprint, ...telemetry } = await connector.read(machine);
     return telemetry;
   });
   const pendingCommands = new Set();
+  const terminalUse = new Map();
   let probes = 0;
   let discoveryActive = false;
   const notificationTests = new Set();
@@ -358,6 +363,47 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
           }
         } catch { /* The request may have reached the printer. Never retry it automatically. */ }
         return error(res, 504, 'command-unconfirmed');
+      } finally {
+        snapshot.forget(machine.id);
+        pendingCommands.delete(machine.id);
+      }
+    }
+    const terminal = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/gcode$/);
+    if (req.method === 'POST' && terminal) {
+      if (!viewer) return error(res, 401, 'sign-in');
+      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+      if (!requireJson(req, res)) return;
+      let data;
+      try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+      const script = typeof data.command === 'string' ? data.command.trim() : '';
+      if (!/^[\x20-\x7E]{1,256}$/.test(script)) return error(res, 400, 'invalid');
+      const machine = store.state.machines.find(({ id }) => id === terminal[1]);
+      if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.terminal) return error(res, 404, 'missing');
+      if (pendingCommands.has(machine.id)) return error(res, 409, 'command-busy');
+      const now = Date.now();
+      const use = terminalUse.get(machine.id);
+      const recent = (use ?? []).filter(time => now - time < minute);
+      if (recent.length >= 30 || (recent.length && now - recent.at(-1) < 500)) return error(res, 429, 'rate');
+      terminalUse.set(machine.id, [...recent, now]);
+      pendingCommands.add(machine.id);
+      try {
+        const connector = await connectors.get(machine.kind ?? 'klipper');
+        const { status } = await connector.read(machine);
+        if (status === 'offline') return error(res, 409, 'terminal-offline');
+        if ((status === 'printing' || status === 'paused') && !harmlessGcode(script) && data.confirm !== true) {
+          return error(res, 409, 'terminal-confirm');
+        }
+        if (res.destroyed) return;
+        if (!session(req)) return error(res, 401, 'sign-in');
+        try {
+          const result = await connector.gcode(machine, script);
+          diagnostics.record('terminal', result.outcome, machine.id);
+          return answer(res, 200, result);
+        } catch {
+          /* La commande a pu atteindre la machine : ne jamais la renvoyer automatiquement. */
+          diagnostics.record('terminal', 'unconfirmed', machine.id);
+          return error(res, 504, 'command-unconfirmed');
+        }
       } finally {
         snapshot.forget(machine.id);
         pendingCommands.delete(machine.id);

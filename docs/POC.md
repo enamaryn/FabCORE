@@ -11,7 +11,7 @@ La suppression d’une machine et le correctif d’accès à `fabcore-update` da
 ## Ensuite
 
 1. Visualiseur G-code par couches, avec ouverture d’un fichier local et distinction des extrusions et déplacements à vide. [Ticket #31](https://github.com/enamaryn/FabCORE/issues/31)
-2. Terminal G-code pour les connecteurs compatibles, à valider sur Moonraker et OctoPrint. [Ticket #32](https://github.com/enamaryn/FabCORE/issues/32)
+2. Terminal G-code pour les connecteurs compatibles, à valider sur Moonraker et OctoPrint. [Ticket #32](https://github.com/enamaryn/FabCORE/issues/32) · première version ouverte en PR sur la fiche machine (administrateur). Reste à valider commande par commande sur l’Ender 3 (Moonraker) et sur OctoPrint, puis à étendre aux autres connecteurs.
 
 ## Jalons fusionnés
 

@@ -23,6 +23,9 @@ const problem = (code) => ({
   'command-state': t('L’état actuel de l’imprimante ne permet pas cette commande.', 'The current printer state does not allow this command.'),
   'command-rejected': t('Moonraker a refusé la commande.', 'Moonraker rejected the command.'),
   'command-unconfirmed': t('État non confirmé. Vérifiez l’imprimante avant de réessayer.', 'State not confirmed. Check the printer before retrying.'),
+  'terminal-offline': t('La machine est hors ligne. Commande non envoyée.', 'The machine is offline. Command not sent.'),
+  'terminal-confirm': t('Confirmation requise pendant une impression. Commande non envoyée.', 'Confirmation required during a print. Command not sent.'),
+  invalid: t('Commande invalide : une seule ligne ASCII de 256 caractères au maximum.', 'Invalid command: a single ASCII line of up to 256 characters.'),
   'observer-duplicate': t('Cet identifiant est déjà utilisé.', 'This username is already in use.'),
   'observer-limit': t('La limite de 16 observateurs est atteinte.', 'The limit of 16 observers has been reached.'),
   'probe-busy': t('Un test est déjà en cours. Réessayez dans quelques secondes.', 'A test is already running. Try again in a few seconds.'),
@@ -73,7 +76,7 @@ function liveIssue(issue) {
 }
 
 async function api(path, data, cancel) {
-  const timeout = AbortSignal.timeout(path === 'discovery' || path.startsWith('machines') || path.startsWith('notifications') ? 18000 : 5000);
+  const timeout = AbortSignal.timeout(path.endsWith('/gcode') ? 65000 : path === 'discovery' || path.startsWith('machines') || path.startsWith('notifications') ? 18000 : 5000);
   const signal = cancel ? AbortSignal.any([timeout, cancel]) : timeout;
   const response = await fetch('/api/' + path, data === undefined ? { signal } : {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal
@@ -97,7 +100,11 @@ function diagnosticMessage(code) {
     identity: t('L’identité de la machine n’a pas été confirmée.', 'The machine identity could not be confirmed.'),
     'invalid-stream': t('La caméra a renvoyé une réponse incompatible.', 'The camera returned an incompatible response.'),
     interrupted: t('Le flux a été interrompu.', 'The stream was interrupted.'),
-    closed: t('Flux fermé.', 'Stream closed.')
+    closed: t('Flux fermé.', 'Stream closed.'),
+    executed: t('Commande G-code exécutée.', 'G-code command executed.'),
+    accepted: t('Commande G-code acceptée.', 'G-code command accepted.'),
+    rejected: t('Commande G-code refusée.', 'G-code command rejected.'),
+    unconfirmed: t('Commande G-code non confirmée.', 'G-code command not confirmed.')
   })[code] || t(...(statusLabels[code] ?? [code, code]));
 }
 
@@ -106,7 +113,7 @@ function diagnosticsPage() {
   const scope = live.diagnosticScope ?? '';
   const date = (at) => at ? new Date(at).toLocaleString(state.lang) : '—';
   const labels = {
-    server: 'FabCore', mqtt: 'MQTT', camera: t('Caméra', 'Camera'), status: t('État', 'Status')
+    server: 'FabCore', mqtt: 'MQTT', camera: t('Caméra', 'Camera'), status: t('État', 'Status'), terminal: t('Terminal', 'Terminal')
   };
   const header = title(t('Diagnostics', 'Diagnostics'), '', btn('diagnostics', t('Actualiser', 'Refresh'), 'activity'));
   if (!data) return header + '<p role="status">' +
@@ -382,6 +389,7 @@ function liveDetail() {
     <div class="machine-detail">
       <div class="machine-detail-row">${camera}${liveTemperatures(m)}</div>
       <div class="machine-detail-row"><div data-live-telemetry>${liveFabrication(m)}</div><div data-live-filaments>${liveFilaments(m)}</div></div>
+      ${terminalPanel(m)}
     </div>`;
 }
 
@@ -552,6 +560,8 @@ async function refresh() {
       const telemetry = app.querySelector('[data-live-telemetry]');
       if (!hadRefreshError && telemetry && current) {
         telemetry.innerHTML = liveFabrication(current);
+        const target = app.querySelector('[data-terminal-target]');
+        if (target) target.innerHTML = terminalTarget(current);
         const readings = app.querySelector('[data-temperature-readings]');
         if (readings) readings.innerHTML = temperatureReadings(current);
         const filaments = app.querySelector('[data-live-filaments]');
@@ -580,6 +590,8 @@ function openWorkshop(username, role) {
   state.role = role === 'admin' ? 'admin' : 'viewer';
   live.username = username;
   temperatureHistory.clear();
+  terminalLogs.clear();
+  terminalDrafts.clear();
   live.phase = 'workshop';
   live.page = 'home';
   live.error = '';
@@ -939,6 +951,111 @@ document.addEventListener('submit', async (event) => {
     }
   } finally {
     controls.forEach((element) => { element.disabled = false; });
+  }
+});
+
+// Terminal G-code : envoi manuel, une commande à la fois, jamais renvoyée automatiquement.
+const terminalLogs = new Map();
+const terminalDrafts = new Map();
+const terminalPending = new Set();
+const harmlessTerminal = new Set(['M105', 'M114', 'M115', 'M119', 'M27', 'M31', 'M503', 'STATUS', 'HELP', 'GET_POSITION', 'QUERY_ENDSTOPS', 'QUERY_PROBE']);
+
+function terminalTarget(m) {
+  return `${t('Cible','Target')} : <strong>${esc(m.name)}</strong> · ${esc(m.model)} ${badge(m.status)}`;
+}
+
+function terminalEntry({ command, outcome, responses, message, at }) {
+  const labels = {
+    pending: [t('Envoi en cours…','Sending…'), 'info'],
+    executed: [t('Exécutée par la machine','Executed by the machine'), 'good'],
+    accepted: [t('Acceptée par OctoPrint · exécution et réponse non visibles ici','Accepted by OctoPrint · execution and reply not visible here'), 'info'],
+    rejected: [t('Refusée','Rejected'), 'bad'],
+    unconfirmed: [t('Résultat inconnu · vérifiez la machine avant de renvoyer','Unknown outcome · check the machine before resending'), 'warn'],
+    failed: [t('Non envoyée','Not sent'), 'bad']
+  };
+  const [label, tone] = labels[outcome];
+  const detail = message === 'octoprint-disconnected' ? t('OctoPrint n’est pas connecté à l’imprimante.','OctoPrint is not connected to the printer.') : message;
+  const replies = responses === null && outcome === 'executed' ? `<small class="muted">${t('Réponses de la machine indisponibles.','Machine replies unavailable.')}</small>` :
+    (responses ?? []).map(line => `<code>${esc(line)}</code>`).join('');
+  return `<div class="terminal-entry"><div class="row wrap between"><code>&gt; ${esc(command)}</code><small>${esc(at)}</small></div>
+    <small class="${tone}">${label}${detail ? ' · ' + esc(detail) : ''}</small>${replies}</div>`;
+}
+
+function terminalPanel(m) {
+  if (state.role !== 'admin' || !machineConnectors[m.kind]?.terminal) return '';
+  const log = terminalLogs.get(m.id) ?? [];
+  const pending = terminalPending.has(m.id);
+  return `<style>
+      .terminal-log{max-height:18rem;overflow:auto;display:grid;gap:.6rem;align-content:start;padding:.7rem;border:1px solid var(--line);border-radius:10px;background:var(--raised)}
+      .terminal-entry{display:grid;gap:.2rem}
+      .terminal-entry code{white-space:pre-wrap}
+      .terminal-form input{flex:1 1 14rem;min-width:0;font-family:ui-monospace,monospace}
+    </style>
+    <section class="panel stack" data-terminal>
+      <h2>${t('Terminal G-code','G-code terminal')}</h2>
+      <p data-terminal-target>${terminalTarget(m)}</p>
+      <div class="terminal-log" role="log" aria-live="polite" aria-label="${t('Journal du terminal','Terminal log')}">
+        ${log.length ? log.map(terminalEntry).join('') : `<small class="muted">${t('Aucune commande envoyée depuis l’ouverture de la page.','No command sent since this page was opened.')}</small>`}
+      </div>
+      <form id="gcode-terminal" class="row wrap terminal-form">
+        <input name="command" maxlength="256" autocomplete="off" autocapitalize="characters" spellcheck="false" required
+          aria-label="${t('Commande G-code','G-code command')}" placeholder="M105" value="${esc(terminalDrafts.get(m.id) ?? '')}" ${pending ? 'disabled' : ''}>
+        <button class="primary" type="submit" ${pending ? 'disabled' : ''}>${t('Envoyer','Send')}</button>
+      </form>
+      <small class="muted">${t('Une commande par envoi. Pendant une impression, toute commande autre qu’une lecture d’état demande une confirmation. Une commande au résultat inconnu n’est jamais renvoyée automatiquement.','One command per send. During a print, any command other than a status query asks for confirmation. A command with an unknown outcome is never resent automatically.')}</small>
+    </section>`;
+}
+
+function renderTerminal(m) {
+  const panel = app.querySelector('[data-terminal]');
+  if (!panel) return;
+  const focused = document.activeElement?.name === 'command';
+  panel.outerHTML = terminalPanel(m).replace(/^\s*<style>[\s\S]*?<\/style>\s*/, '');
+  const log = app.querySelector('.terminal-log');
+  if (log) log.scrollTop = log.scrollHeight;
+  if (focused) app.querySelector('#gcode-terminal input')?.focus();
+}
+
+app.addEventListener('input', (event) => {
+  if (event.target.form?.id === 'gcode-terminal' && state.machine) terminalDrafts.set(state.machine, event.target.value);
+});
+
+app.addEventListener('submit', async (event) => {
+  if (event.target.id !== 'gcode-terminal') return;
+  event.preventDefault();
+  const m = machine(state.machine);
+  const command = event.target.elements.command.value.trim();
+  if (!m || !command || terminalPending.has(m.id) || state.role !== 'admin') return;
+  const ask = () => window.confirm(t('Une impression est en cours sur','A print is in progress on') + ' ' + m.name + '.\n' +
+    t('Envoyer quand même cette commande ?','Send this command anyway?') + '\n\n' + command);
+  const printing = m.status === 'printing' || m.status === 'paused';
+  let confirm = printing && !harmlessTerminal.has(command.split(/\s+/)[0].toUpperCase());
+  if (confirm && !ask()) return;
+  const log = terminalLogs.get(m.id) ?? [];
+  const entry = { command, outcome: 'pending', responses: [], message: '', at: new Date().toLocaleTimeString(state.lang) };
+  log.push(entry);
+  terminalLogs.set(m.id, log.slice(-50));
+  terminalDrafts.delete(m.id);
+  terminalPending.add(m.id);
+  renderTerminal(m);
+  try {
+    try {
+      Object.assign(entry, await api('machines/' + m.id + '/gcode', { command, confirm }));
+    } catch (error) {
+      // Le serveur a vu une impression que la page n’affichait pas encore : la commande n’a pas été envoyée.
+      if (error.code !== 'terminal-confirm' || confirm || !ask()) throw error;
+      confirm = true;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      Object.assign(entry, await api('machines/' + m.id + '/gcode', { command, confirm }));
+    }
+  } catch (error) {
+    const unknown = error.code === 'command-unconfirmed' || error.name === 'TimeoutError' || !error.code;
+    entry.outcome = unknown ? 'unconfirmed' : 'failed';
+    entry.message = unknown ? '' : problem(error.code);
+  } finally {
+    terminalPending.delete(m.id);
+    const current = machine(m.id);
+    if (live.page === 'detail' && state.machine === m.id && current) renderTerminal(current);
   }
 });
 

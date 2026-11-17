@@ -56,3 +56,21 @@ export async function readOctoPrint(machine, { fetcher = fetch, signal } = {}) {
     return error instanceof SyntaxError ? unavailable('error', 'octoprint-response') : unavailable('offline', 'octoprint-connection');
   }
 }
+
+// Terminal : l’API REST d’OctoPrint confirme la mise en file de la commande, pas son exécution ni la réponse de l’imprimante.
+export async function sendOctoPrintGcode(machine, script, fetcher = fetch) {
+  if (moonrakerOrigin(machine.origin) !== machine.origin || !/^[!-~]{1,256}$/.test(machine.apiKey ?? '')) {
+    return { outcome: 'rejected', message: '' };
+  }
+  const response = await fetcher(machine.origin + '/api/printer/command', {
+    method: 'POST',
+    redirect: 'error',
+    signal: AbortSignal.timeout(5000),
+    headers: { 'X-Api-Key': machine.apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ commands: [script] })
+  });
+  await response.body?.cancel();
+  if (response.status === 204 || response.ok) return { outcome: 'accepted', responses: null };
+  if (response.status >= 500) throw new Error('OctoPrint gcode outcome unknown');
+  return { outcome: 'rejected', message: response.status === 409 ? 'octoprint-disconnected' : '' };
+}
