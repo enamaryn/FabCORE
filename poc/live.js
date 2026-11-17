@@ -361,10 +361,8 @@ function liveDetail() {
       <div class="row wrap">${btn('camera-start',t('Ouvrir le flux','Open stream'))}
       ${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
     </section>` : '';
-  const manage = state.role === 'admin'
-    ? btn('edit',t('Modifier la machine','Edit machine')) + btn('delete-machine:' + esc(m.id),t('Supprimer la machine','Delete machine'),'','danger')
-    : '';
-  return title(esc(m.name), esc(m.model + ' · ' + m.origin), `<div class="row wrap">${btn('nav:machines',t('Retour au parc','Back to fleet'),'grid','ghost')}${manage}</div>`) +
+  const edit = state.role === 'admin' ? btn('edit',t('Modifier la machine','Edit machine')) : '';
+  return title(esc(m.name), esc(m.model + ' · ' + m.origin), `<div class="row wrap">${btn('nav:machines',t('Retour au parc','Back to fleet'),'grid','ghost')}${edit}</div>`) +
     `<style>
       .machine-detail{display:grid;gap:1rem}
       .machine-detail-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
@@ -791,7 +789,7 @@ document.addEventListener('click', async (event) => {
     const current = machine(value);
     if (!current || !window.confirm(t('Retirer cette machine de FabCore ?', 'Remove this machine from FabCore?') + '\n' + current.name)) return;
     const form = target.form;
-    const controls = (form ? [...form.elements] : [target]).filter(element => !element.disabled);
+    const controls = [...form.elements].filter(element => !element.disabled);
     controls.forEach(element => { element.disabled = true; });
     try {
       await api('machines/delete', { id: current.id });
@@ -801,13 +799,12 @@ document.addEventListener('click', async (event) => {
       temperatureHistory.delete(current.id);
       state.machine = null;
       live.page = 'machines';
-      if (dialog.open) dialog.close();
+      dialog.close();
       renderLive();
       app.querySelector('h1')?.focus();
       toast(t('Machine supprimée.', 'Machine deleted.'));
     } catch (error) {
-      if (form) form.querySelector('[role="alert"]').textContent = problem(error.code);
-      else toast(problem(error.code));
+      form.querySelector('[role="alert"]').textContent = problem(error.code);
     } finally {
       controls.forEach(element => { element.disabled = false; });
     }
