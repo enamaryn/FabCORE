@@ -5,6 +5,7 @@ import { createConnection } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { connect } from 'node:tls';
 import { privateIPv4, readResponse } from './connector-http.mjs';
+import { discoverXTool } from './xtool-discovery.mjs';
 
 const ca = readFileSync(new URL('./certs/bambu-p2s.pem', import.meta.url));
 const toNumber = (ip) => ip.split('.').reduce((number, octet) => number * 256 + Number(octet), 0);
@@ -211,22 +212,31 @@ async function detectHost(host, signal, cc2) {
   return [...found, ...octoprint];
 }
 
-export async function scanNetwork(network, signal, { inspectHost = detectHost, broadcast = detectCC1, machines = [] } = {}) {
+export async function scanNetwork(network, signal, { inspectHost = detectHost, broadcast = detectCC1, xtoolDiscovery = discoverXTool, machines = [] } = {}) {
   setMaxListeners(128, signal);
   const cc2 = new Map(machines.filter(machine => machine.kind === 'elegoo' && machine.accessCode)
     .map(machine => [URL.parse(machine.origin)?.hostname, machine]));
   const found = [];
   const discovery = broadcast(network, signal);
-  let cursor = network.start + 1;
+  const hosts = [];
+  for (let address = network.start + 1; address < network.end; address++) {
+    const host = toIP(address);
+    if (!network.own.includes(host)) hosts.push(host);
+  }
+  const xtool = xtoolDiscovery(hosts, network.own[0], signal);
+  let cursor = 0;
   async function worker() {
-    while (!signal.aborted && cursor < network.end) {
-      const host = toIP(cursor++);
-      if (!network.own.includes(host)) found.push(...await inspectHost(host, signal, cc2.get(host)));
+    while (!signal.aborted && cursor < hosts.length) {
+      const host = hosts[cursor++];
+      found.push(...await inspectHost(host, signal, cc2.get(host)));
     }
   }
   await Promise.all(Array.from({ length: 20 }, worker));
-  found.push(...await discovery);
-  return found.sort((a, b) => toNumber(a.host) - toNumber(b.host) || a.kind.localeCompare(b.kind));
+  const xtoolDevices = await xtool;
+  const xtoolHosts = new Set(xtoolDevices.map(({ host }) => host));
+  const devices = found.filter(({ kind, host }) => kind !== 'xtool-m2' || !xtoolHosts.has(host));
+  devices.push(...await discovery, ...xtoolDevices);
+  return devices.sort((a, b) => toNumber(a.host) - toNumber(b.host) || a.kind.localeCompare(b.kind));
 }
 
 
