@@ -23,6 +23,12 @@ const problem = (code) => ({
   'command-state': t('L’état actuel de l’imprimante ne permet pas cette commande.', 'The current printer state does not allow this command.'),
   'command-rejected': t('Moonraker a refusé la commande.', 'Moonraker rejected the command.'),
   'command-unconfirmed': t('État non confirmé. Vérifiez l’imprimante avant de réessayer.', 'State not confirmed. Check the printer before retrying.'),
+  'files-unavailable': t('La machine ne donne pas accès à ses fichiers. Vérifiez la connexion et la clé API.', 'The machine does not give access to its files. Check the connection and API key.'),
+  'upload-rejected': t('La machine a refusé le fichier.', 'The machine rejected the file.'),
+  'upload-failed': t('Envoi interrompu. Vérifiez la liste avant de recommencer.', 'Upload interrupted. Check the list before trying again.'),
+  'upload-busy': t('Un envoi est déjà en cours vers cette machine.', 'An upload to this machine is already in progress.'),
+  'file-too-large': t('Fichier vide ou trop volumineux (512 Mo au maximum).', 'File empty or too large (512 MB maximum).'),
+  missing: t('Élément introuvable.', 'Item not found.'),
   'observer-duplicate': t('Cet identifiant est déjà utilisé.', 'This username is already in use.'),
   'observer-limit': t('La limite de 16 observateurs est atteinte.', 'The limit of 16 observers has been reached.'),
   'probe-busy': t('Un test est déjà en cours. Réessayez dans quelques secondes.', 'A test is already running. Try again in a few seconds.'),
@@ -100,7 +106,9 @@ function diagnosticMessage(code) {
     identity: t('L’identité de la machine n’a pas été confirmée.', 'The machine identity could not be confirmed.'),
     'invalid-stream': t('La caméra a renvoyé une réponse incompatible.', 'The camera returned an incompatible response.'),
     interrupted: t('Le flux a été interrompu.', 'The stream was interrupted.'),
-    closed: t('Flux fermé.', 'Stream closed.')
+    closed: t('Flux fermé.', 'Stream closed.'),
+    uploaded: t('Fichier envoyé sur la machine.', 'File uploaded to the machine.'),
+    'print-started': t('Impression lancée depuis FabCore.', 'Print started from FabCore.')
   })[code] || t(...(statusLabels[code] ?? [code, code]));
 }
 
@@ -109,7 +117,7 @@ function diagnosticsPage() {
   const scope = live.diagnosticScope ?? '';
   const date = (at) => at ? new Date(at).toLocaleString(state.lang) : '—';
   const labels = {
-    server: 'FabCore', mqtt: 'MQTT', camera: t('Caméra', 'Camera'), status: t('État', 'Status')
+    server: 'FabCore', mqtt: 'MQTT', camera: t('Caméra', 'Camera'), status: t('État', 'Status'), files: t('Fichiers', 'Files')
   };
   const header = title(t('Diagnostics', 'Diagnostics'), '', btn('diagnostics', t('Actualiser', 'Refresh'), 'activity'));
   if (!data) return header + '<p role="status">' +
@@ -385,6 +393,7 @@ function liveDetail() {
     <div class="machine-detail">
       <div class="machine-detail-row">${camera}${liveTemperatures(m)}</div>
       <div class="machine-detail-row"><div data-live-telemetry>${liveFabrication(m)}</div><div data-live-filaments>${liveFilaments(m)}</div></div>
+      ${filesPanel(m)}
     </div>`;
 }
 
@@ -488,7 +497,7 @@ function renderLive() {
   document.documentElement.lang = state.lang;
   document.documentElement.dataset.theme = state.theme === 'system' ? (media.matches ? 'light' : 'dark') : state.theme;
   const signedIn = live.phase === 'workshop';
-  const screens = { diagnostics: diagnosticsPage, notifications: notificationPage, home: dashboard, machines: liveFleet, detail: liveDetail, history: () =>
+  const screens = { diagnostics: diagnosticsPage, notifications: notificationPage, home: dashboard, machines: liveFleet, detail: liveDetail, viewer: viewerPage, history: () =>
     title(t('Activité récente','Recent activity')) + `<section class="panel">${listEvents()}</section>` };
   app.innerHTML = `<a class="skip" href="#content">${t('Aller au contenu','Skip to content')}</a><div class="${signedIn?'layout':''}">
     ${signedIn?`<aside class="sidebar">${brand()}<nav aria-label="${t('Navigation principale','Main navigation')}">${liveNavigation()}</nav><div class="sidefoot"><small class="signal">POC${state.role === 'viewer' ? ' · ' + t('Observateur','Observer') : ''}</small></div></aside>`:''}
@@ -504,6 +513,8 @@ function renderLive() {
       ${signedIn?screens[live.page]():credentialsPage()}
     </main></div></div>
     ${signedIn?`<nav class="mobile" style="grid-template-columns:repeat(3,1fr)" aria-label="${t('Navigation mobile','Mobile navigation')}">${liveNavigation()}</nav>`:''}`;
+  if (signedIn && live.page === 'viewer') mountGcode();
+  if (signedIn && live.page === 'detail' && state.machine && machineConnectors[machine(state.machine)?.kind]?.files && filesState(state.machine).files === null) loadFiles(state.machine);
 }
 
 const statusLabels = {
@@ -542,6 +553,7 @@ async function refresh() {
     const cameraImage = app.querySelector('[data-live-camera] img');
     if (cameraImage && current?.cameraOpen) cameraImage.dataset.streamOpened = 'true';
     if (cameraImage?.dataset.streamOpened && !current?.cameraOpen) showCamera(false, true);
+    updateViewer();
     const plot = app.querySelector('[data-temperature-plot]');
     const newestSample = String(temperatureHistory.get(current?.id)?.at(-1)?.at ?? '');
     if (plot && current && plot.dataset.sample !== newestSample) {
@@ -550,7 +562,7 @@ async function refresh() {
     }
     const checkedAt = current?.checkedAt;
     if (timestamp && checkedAt) timestamp.textContent = new Date(checkedAt).toLocaleTimeString(state.lang);
-    if ((changed || hadRefreshError) && !dialog.open && !['notifications', 'diagnostics'].includes(live.page)) {
+    if ((changed || hadRefreshError) && !dialog.open && !['notifications', 'diagnostics', 'viewer'].includes(live.page)) {
       const action = document.activeElement?.dataset.action;
       const telemetry = app.querySelector('[data-live-telemetry]');
       if (!hadRefreshError && telemetry && current) {
@@ -559,6 +571,8 @@ async function refresh() {
         if (readings) readings.innerHTML = temperatureReadings(current);
         const filaments = app.querySelector('[data-live-filaments]');
         if (filaments) filaments.innerHTML = liveFilaments(current);
+        if (Boolean(app.querySelector('[data-files] [data-action="viewer-live"]')) !== Boolean(liveFile(current)) ||
+          Boolean(app.querySelector('[data-files] [data-action^="files-print"]')) !== canStart(current)) renderFiles(current.id);
       } else renderLive();
       if (action) [...app.querySelectorAll('[data-action]')].find(button => button.dataset.action === action && button.getClientRects().length)?.focus();
     }
@@ -583,6 +597,8 @@ function openWorkshop(username, role) {
   state.role = role === 'admin' ? 'admin' : 'viewer';
   live.username = username;
   temperatureHistory.clear();
+  Object.assign(gcode, { machine: null, path: '', size: 0, result: null, layer: 0, loading: null, error: '', view: null });
+  machineFiles.clear();
   live.phase = 'workshop';
   live.page = 'home';
   live.error = '';
@@ -953,6 +969,428 @@ document.addEventListener('submit', async (event) => {
     if (pairing) dialog.removeEventListener('close', cancelPairing);
     controls.forEach((element) => { element.disabled = false; });
   }
+});
+
+// Fichiers de la machine et visualiseur G-code en direct.
+// Le fichier est lu depuis la machine via FabCore ; la position d’impression vient de la télémétrie.
+const gcodeLimit = 512 * 1024 * 1024;
+const gcode = { machine: null, path: '', size: 0, result: null, layer: 0, read: 0, loading: null, error: '', travel: true, previous: true, follow: true, view: null };
+const machineFiles = new Map();
+const fileName = (path) => path.split('/').at(-1);
+
+function filesState(id) {
+  if (!machineFiles.has(id)) machineFiles.set(id, { files: null, loading: false, error: '', upload: null });
+  return machineFiles.get(id);
+}
+
+function liveFile(m) {
+  return (m.status === 'printing' || m.status === 'paused') && typeof m.filePath === 'string' && Number.isFinite(m.filePosition) ? m.filePath : null;
+}
+
+function canStart(m) {
+  return state.role === 'admin' && (m.status === 'ready' || m.status === 'done');
+}
+
+function filesPanel(m) {
+  if (!machineConnectors[m.kind]?.files) return '';
+  const entry = filesState(m.id);
+  const current = liveFile(m);
+  const size = (bytes) => bytes === null ? '—' : bytes >= 1048576 ? (bytes / 1048576).toLocaleString(state.lang, { maximumFractionDigits: 1 }) + ' Mo' : Math.ceil(bytes / 1024).toLocaleString(state.lang) + ' ko';
+  const date = (at) => at ? new Date(at).toLocaleString(state.lang, { dateStyle: 'short', timeStyle: 'short' }) : '—';
+  const upload = entry.upload;
+  return `<section class="panel stack" data-files>
+      <div class="row between wrap"><h2>${t('Fichiers de la machine','Machine files')}</h2>${btn('files-refresh', t('Actualiser','Refresh'), '', 'ghost', entry.loading ? 'disabled' : '')}</div>
+      ${current ? `<div class="notice row between wrap"><span>${t('Impression en cours','Print in progress')} · <strong>${esc(fileName(current))}</strong></span>${btn('viewer-live', t('Suivre en direct','Follow live'), 'activity', 'primary')}</div>` : ''}
+      ${state.role === 'admin' ? `<label class="stack"><span>${t('Envoyer un fichier G-code sur la machine','Upload a G-code file to the machine')}</span>
+        <input type="file" accept=".gcode,.gco,.g" data-files-upload ${upload ? 'disabled' : ''}></label>
+        ${upload ? `<p role="status">${t('Envoi de','Uploading')} ${esc(upload.name)}… <span data-upload-percent>${upload.percent}</span> %</p><progress value="${upload.percent}" max="100" data-upload-bar></progress>` : ''}` : ''}
+      ${entry.error ? `<p class="error" role="alert">${esc(entry.error)}</p>` : ''}
+      ${entry.files === null ? `<p role="status">${t('Chargement de la liste…','Loading the list…')}</p>` : entry.files.length ? `<div class="table"><table>
+        <thead><tr><th>${t('Fichier','File')}</th><th>${t('Taille','Size')}</th><th>${t('Modifié','Modified')}</th><th><span class="hide-mobile">${t('Actions','Actions')}</span></th></tr></thead>
+        <tbody>${entry.files.map((file, index) => `<tr><td>${esc(file.path)}</td><td>${size(file.size)}</td><td>${date(file.modified)}</td>
+          <td><div class="row wrap">${btn('viewer-open:' + index, t('Visualiser','View'))}${canStart(m) ? btn('files-print:' + index, t('Imprimer','Print')) : ''}</div></td></tr>`).join('')}</tbody>
+      </table></div>` : `<p class="muted">${t('Aucun fichier G-code sur la machine.','No G-code file on the machine.')}</p>`}
+    </section>`;
+}
+
+function renderFiles(id) {
+  const m = machine(id);
+  const panel = app.querySelector('[data-files]');
+  if (!m || !panel || state.machine !== id || live.page !== 'detail') return;
+  panel.outerHTML = filesPanel(m);
+}
+
+async function loadFiles(id) {
+  const entry = filesState(id);
+  if (entry.loading) return;
+  entry.loading = true;
+  entry.error = '';
+  renderFiles(id);
+  try {
+    entry.files = (await api('machines/' + id + '/files')).files;
+  } catch (error) {
+    entry.files ??= [];
+    entry.error = problem(error.code);
+  } finally {
+    entry.loading = false;
+    renderFiles(id);
+  }
+}
+
+function uploadFile(id, file) {
+  const entry = filesState(id);
+  entry.error = '';
+  if (!/^[\x20-\x7E]{1,200}$/.test(file.name) || file.name.includes('/') || !/\.(gcode|gco|g)$/i.test(file.name)) {
+    entry.error = t('Nom invalide : caractères ASCII et extension .gcode, .gco ou .g.', 'Invalid name: ASCII characters and a .gcode, .gco or .g extension.');
+    return renderFiles(id);
+  }
+  if (file.size > gcodeLimit || file.size < 1) {
+    entry.error = problem('file-too-large');
+    return renderFiles(id);
+  }
+  entry.upload = { name: file.name, percent: 0 };
+  renderFiles(id);
+  const request = new XMLHttpRequest();
+  request.open('POST', '/api/machines/' + id + '/files?name=' + encodeURIComponent(file.name));
+  request.setRequestHeader('Content-Type', 'application/octet-stream');
+  request.upload.onprogress = (event) => {
+    if (!event.lengthComputable) return;
+    entry.upload.percent = Math.floor(event.loaded / event.total * 100);
+    const label = app.querySelector('[data-upload-percent]');
+    const bar = app.querySelector('[data-upload-bar]');
+    if (label) label.textContent = entry.upload.percent;
+    if (bar) bar.value = entry.upload.percent;
+  };
+  request.onloadend = () => {
+    let code = '';
+    try { code = JSON.parse(request.responseText).error ?? ''; } catch { /* réponse vide */ }
+    entry.upload = null;
+    if (request.status === 201) {
+      toast(t('Fichier envoyé sur la machine.', 'File uploaded to the machine.'));
+      loadFiles(id);
+    } else {
+      entry.error = request.status === 0 ? t('Envoi interrompu. Vérifiez la liste avant de recommencer.', 'Upload interrupted. Check the list before trying again.') : problem(code);
+      renderFiles(id);
+    }
+  };
+  request.send(file);
+}
+
+async function startPrint(id, path) {
+  const m = machine(id);
+  if (!m || !path || !window.confirm(t('Lancer l’impression sur','Start printing on') + ' ' + m.name + ' ?\n\n' + path)) return;
+  try {
+    await api('machines/' + id + '/print', { path, confirm: true });
+    toast(t('Impression lancée.', 'Print started.'));
+  } catch (error) {
+    toast(problem(error.code));
+  }
+  refresh();
+}
+
+function openViewer(id, path, follow) {
+  if (gcode.machine !== id || gcode.path !== path) {
+    Object.assign(gcode, { machine: id, path, size: 0, result: null, layer: 0, read: 0, error: '', view: null });
+    loadGcode(id, path);
+  }
+  gcode.follow = follow;
+  live.page = 'viewer';
+  renderLive();
+  app.querySelector('h1')?.focus();
+}
+
+function viewerLive() {
+  const m = machine(gcode.machine);
+  if (!m || !gcode.result || liveFile(m) !== gcode.path) return null;
+  return { printed: printedSegments(gcode.result, m.filePosition), status: m.status, progress: m.progress };
+}
+
+function viewerStatus() {
+  const now = viewerLive();
+  if (!now) return t('Aperçu du fichier · pas d’impression en cours de ce fichier.', 'File preview · this file is not being printed.');
+  const layer = layerOfSegment(gcode.result, Math.max(0, now.printed - 1));
+  return `${now.status === 'paused' ? t('En pause','Paused') : t('En direct','Live')} · ${t('couche','layer')} ${layer + 1} / ${gcode.result.layers.length} · ${now.progress} %`;
+}
+
+function viewerPage() {
+  const m = machine(gcode.machine);
+  if (!m) return liveFleet();
+  const result = gcode.result;
+  const percent = gcode.loading && gcode.size ? Math.floor(gcode.read / gcode.size * 100) : 0;
+  const unsupported = result?.unsupported.length ? `<p class="notice" role="status">${t('Trajectoires non prises en charge, ignorées dans l’aperçu :','Unsupported moves, skipped in the preview:')}
+    ${result.unsupported.map(({ command, count, line }) => `<code>${esc(command)}</code> × ${count} (${t('première ligne','first line')} ${line})`).join(', ')}</p>` : '';
+  const actions = `<div class="row wrap">${btn('machine:' + m.id, t('Retour à la machine','Back to machine'), 'machine', 'ghost')}${canStart(m) && result ? btn('viewer-print', t('Lancer l’impression','Start print'), '', 'primary') : ''}</div>`;
+  return title(esc(fileName(gcode.path)), esc(m.name + ' · ' + gcode.path), actions) +
+    `<style>
+      .gcode-canvas{position:relative;height:min(68vh,640px);min-height:320px;border:1px solid var(--line);border-radius:10px;background:var(--raised);overflow:hidden;touch-action:none;cursor:grab}
+      .gcode-canvas canvas{display:block;width:100%;height:100%}
+      .gcode-canvas.dragging{cursor:grabbing}
+      .gcode-layer{flex:1 1 220px;min-width:0}
+      .gcode-layer input{width:100%;min-height:0;padding:0}
+      .gcode-legend{display:inline-flex;align-items:center;gap:6px}
+      .gcode-legend::before{content:"";width:16px;height:3px;border-radius:2px;background:currentColor}
+    </style>
+    <div class="stack">
+      ${gcode.loading ? `<section class="panel stack"><p role="status" data-gcode-progress>${t('Lecture du fichier depuis la machine…','Reading the file from the machine…')} ${percent} %</p><progress value="${percent}" max="100"></progress></section>` : ''}
+      ${gcode.error ? `<p class="error" role="alert">${esc(gcode.error)}</p>` : ''}
+      ${result && !gcode.loading ? `<p class="muted">${result.lines.toLocaleString(state.lang)} ${t('lignes','lines')} · ${result.layers.length} ${t('couches','layers')} · ${result.types.length.toLocaleString(state.lang)} ${t('segments','segments')}</p>${unsupported}` : ''}
+      ${result && !gcode.loading ? (result.layers.length ? `<section class="panel stack">
+        <div class="row wrap between"><strong data-viewer-status>${viewerStatus()}</strong>
+          <label class="row"><input type="checkbox" data-gcode-option="follow" ${gcode.follow ? 'checked' : ''}> ${t('Suivre la couche en cours','Follow the current layer')}</label></div>
+        <div class="row wrap">
+          ${btn('gcode-layer:-1', t('Couche précédente','Previous layer'))}
+          <label class="gcode-layer stack"><span data-gcode-label>${gcodeLayerLabel()}</span>
+            <input type="range" min="1" max="${result.layers.length}" value="${gcode.layer + 1}" data-gcode-layer></label>
+          ${btn('gcode-layer:1', t('Couche suivante','Next layer'))}
+        </div>
+        <div class="row wrap between">
+          <div class="row wrap">
+            <label class="row"><input type="checkbox" data-gcode-option="travel" ${gcode.travel ? 'checked' : ''}> ${t('Déplacements à vide','Travel moves')}</label>
+            <label class="row"><input type="checkbox" data-gcode-option="previous" ${gcode.previous ? 'checked' : ''}> ${t('Couche précédente en fond','Previous layer underneath')}</label>
+          </div>
+          <div class="row wrap">
+            ${btn('gcode-zoom:out', '−', '', '', `aria-label="${t('Dézoomer','Zoom out')}"`)}
+            ${btn('gcode-zoom:in', '+', '', '', `aria-label="${t('Zoomer','Zoom in')}"`)}
+            ${btn('gcode-fit', t('Ajuster','Fit'))}
+          </div>
+        </div>
+        <div class="gcode-canvas" data-gcode-canvas><canvas role="img" aria-label="${t('Trajectoires de la couche','Layer toolpaths')}"></canvas></div>
+        <div class="row wrap"><small class="gcode-legend good">${t('Imprimé','Printed')}</small><small class="gcode-legend neutral">${t('À imprimer','To print')}</small><small class="gcode-legend info">${t('Déplacement à vide','Travel move')}</small><small class="gcode-legend warn">${t('Buse','Nozzle')}</small>
+          <small>${t('Molette ou boutons pour zoomer, glisser pour déplacer.','Wheel or buttons to zoom, drag to pan.')}</small></div>
+      </section>` : `<p class="notice">${t('Aucune extrusion trouvée dans ce fichier.','No extrusion found in this file.')}</p>`) : ''}
+    </div>`;
+}
+
+function gcodeLayerLabel() {
+  const layer = gcode.result?.layers[gcode.layer];
+  if (!layer) return '';
+  return `${t('Couche','Layer')} ${gcode.layer + 1} / ${gcode.result.layers.length} · Z ${layer.z.toLocaleString(state.lang)} mm`;
+}
+
+let printedSegments;
+let layerOfSegment;
+async function loadGcode(id, path) {
+  const token = {};
+  gcode.loading = token;
+  try {
+    const parserModule = await import('/gcode.mjs');
+    ({ printedSegments, layerOfSegment } = parserModule);
+    const response = await fetch('/api/machines/' + id + '/file?path=' + encodeURIComponent(path));
+    if (!response.ok) {
+      let code = '';
+      try { code = (await response.json()).error; } catch { /* corps vide */ }
+      throw Object.assign(new Error(code), { code });
+    }
+    gcode.size = Number(response.headers.get('content-length')) || 0;
+    const parser = parserModule.createGcodeParser();
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    let shown = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (gcode.loading !== token) return reader.cancel();
+      if (done) break;
+      parser.write(value);
+      gcode.read += value.length;
+      if (Date.now() - shown > 150) {
+        shown = Date.now();
+        const percent = gcode.size ? Math.min(100, Math.floor(gcode.read / gcode.size * 100)) : 0;
+        const status = app.querySelector('[data-gcode-progress]');
+        if (status) {
+          status.textContent = `${t('Lecture du fichier depuis la machine…','Reading the file from the machine…')} ${percent} %`;
+          status.nextElementSibling.value = percent;
+        }
+        await new Promise(resolve => setTimeout(resolve));
+      }
+    }
+    gcode.result = parser.finish();
+    const now = viewerLive();
+    if (now && gcode.follow) gcode.layer = layerOfSegment(gcode.result, Math.max(0, now.printed - 1));
+  } catch (error) {
+    if (gcode.loading !== token) return;
+    gcode.error = error.code ? problem(error.code) : t('Lecture du fichier impossible.', 'Could not read the file.');
+  }
+  gcode.loading = null;
+  if (live.page === 'viewer') renderLive();
+}
+
+// Appelé à chaque actualisation de la télémétrie pendant que le visualiseur est ouvert.
+function updateViewer() {
+  if (live.page !== 'viewer' || !gcode.result) return;
+  const status = app.querySelector('[data-viewer-status]');
+  if (status) status.textContent = viewerStatus();
+  const now = viewerLive();
+  if (now && gcode.follow) {
+    const layer = layerOfSegment(gcode.result, Math.max(0, now.printed - 1));
+    if (layer !== gcode.layer) return setGcodeLayer(layer);
+  }
+  drawGcode();
+}
+
+function gcodeFit(canvas) {
+  const bounds = gcode.result?.bounds;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (!bounds) return { scale: 1, x: width / 2, y: height / 2 };
+  const margin = 24;
+  const scale = Math.min((width - margin * 2) / Math.max(bounds.maxX - bounds.minX, 1), (height - margin * 2) / Math.max(bounds.maxY - bounds.minY, 1));
+  return {
+    scale,
+    x: width / 2 - (bounds.minX + bounds.maxX) / 2 * scale,
+    y: height / 2 + (bounds.minY + bounds.maxY) / 2 * scale
+  };
+}
+
+function drawGcode() {
+  const canvas = app.querySelector('[data-gcode-canvas] canvas');
+  const result = gcode.result;
+  if (!canvas || !result?.layers.length) return;
+  const ratio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  gcode.view ??= gcodeFit(canvas);
+  const { scale, x: offsetX, y: offsetY } = gcode.view;
+  const context = canvas.getContext('2d');
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, width, height);
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  const colors = getComputedStyle(document.documentElement);
+  const color = (name) => colors.getPropertyValue(name).trim();
+  const { segments, types } = result;
+  const stroke = (from, to, type, style, lineWidth, alpha) => {
+    if (from >= to) return;
+    context.beginPath();
+    for (let index = from; index < to; index++) {
+      if (types[index] !== type) continue;
+      const at = index * 4;
+      context.moveTo(offsetX + segments[at] * scale, offsetY - segments[at + 1] * scale);
+      context.lineTo(offsetX + segments[at + 2] * scale, offsetY - segments[at + 3] * scale);
+    }
+    context.globalAlpha = alpha;
+    context.strokeStyle = style;
+    context.lineWidth = lineWidth;
+    context.stroke();
+  };
+  const current = result.layers[gcode.layer];
+  const below = result.layers[gcode.layer - 1];
+  const now = viewerLive();
+  const printed = now ? Math.min(Math.max(now.printed, current.start), current.end) : current.end;
+  if (gcode.previous && below) stroke(below.start, below.end, 1, color('--dim'), 1.5, 0.3);
+  stroke(printed, current.end, 1, color('--dim'), 1.6, 0.55);
+  stroke(current.start, printed, 1, color('--accent'), 1.8, 1);
+  if (gcode.travel) stroke(current.start, printed, 0, color('--blue'), 1, 0.7);
+  if (now && now.printed > current.start && now.printed <= current.end) {
+    const at = (now.printed - 1) * 4;
+    context.globalAlpha = 1;
+    context.fillStyle = color('--amber');
+    context.beginPath();
+    context.arc(offsetX + segments[at + 2] * scale, offsetY - segments[at + 3] * scale, 5, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.globalAlpha = 1;
+}
+
+function zoomGcode(factor, x, y) {
+  const canvas = app.querySelector('[data-gcode-canvas] canvas');
+  if (!canvas || !gcode.view) return;
+  const view = gcode.view;
+  const scale = Math.min(Math.max(view.scale * factor, 0.05), 2000);
+  const centerX = x ?? canvas.clientWidth / 2;
+  const centerY = y ?? canvas.clientHeight / 2;
+  view.x = centerX - (centerX - view.x) * scale / view.scale;
+  view.y = centerY - (centerY - view.y) * scale / view.scale;
+  view.scale = scale;
+  drawGcode();
+}
+
+function setGcodeLayer(index) {
+  const layers = gcode.result?.layers;
+  if (!layers?.length) return;
+  gcode.layer = Math.min(Math.max(index, 0), layers.length - 1);
+  const slider = app.querySelector('[data-gcode-layer]');
+  if (slider) slider.value = gcode.layer + 1;
+  const label = app.querySelector('[data-gcode-label]');
+  if (label) label.textContent = gcodeLayerLabel();
+  drawGcode();
+}
+
+// Un choix manuel de couche suspend le suivi automatique.
+function chooseGcodeLayer(index) {
+  if (gcode.follow) {
+    gcode.follow = false;
+    const follow = app.querySelector('[data-gcode-option="follow"]');
+    if (follow) follow.checked = false;
+  }
+  setGcodeLayer(index);
+}
+
+function mountGcode() {
+  const area = app.querySelector('[data-gcode-canvas]');
+  if (!area) return;
+  const canvas = area.querySelector('canvas');
+  let drag = null;
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    const box = canvas.getBoundingClientRect();
+    zoomGcode(event.deltaY < 0 ? 1.2 : 1 / 1.2, event.clientX - box.left, event.clientY - box.top);
+  }, { passive: false });
+  canvas.addEventListener('pointerdown', (event) => {
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    canvas.setPointerCapture(event.pointerId);
+    area.classList.add('dragging');
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (drag?.id !== event.pointerId || !gcode.view) return;
+    gcode.view.x += event.clientX - drag.x;
+    gcode.view.y += event.clientY - drag.y;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    drawGcode();
+  });
+  const release = () => {
+    drag = null;
+    area.classList.remove('dragging');
+  };
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+  drawGcode();
+}
+
+app.addEventListener('change', (event) => {
+  if (event.target.matches('[data-files-upload]') && event.target.files[0] && state.machine) uploadFile(state.machine, event.target.files[0]);
+  if (event.target.matches('[data-gcode-option]')) {
+    const option = event.target.dataset.gcodeOption;
+    gcode[option] = event.target.checked;
+    if (option === 'follow') return updateViewer();
+    drawGcode();
+  }
+});
+
+app.addEventListener('input', (event) => {
+  if (event.target.matches('[data-gcode-layer]')) chooseGcodeLayer(Number(event.target.value) - 1);
+});
+
+app.addEventListener('click', (event) => {
+  const [action, value] = (event.target.closest('[data-action]')?.dataset.action ?? '').split(':');
+  const m = machine(state.machine);
+  const listed = m && machineFiles.get(m.id)?.files?.[Number(value)];
+  if (action === 'gcode-layer') chooseGcodeLayer(gcode.layer + Number(value));
+  if (action === 'gcode-zoom') zoomGcode(value === 'in' ? 1.5 : 1 / 1.5);
+  if (action === 'gcode-fit') {
+    gcode.view = null;
+    drawGcode();
+  }
+  if (action === 'files-refresh' && m) loadFiles(m.id);
+  if (action === 'viewer-open' && listed) openViewer(m.id, listed.path, liveFile(m) === listed.path);
+  if (action === 'viewer-live' && m && liveFile(m)) openViewer(m.id, liveFile(m), true);
+  if (action === 'files-print' && listed) startPrint(m.id, listed.path);
+  if (action === 'viewer-print') startPrint(gcode.machine, gcode.path);
+});
+
+window.addEventListener('resize', () => {
+  if (live.page === 'viewer') drawGcode();
 });
 
 dialog.addEventListener('close', () => {

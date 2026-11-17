@@ -110,6 +110,17 @@ Pour un **serveur existant**, indiquer l’URL HTTPS, le sujet et le mode d’au
 
 FabCore relaie la vidéo RTSPS de la P2S au navigateur sous forme de MJPEG. Vérifier que le port local TCP 322 est joignable et que la caméra est annoncée dans les réglages de diffusion locale de la P2S. L’installateur FabCore installe FFmpeg depuis les dépôts du système. Sur une installation existante faite à la main, installer le paquet `ffmpeg`. Le flux s’ouvre sur la fiche de la P2S et utilise le code d’accès LAN déjà enregistré.
 
+## Fichiers et visualiseur G-code en direct
+
+Sur la fiche d’une machine Klipper (Moonraker) ou OctoPrint, le panneau **Fichiers de la machine** liste les fichiers G-code présents sur la machine (dossier `gcodes` de Moonraker, stockage local d’OctoPrint).
+
+- **Visualiser** ouvre le fichier dans le visualiseur par couches : sélection de couche, zoom à la molette ou aux boutons, déplacement par glisser. Le fichier est lu depuis la machine à travers FabCore.
+- Pendant une impression, **Suivre en direct** ouvre le fichier en cours. Le visualiseur se place sur la couche en cours, colore la partie déjà imprimée et marque la position de la buse. Il s’appuie sur la position de lecture dans le fichier (`virtual_sdcard.file_position` pour Klipper, `progress.filepos` pour OctoPrint), actualisée avec la télémétrie. Choisir une autre couche suspend le suivi ; cocher **Suivre la couche en cours** le reprend.
+- L’administrateur peut **envoyer un fichier** (`.gcode`, `.gco` ou `.g`, nom ASCII, 512 Mo au maximum) et **lancer l’impression** d’un fichier quand la machine est disponible ou a terminé. Le lancement demande une confirmation et n’est jamais renvoyé automatiquement si son résultat est incertain.
+- L’observateur peut consulter la liste et le visualiseur, sans envoyer ni lancer.
+
+Le visualiseur gère `G0`/`G1`, les arcs `G2`/`G3` donnés par `I`/`J`, `G90`/`G91`, `M82`/`M83`, `G92`, `G20`/`G21` et `G28`. Les autres trajectoires (`G5`, arcs `R`, plans `G18`/`G19`…) sont ignorées et listées avec leur première ligne. Les fichiers imprimés depuis la carte SD d’OctoPrint ne sont pas lisibles par FabCore.
+
 ## Fonctionnement et limites
 
 - Pour la télémétrie, l’adaptateur interroge `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.

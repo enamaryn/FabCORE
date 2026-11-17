@@ -1,4 +1,4 @@
-import { moonrakerOrigin, readResponse } from './connector-http.mjs';
+import { encodePath, filePath, moonrakerOrigin, multipart, readResponse } from './connector-http.mjs';
 export { privateIPv4, moonrakerOrigin, readResponse } from './connector-http.mjs';
 
 const query = '/printer/objects/query?webhooks&print_stats&virtual_sdcard&extruder&heater_bed';
@@ -37,13 +37,18 @@ export async function readMoonraker(machine, fetcher = fetch) {
     if (!status) return unavailable('error', 'print_stats');
 
     const progress = objects.virtual_sdcard?.progress;
+    const position = objects.virtual_sdcard?.file_position;
+    const active = status === 'printing' || status === 'paused';
+    const live = active && typeof print.filename === 'string' && print.filename.length <= 255 && Number.isFinite(position)
+      ? { filePath: print.filename, filePosition: position } : {};
     return {
       status,
       issue: status === 'error' ? 'print' : null,
       nozzle: temperature(objects.extruder?.temperature),
       bed: temperature(objects.heater_bed?.temperature),
       progress: status === 'done' ? 100 : Number.isFinite(progress) ? Math.round(Math.max(0, Math.min(1, progress)) * 100) : 0,
-      file: typeof print.filename === 'string' ? print.filename.slice(0, 200) : ''
+      file: typeof print.filename === 'string' ? print.filename.slice(0, 200) : '',
+      ...live
     };
   } catch (error) {
     return error instanceof SyntaxError ? unavailable('error', 'moonraker') : unavailable('offline', 'connection');
@@ -68,4 +73,45 @@ export async function commandMoonraker(machine, action, fetcher = fetch) {
   }
   if ((await readResponse(response))?.result !== 'ok') throw new Error('Moonraker command outcome unknown');
   return true;
+}
+
+// Fichiers du dossier gcodes de Moonraker : liste, lecture pour le visualiseur, envoi et lancement d’une impression.
+export function createMoonrakerFiles(fetcher = fetch) {
+  const call = (machine, path, options = {}) => {
+    if (moonrakerOrigin(machine.origin) !== machine.origin) throw new Error('invalid origin');
+    return fetcher(machine.origin + path, {
+      redirect: 'error', ...options,
+      headers: { ...(machine.apiKey ? { 'X-Api-Key': machine.apiKey } : {}), ...options.headers }
+    });
+  };
+  return {
+    async list(machine) {
+      const response = await call(machine, '/server/files/list?root=gcodes', { method: 'GET', signal: AbortSignal.timeout(5000) });
+      if (!response.ok) { await response.body?.cancel(); throw new Error('list ' + response.status); }
+      const entries = (await readResponse(response))?.result;
+      if (!Array.isArray(entries)) throw new Error('list');
+      return entries.filter(entry => filePath(entry?.path)).map(({ path, size, modified }) => ({
+        path, size: Number.isFinite(size) ? size : null, modified: Number.isFinite(modified) ? modified * 1000 : null
+      }));
+    },
+    download: (machine, path, signal) => call(machine, '/server/files/gcodes/' + encodePath(path), { method: 'GET', signal }),
+    async upload(machine, name, source, size) {
+      const form = multipart('file', name, source, size, { root: 'gcodes' });
+      const response = await call(machine, '/server/files/upload', { method: 'POST', body: form.body, duplex: 'half', headers: form.headers });
+      if (!response.ok) { await response.body?.cancel(); return null; }
+      const body = await readResponse(response);
+      const path = (body?.result ?? body)?.item?.path;
+      return filePath(path) ?? name;
+    },
+    async start(machine, path) {
+      const response = await call(machine, '/printer/print/start?filename=' + encodeURIComponent(path), { method: 'POST', signal: AbortSignal.timeout(5000) });
+      if (!response.ok) {
+        await response.body?.cancel();
+        if (response.status >= 500) throw new Error('start outcome unknown');
+        return false;
+      }
+      if ((await readResponse(response))?.result !== 'ok') throw new Error('start outcome unknown');
+      return true;
+    }
+  };
 }
