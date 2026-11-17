@@ -42,7 +42,7 @@ test('M2 lit son identité et son état, et refuse un certificat différent', as
   assert.equal(rejected.issue, 'xtool-identity');
   authRequired = true;
   assert.deepEqual(await readXTool(machine, { identityOnly: true, Socket: MockSocket }), { candidate: true });
-  assert.equal((await readXTool(machine, { Socket: MockSocket })).issue, 'xtool-protocol');
+  assert.equal((await readXTool(machine, { Socket: MockSocket })).issue, 'xtool-authorization');
   assert.deepEqual(requests, [
     ['GET', '/v1/user/parity'],
     ['GET', '/v1/platform/device/machine-info'],
