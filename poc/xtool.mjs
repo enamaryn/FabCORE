@@ -35,7 +35,7 @@ function encode(value) {
 
 const result = (status, issue = null) => ({ status, issue, nozzle: null, bed: null, progress: 0, file: '' });
 
-export function readXTool(machine, { signal, identityOnly = false, pairing = false, onStatus, Socket = WebSocket } = {}) {
+export function readXTool(machine, { signal, identityOnly = false, pairing = false, onStatus, onReady, Socket = WebSocket } = {}) {
   const url = new URL(machine.origin);
   if (url.protocol !== 'wss:' || !privateIPv4(url.hostname) || url.port !== '28900' || signal?.aborted) {
     return Promise.resolve(result('offline', 'xtool-connection'));
@@ -58,6 +58,7 @@ export function readXTool(machine, { signal, identityOnly = false, pairing = fal
     let pairingToken;
     let reportedState;
     let syncAcknowledged = false;
+    const pending = new Map();
     let heartbeat;
     let heartbeatAt = Date.now();
     const requests = [
@@ -77,12 +78,18 @@ export function readXTool(machine, { signal, identityOnly = false, pairing = fal
       clearInterval(heartbeat);
       signal?.removeEventListener('abort', disconnect);
       ws.terminate();
+      for (const request of pending.values()) {
+        clearTimeout(request.timer);
+        request.reject(new Error('xtool-connection'));
+      }
+      pending.clear();
       onStatus?.(state);
       resolve(state);
     }
     function send(method, path, data = {}) {
       ws.send(encode({ type: 'request', method, url: path, params: {}, data, timestamp: Date.now(),
         transactionId: ++transaction, ...(sessionToken ? { sessionToken } : {}) }));
+      return transaction;
     }
     function sendNext() {
       send(...requests[step++]);
@@ -110,6 +117,18 @@ export function readXTool(machine, { signal, identityOnly = false, pairing = fal
       onStatus(state);
       resolve(state);
       if (!heartbeat) {
+        onReady?.({
+          url, fingerprint, Socket,
+          request(method, path, data = {}, params = {}) {
+            return new Promise((resolve, reject) => {
+              const id = ++transaction;
+              const timer = setTimeout(() => { pending.delete(id); reject(new Error('xtool-protocol')); }, 10_000);
+              pending.set(id, { resolve, reject, timer });
+              ws.send(encode({ type: 'request', method, url: path, params, data,
+                timestamp: Date.now(), transactionId: id, ...(sessionToken ? { sessionToken } : {}) }));
+            });
+          }
+        });
         heartbeat = setInterval(() => {
           if (Date.now() - heartbeatAt > 35_000) return disconnect();
           ws.send(encode({ type: 'request', method: 'GET', url: '/v1/user/ping',
@@ -122,6 +141,14 @@ export function readXTool(machine, { signal, identityOnly = false, pairing = fal
     function handleResponse(payload) {
       let message;
       try { message = JSON.parse(payload); } catch { return finish(result('error', 'xtool-protocol')); }
+      const request = message?.type === 'response' && pending.get(message.transactionId);
+      if (request) {
+        pending.delete(message.transactionId);
+        clearTimeout(request.timer);
+        if (message.code === 0) request.resolve(message.data);
+        else request.reject(new Error('xtool-camera'));
+        return;
+      }
       if (message?.type === 'response' && message.transactionId === 65510) {
         if (message.code === 0) heartbeatAt = Date.now();
         return;
@@ -202,9 +229,12 @@ export function createXToolMonitor({ Socket = WebSocket } = {}) {
         sessions.set(machine.id, entry);
         const update = state => {
           entry.current = { ...state, checkedAt: new Date().toISOString() };
-          if (state.issue && ['offline', 'error'].includes(state.status)) entry.retryAt = Date.now() + 30_000;
+          if (state.issue && ['offline', 'error'].includes(state.status)) {
+            entry.session = null;
+            entry.retryAt = Date.now() + 30_000;
+          }
         };
-        void readXTool(machine, { Socket, signal: entry.controller.signal, onStatus: update });
+        void readXTool(machine, { Socket, signal: entry.controller.signal, onStatus: update, onReady: session => { entry.session = session; } });
       } else if (entry.retryAt && entry.retryAt <= Date.now()) {
         forget(machine.id);
         return read(machine);
@@ -213,6 +243,11 @@ export function createXToolMonitor({ Socket = WebSocket } = {}) {
   }
   return {
     read,
+    async camera(machine, output, signal, onFrame) {
+      read(machine);
+      const { streamXToolCamera } = await import('./xtool-camera.mjs');
+      return streamXToolCamera(() => sessions.get(machine.id)?.session, output, signal, onFrame);
+    },
     forget,
     close() {
       for (const id of sessions.keys()) forget(id);

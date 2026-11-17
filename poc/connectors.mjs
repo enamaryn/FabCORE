@@ -113,7 +113,7 @@ const definitions = {
       monitor.forget(machine.id);
       return identified(await readXTool(machine, options), ['xtool-device']);
     } };
-  }, { temperatures: false, printJob: false, live: true, verify: true })
+  }, { temperatures: false, printJob: false, camera: true, live: true, verify: true })
 };
 
 function identified(result, tolerated) {
