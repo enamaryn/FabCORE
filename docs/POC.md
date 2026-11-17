@@ -4,6 +4,10 @@
 
 Finaliser la recette de découverte réseau sur le LXC. Vérifier qu’OctoPrint est trouvé même sans imprimante branchée et que la P2S et les deux Elegoo apparaissent comme déjà ajoutées. Les améliorations de scan sont incluses dans la [PR #29](https://github.com/enamaryn/FabCORE/pull/29), fusionnée. La recette sur le réseau réel reste à confirmer.
 
+## Gestion du parc
+
+Suppression d’une machine depuis sa fiche, réservée aux administrateurs. Le parcours HTTP couvre les droits Observateur, la suppression persistante et le réajout. Essai sur le LXC prévu après fusion.
+
 ## Ensuite
 
 1. Visualiseur G-code par couches, avec ouverture d’un fichier local et distinction des extrusions et déplacements à vide. [Ticket #31](https://github.com/enamaryn/FabCORE/issues/31)
