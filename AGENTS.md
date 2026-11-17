@@ -14,7 +14,7 @@ Ce fichier s’adresse à toute personne ou IA qui intervient sur le dépôt. **
 | MVP · planifié | [Périmètre et agent local FabCore Cloud](docs/MVP.md) |
 | Développement complet | [Évolutions après le MVP](docs/FULL-DEVELOPPEMENT.md) |
 
-Pour l’exploitation, consulter le [guide du POC](poc/README.md). Pour ajouter ou modifier un connecteur, lire le [contrat des connecteurs](poc/CONNECTORS.md).
+Pour l’exploitation, consulter le [guide du POC](poc/README.md). Pour ajouter ou modifier un connecteur, lire le [contrat des connecteurs](poc/CONNECTORS.md). Pour une interface, lire les [règles produit](docs/PRODUCT.md). L’intention d’origine du projet est dans le [prompt d’origine](MASTER_PROMPT_ORIGIN.md), à consulter seulement pour un cadrage.
 
 ## Modifier le code
 
