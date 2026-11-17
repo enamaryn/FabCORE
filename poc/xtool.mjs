@@ -243,10 +243,10 @@ export function createXToolMonitor({ Socket = WebSocket } = {}) {
   }
   return {
     read,
-    async camera(machine, output, signal, onFrame) {
+    async camera(machine, output, signal, onFrame, view) {
       read(machine);
       const { streamXToolCamera } = await import('./xtool-camera.mjs');
-      return streamXToolCamera(() => sessions.get(machine.id)?.session, output, signal, onFrame);
+      return streamXToolCamera(() => sessions.get(machine.id)?.session, output, signal, onFrame, view);
     },
     forget,
     close() {
