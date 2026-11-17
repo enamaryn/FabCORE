@@ -19,20 +19,24 @@ Le découpage suit la même convention que le [POC](POC.md#lire-ce-plan) : étap
 | MVP-07 | Notifications et alertes | À faire |
 | MVP-08 | Historique et fichiers | À faire |
 | MVP-09 | Agent local et FabCore Cloud | À faire |
-| MVP-10 | Sécurité, accessibilité et qualité | À faire |
-| MVP-11 | Open source et documentation | À faire |
-| MVP-12 | Bêta et recette de sortie | À faire |
+| MVP-10 | Offre professionnelle et tarification | À faire |
+| MVP-11 | Sécurité, accessibilité et qualité | À faire |
+| MVP-12 | Open source et documentation | À faire |
+| MVP-13 | Bêta et recette de sortie | À faire |
 
 ## MVP-00 · Cadrage
 
-À faire. Décisions à prendre avec le porteur du projet, consignées dans `docs/DECISIONS.md` (à créer à ce moment).
+En cours. Décisions prises ou proposées le 17 novembre 2026, à consigner dans `docs/DECISIONS.md` lors de la création du socle.
 
 - [ ] MVP-00.1 Bilan du POC ([POC-11](POC.md#poc-11--clôture-du-poc-et-passage-au-mvp)) : ce qui est conservé, réécrit ou abandonné.
-- [ ] MVP-00.2 Architecture cible. Le POC est en JavaScript sans framework avec un fichier `state.json`. Le prompt d’origine oriente vers TypeScript strict, React, PostgreSQL et un monolithe modulaire. Choisir entre une migration progressive et un nouveau socle.
-- [ ] MVP-00.3 Persistance : PostgreSQL ou SQLite, avec reprise des données du POC.
-- [ ] MVP-00.4 Temps réel : remplacer l’interrogation toutes les deux secondes par SSE ou WebSocket.
-- [ ] MVP-00.5 Modèle d’hébergement. Le prompt d’origine impose l’auto-hébergement sans compte cloud obligatoire. Le [prompt consolidé](../MASTER_PROMPT.md#poc-mvp-et-suite) vise aussi un SaaS avec agent local. Confirmer que les deux coexistent et que l’auto-hébergement reste complet.
-- [ ] MVP-00.6 Priorité des connecteurs P0 et liste du matériel de recette disponible.
+- [ ] MVP-00.2 Architecture cible · **recommandation à valider** : TypeScript strict sur Node.js LTS, monolithe modulaire, migration progressive module par module depuis le POC (pas de réécriture), tests verts à chaque étape. Les connecteurs du POC sont repris, pas réécrits.
+- [ ] MVP-00.3 Persistance · **recommandation à valider** : PostgreSQL en auto-hébergement comme en cloud (un seul chemin de code), installé par l’installateur, avec reprise du `state.json` du POC.
+- [ ] MVP-00.4 Interface et temps réel · **recommandation à valider** : React pour l’interface définitive, SSE à la place de l’interrogation toutes les deux secondes.
+- [x] MVP-00.5 Modèle d’hébergement · **décidé** :
+  - Auto-hébergement gratuit, sans compte cloud, limité à **10 machines**.
+  - Au-delà : **offre professionnelle** avec compte FabCore Cloud, agent local relié au compte et abonnement ([MVP-10](#mvp-10--offre-professionnelle-et-tarification)).
+- [ ] MVP-00.6 Priorité des connecteurs et liste du matériel de recette disponible.
+- [ ] MVP-00.7 Licence et modèle économique. Le code est sous GPL-3.0 : une limite inscrite dans le code libre peut être retirée par un fork. Choisir entre une valeur professionnelle portée par les services cloud (hébergement, agent, multi-ateliers, support) et un changement de licence (par exemple AGPL et licence commerciale, avec cession des droits des contributeurs). Avis juridique conseillé.
 
 ## MVP-01 · Socle technique
 
@@ -88,7 +92,10 @@ Le découpage suit la même convention que le [POC](POC.md#lire-ce-plan) : étap
 - [ ] MVP-04.6 OctoPrint : événements, caméras, commandes.
 - [ ] MVP-04.7 PrusaLink : fichiers et commandes.
 - [ ] MVP-04.8 Creality : K1, K1C, K1 Max, K2, K2 Plus, Ender selon firmware.
-- [ ] MVP-04.9 Anycubic, QIDI Tech, Sovol, Flashforge : étude, simulateurs, puis connecteurs selon le matériel disponible.
+- [ ] MVP-04.9 Anycubic, QIDI Tech, Sovol, Flashforge : étude des protocoles, puis connecteurs.
+- [ ] MVP-04.10 Longer (laser) : supervision, sans lancement à distance.
+- [ ] MVP-04.11 Simulateurs de toutes les marques visées (Bambu Lab, Elegoo, Creality, Prusa, Anycubic, QIDI Tech, Sovol, Flashforge, Longer, xTool, Klipper, OctoPrint) pour développer et tester sans matériel. Décidé le 17 novembre 2026 ([POC-11.9](POC.md#poc-11--clôture-du-poc-et-passage-au-mvp)).
+- [ ] MVP-04.12 Recette sur matériel réel pour chaque connecteur avant le statut `Validé`. Un connecteur testé seulement sur simulateur reste `Expérimental`.
 
 ## MVP-05 · Supervision et pilotage
 
@@ -140,30 +147,42 @@ Le découpage suit la même convention que le [POC](POC.md#lire-ce-plan) : étap
 - [ ] MVP-09.6 Isolation entre deux ateliers qui utilisent les mêmes adresses privées.
 - [ ] MVP-09.7 Pilote sur un atelier réel.
 
-## MVP-10 · Sécurité, accessibilité et qualité
+## MVP-10 · Offre professionnelle et tarification
+
+À faire. Dépend de MVP-00.5, MVP-00.7 et MVP-09.
+
+- [ ] MVP-10.1 Limite de 10 machines en auto-hébergement : comptage côté serveur, message clair à l’ajout de la 11e machine, aucune machine existante désactivée.
+- [ ] MVP-10.2 Comptes FabCore Cloud : inscription, organisation, ateliers.
+- [ ] MVP-10.3 Passage de l’auto-hébergement à l’offre professionnelle : appairage de l’agent, reprise des machines et des réglages.
+- [ ] MVP-10.4 Grille tarifaire (par machine, par atelier ou par paliers) et période d’essai.
+- [ ] MVP-10.5 Abonnement et paiement via un prestataire, factures.
+- [ ] MVP-10.6 Isolation des données entre clients, sauvegardes du cloud.
+- [ ] MVP-10.7 Conditions d’utilisation, politique de confidentialité et conformité RGPD.
+
+## MVP-11 · Sécurité, accessibilité et qualité
 
 À faire.
 
-- [ ] MVP-10.1 Audit sécurité : CSRF, SSRF, WebSocket, flux vidéo, secrets, limitation des tentatives.
-- [ ] MVP-10.2 Tests de non-régression des parcours principaux.
-- [ ] MVP-10.3 Tests responsive (desktop, tablette, mobile) et i18n.
-- [ ] MVP-10.4 Accessibilité WCAG 2.2 AA dans les deux thèmes.
+- [ ] MVP-11.1 Audit sécurité : CSRF, SSRF, WebSocket, flux vidéo, secrets, limitation des tentatives.
+- [ ] MVP-11.2 Tests de non-régression des parcours principaux.
+- [ ] MVP-11.3 Tests responsive (desktop, tablette, mobile) et i18n.
+- [ ] MVP-11.4 Accessibilité WCAG 2.2 AA dans les deux thèmes.
 
-## MVP-11 · Open source et documentation
-
-À faire.
-
-- [ ] MVP-11.1 Licence GPL-3.0 confirmée après vérification des licences des dépendances.
-- [ ] MVP-11.2 `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`.
-- [ ] MVP-11.3 Modèles d’issues et de PR.
-- [ ] MVP-11.4 Documentation utilisateur et guide d’installation FR/EN.
-- [ ] MVP-11.5 Documentation développeur et guide des connecteurs.
-- [ ] MVP-11.6 Vérification du nom (dépôts, domaines, marques), sans valeur juridique.
-
-## MVP-12 · Bêta et recette de sortie
+## MVP-12 · Open source et documentation
 
 À faire.
 
-- [ ] MVP-12.1 Bêta sur au moins un atelier réel en auto-hébergement et un via l’agent.
-- [ ] MVP-12.2 Critères de sortie : parcours du [résultat recherché](../MASTER_PROMPT_ORIGIN.md#21-résultat-recherché) réalisable de bout en bout.
-- [ ] MVP-12.3 Bilan et cadrage du [développement complet](FULL-DEVELOPPEMENT.md).
+- [ ] MVP-12.1 Licence confirmée selon MVP-00.7, après vérification des licences des dépendances.
+- [ ] MVP-12.2 `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`.
+- [ ] MVP-12.3 Modèles d’issues et de PR.
+- [ ] MVP-12.4 Documentation utilisateur et guide d’installation FR/EN.
+- [ ] MVP-12.5 Documentation développeur et guide des connecteurs.
+- [ ] MVP-12.6 Vérification du nom (dépôts, domaines, marques), sans valeur juridique.
+
+## MVP-13 · Bêta et recette de sortie
+
+À faire.
+
+- [ ] MVP-13.1 Bêta sur au moins un atelier réel en auto-hébergement et un en offre professionnelle via l’agent.
+- [ ] MVP-13.2 Critères de sortie : parcours du [résultat recherché](../MASTER_PROMPT_ORIGIN.md#21-résultat-recherché) réalisable de bout en bout.
+- [ ] MVP-13.3 Bilan et cadrage du [développement complet](FULL-DEVELOPPEMENT.md).

@@ -163,7 +163,7 @@ En cours. Chaque sous-étape passe à `Testé matériel` une fois vérifiée sur
 - [ ] POC-11.6 Erreurs détectables : hors ligne, accès refusé, firmware en erreur.
 - [ ] POC-11.7 Authentification locale et OIDC fonctionnelles.
 - [ ] POC-11.8 Limites documentées dans le [guide](../poc/README.md) et la [matrice de compatibilité](MVP.md#mvp-04--connecteurs-p0-validés-modèle-par-modèle).
-- [ ] POC-11.9 Décision : simulateurs des autres marques P0 (Anycubic, QIDI, Sovol, Flashforge, Creality) en fin de POC ou en [MVP-04](MVP.md#mvp-04--connecteurs-p0-validés-modèle-par-modèle).
+- [x] POC-11.9 Simulateurs et connecteurs des autres marques : **décidé**, reportés au [MVP-04](MVP.md#mvp-04--connecteurs-p0-validés-modèle-par-modèle) (17 novembre 2026).
 - [ ] POC-11.10 Bilan technique et décisions d’architecture pour [MVP-00](MVP.md#mvp-00--cadrage).
 
 [Guide d’exploitation et de configuration](../poc/README.md)
