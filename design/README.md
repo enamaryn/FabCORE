@@ -22,6 +22,7 @@ Les données métier et les étapes de l’assistant vivent en mémoire de la pa
 | [Prusa Connect / PrusaLink](https://help.prusa3d.com/article/prusa-connect-and-prusalink-explained_302608) | Supervision du parc et distinction accès local/cloud | Laisser le mode de connexion lisible et distinguer la vue parc des capacités de la liaison |
 | [CNCjs](https://cnc.js.org/docs/user-guide/) | L’atelier CNC organise ses commandes autour des axes, de l’origine et de la trajectoire | Prévoir une fiche par famille de machine, avec un vocabulaire adapté |
 | [PrintBuddy](https://www.printbuddy.tech/index-en) | Vue multimarque et différences de capacité documentées par fournisseur | Utiliser un état commun pour le parc et faire varier fichiers, caméra et pilotage par appareil |
+| [SimplyPrint](https://simplyprint.io/fr) ([tarifs](https://simplyprint.io/pricing.md)) | Gestion cloud multimarque d’imprimantes 3D par abonnement, intégrations natives annoncées pour Bambu Lab et Prusa. Gratuit limité à 2 imprimantes. Au relevé de novembre 2026 : Basic jusqu’à 3 imprimantes (environ 6 $/mois), Pro jusqu’à 10 imprimantes (30 à 40 $/mois), essai de 14 jours | Concurrent direct de l’offre professionnelle. FabCore se distingue par l’open source, l’auto-hébergement gratuit jusqu’à 10 machines et les familles laser et CNC. L’offre pro doit se vendre sur le service cloud, pas sur le nombre de machines. Repère pour la grille tarifaire ([MVP-11](../docs/MVP.md#mvp-11--offre-professionnelle-et-tarification)) |
 
 ## Architecture et design system
 

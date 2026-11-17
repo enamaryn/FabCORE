@@ -186,7 +186,11 @@ En cours. Décisions prises le 17 novembre 2026, à consigner dans `docs/DECISIO
 - [ ] MVP-11.1 Limite de 10 machines en auto-hébergement : comptage côté serveur, message clair à l’ajout de la 11e machine, aucune machine existante désactivée.
 - [ ] MVP-11.2 Comptes FabCore Cloud : inscription, organisation, ateliers.
 - [ ] MVP-11.3 Passage de l’auto-hébergement à l’offre professionnelle : appairage de l’agent, reprise des machines et des réglages.
-- [ ] MVP-11.4 Grille tarifaire (par machine, par atelier ou par paliers) et période d’essai.
+- [ ] MVP-11.0 Positionnement face à la concurrence :
+  - [ ] Étude des offres cloud existantes : [SimplyPrint](../design/README.md#benchmark) (relevé initial), OctoEverywhere, Obico et autres acteurs pertinents. Fonctions, matériel pris en charge, auto-hébergement, prix.
+  - [ ] Différences de FabCore à mettre en avant (open source, auto-hébergement gratuit, lasers et CNC) et fonctions attendues absentes du plan (par exemple tranchage dans le cloud, file d’impression).
+  - [ ] Décisions reportées dans le plan (MVP ou [développement complet](FULL-DEVELOPPEMENT.md)).
+- [ ] MVP-11.4 Grille tarifaire (par machine, par atelier ou par paliers) et période d’essai, en s’appuyant sur MVP-11.0.
 - [ ] MVP-11.5 Abonnement et paiement via un prestataire, factures.
 - [ ] MVP-11.6 Isolation des données entre clients, sauvegardes du cloud.
 - [ ] MVP-11.7 Conditions d’utilisation, politique de confidentialité et conformité RGPD.
