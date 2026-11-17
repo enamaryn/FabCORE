@@ -107,7 +107,7 @@ export function readXTool(machine, { signal, identityOnly = false, pairing = fal
       try { message = JSON.parse(payload); } catch { return finish(result('error', 'xtool-protocol')); }
       const push = message?.data?.['/v1/platform/device/state'];
       if (message?.type === 'request' || message?.method === 'REPORT') {
-        const state = states.get(push?.curMode?.mode);
+        const state = states.get(push?.mode ?? push?.curMode?.mode);
         if (state) {
           reportedState = state;
           completeStatus();
