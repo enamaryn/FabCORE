@@ -41,17 +41,18 @@ async function elegooCamera(machine, output, signal, onFrame, openCamera, identi
 }
 
 const definitions = {
-  klipper: httpConnector('Klipper · Moonraker', 7125, false, async ({ readPrinter, sendCommand, sendGcode }) => {
+  klipper: httpConnector('Klipper · Moonraker', 7125, false, async ({ readPrinter, sendCommand, sendGcode, fetchFiles }) => {
     const mod = await import('./moonraker.mjs');
     const read = readPrinter ?? mod.readMoonraker;
     return { read: machine => read(machine), probe: probeStatus(machine => read(machine), ['print']), command: sendCommand ?? mod.commandMoonraker,
-      gcode: sendGcode ?? mod.sendMoonrakerGcode };
-  }, { commands: true, terminal: true }),
-  octoprint: httpConnector('OctoPrint', 5000, true, async ({ readOcto, sendGcode }) => {
+      files: mod.createMoonrakerFiles(fetchFiles), gcode: sendGcode ?? mod.sendMoonrakerGcode };
+  }, { commands: true, files: true, terminal: true }),
+  octoprint: httpConnector('OctoPrint', 5000, true, async ({ readOcto, sendGcode, fetchFiles }) => {
     const mod = await import('./octoprint.mjs');
     const read = readOcto ?? mod.readOctoPrint;
-    return { read, probe: probeStatus(read, ['octoprint-disconnected', 'octoprint-printer-error'], true), gcode: sendGcode ?? mod.sendOctoPrintGcode };
-  }, { interval: 5000, terminal: true }),
+    return { read, probe: probeStatus(read, ['octoprint-disconnected', 'octoprint-printer-error'], true), files: mod.createOctoPrintFiles(fetchFiles),
+      gcode: sendGcode ?? mod.sendOctoPrintGcode };
+  }, { interval: 5000, files: true, terminal: true }),
   prusalink: httpConnector('PrusaLink', 80, true, async ({ readPrusa }) => {
     const read = readPrusa ?? (await import('./prusalink.mjs')).readPrusaLink;
     return { read, probe: probeStatus(read, ['prusalink-printer-error'], true) };
@@ -104,22 +105,28 @@ const definitions = {
     };
   }, { camera: true, interval: 7000, verify: true }),
   'xtool-m2': localConnector('xTool · M2', 'xtool-m2', (host, _data, existing) => ({
-    origin: `wss://${host}:28900`, serial: existing?.serial, fingerprint: existing?.fingerprint
+    origin: `wss://${host}:28900`, serial: existing?.serial, fingerprint: existing?.fingerprint,
+    ...(existing?.origin === `wss://${host}:28900` && existing.pairingToken ? { pairingToken: existing.pairingToken } : {})
   }), async () => {
-    const { readXTool } = await import('./xtool.mjs');
-    return { read: readXTool, probe: async (machine, options) => identified(await readXTool(machine, options), ['xtool-device']) };
-  }, { temperatures: false, printJob: false, interval: 15000, verify: true })
+    const { readXTool, createXToolMonitor } = await import('./xtool.mjs');
+    const monitor = createXToolMonitor();
+    return { ...monitor, probe: async (machine, options) => {
+      monitor.forget(machine.id);
+      return identified(await readXTool(machine, options), ['xtool-device']);
+    } };
+  }, { temperatures: false, printJob: false, camera: true, live: true, verify: true })
 };
 
 function identified(result, tolerated) {
   const ok = Boolean(result.serial && (!result.issue || tolerated.includes(result.issue)));
   return { ok, issue: ok ? null : result.issue, serial: result.serial,
-    ...(result.fingerprint ? { fingerprint: result.fingerprint } : {}) };
+    ...(result.fingerprint ? { fingerprint: result.fingerprint } : {}),
+    ...(result.pairingToken ? { pairingToken: result.pairingToken } : {}) };
 }
 export const connectorDefinition = kind => typeof kind === 'string' && Object.hasOwn(definitions, kind) ? definitions[kind] : null;
 export const connectorCatalog = Object.fromEntries(Object.entries(definitions).map(([kind, {
-  model, form, port, required, camera = false, commands = false, terminal = false, filaments = null, temperatures = true, printJob = true
-}]) => [kind, { model, form, port, required, camera, commands, terminal, filaments, temperatures, printJob }]));
+  model, form, port, required, camera = false, commands = false, files = false, terminal = false, filaments = null, temperatures = true, printJob = true
+}]) => [kind, { model, form, port, required, camera, commands, files, terminal, filaments, temperatures, printJob }]));
 
 export function createConnectorRegistry(options, definition = connectorDefinition) {
   const pending = new Map();

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
-import { readXTool } from './xtool.mjs';
+import { createXToolMonitor, readXTool } from './xtool.mjs';
 
 test('M2 lit son identité et son état, et refuse un certificat différent', async () => {
   const requests = [];
@@ -52,4 +52,105 @@ test('M2 lit son identité et son état, et refuse un certificat différent', as
     ['GET', '/v1/user/parity'],
     ['GET', '/v1/user/parity']
   ]);
+});
+
+test('M2 attend la confirmation et réutilise le jeton lors de la connexion suivante', async () => {
+  let confirmationRequested = false;
+  let pair = true;
+  class MockSocket extends EventEmitter {
+    constructor() {
+      super();
+      queueMicrotask(() => {
+        this.emit('upgrade', { socket: { getPeerCertificate: () => ({ fingerprint256: 'AA:BB' }) } });
+        this.emit('open');
+      });
+    }
+    send(frame) {
+      const request = JSON.parse(frame.subarray(10));
+      let code = 0;
+      let data;
+      switch (request.url) {
+        case '/v1/user/parity':
+          assert.equal(request.data.token, pair ? '' : 'persistent-token');
+          if (pair) {
+            code = 406;
+            data = { authState: 'WAITING_BUTTON_CONFIRM' };
+          } else data = { sessionToken: 'temporary-token' };
+          break;
+        case '/v1/user/auth-status':
+          confirmationRequested = true;
+          data = { token: 'persistent-token', sessionToken: 'temporary-token' };
+          break;
+        case '/v1/platform/device/machine-info':
+          assert.equal(request.sessionToken, 'temporary-token');
+          if (pair) assert.ok(confirmationRequested);
+          data = { sn: 'M2-123456' };
+          break;
+        case '/v1/platform/device/state/sync':
+          assert.equal(request.sessionToken, 'temporary-token');
+          this.emit('message', Buffer.from(JSON.stringify({
+            type: 'request', transactionId: 99999,
+            data: { '/v1/platform/device/state': { mode: 'Idle' } }
+          })), false);
+          data = {};
+          break;
+        default:
+          assert.fail(request.url);
+      }
+      queueMicrotask(() => this.emit('message', Buffer.from(JSON.stringify({
+        type: 'response', transactionId: request.transactionId, code, data
+      })), false));
+    }
+    terminate() {}
+  }
+  const machine = { origin: 'wss://192.168.1.12:28900' };
+  const paired = await readXTool(machine, { Socket: MockSocket, pairing: true });
+  assert.equal(paired.status, 'ready');
+  assert.equal(paired.pairingToken, 'persistent-token');
+  pair = false;
+  const status = await readXTool({ ...machine, pairingToken: paired.pairingToken, fingerprint: paired.fingerprint },
+    { Socket: MockSocket });
+  assert.equal(status.status, 'ready');
+  assert.equal(status.pairingToken, undefined);
+});
+
+test('la supervision M2 garde une seule connexion entre plusieurs lectures', async () => {
+  let opened = 0;
+  let closed = 0;
+  let socket;
+  class MockSocket extends EventEmitter {
+    constructor() {
+      super();
+      opened++;
+      socket = this;
+      queueMicrotask(() => {
+        this.emit('upgrade', { socket: { getPeerCertificate: () => ({ fingerprint256: 'AA:BB' }) } });
+        this.emit('open');
+      });
+    }
+    send(frame) {
+      const req = JSON.parse(frame.subarray(10));
+      const data = req.url.endsWith('machine-info') ? { sn: 'M2TEST01' }
+        : req.url.endsWith('sync') ? { curMode: { mode: 'Idle' } } : {};
+      queueMicrotask(() => this.emit('message', Buffer.from(JSON.stringify({
+        type: 'response', transactionId: req.transactionId, code: 0, data
+      })), false));
+    }
+    terminate() { closed++; }
+  }
+  const monitor = createXToolMonitor({ Socket: MockSocket });
+  const machine = { id: 'test', origin: 'wss://192.168.1.12:28900' };
+  monitor.read(machine);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(monitor.read(machine).status, 'ready');
+  monitor.read(machine);
+  assert.equal(opened, 1);
+  assert.equal(closed, 0);
+  socket.emit('message', Buffer.from(JSON.stringify({
+    type: 'request', method: 'REPORT',
+    data: { '/v1/platform/device/state': { mode: 'WorkPlay' } }
+  })), false);
+  assert.equal(monitor.read(machine).status, 'printing');
+  monitor.close();
+  assert.equal(closed, 1);
 });

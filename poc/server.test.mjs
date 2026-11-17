@@ -72,6 +72,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   let ambiguousCommand = false;
   const origin = 'http://fabcore.test';
   const cameraInputs = new Map();
+  let cc2Probes = 0;
   let cameraContentType = 'multipart/x-mixed-replace; boundary=frame';
   const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token',
     notify: async (channel, config, internal) => {
@@ -103,6 +104,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
       return input;
     },
     readCC2: async (machine) => {
+      cc2Probes++;
     const serial = machine.origin.endsWith('.54:1883') ? 'CC2TEST02' : 'CC2TEST01';
     const issue = machine.serial && machine.serial !== serial ? 'elegoo-identity' : null;
     return { serial, issue, status: issue ? 'error' : 'ready', nozzle: 25, bed: 24, progress: 0, file: '' };
@@ -241,11 +243,14 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   ambiguousCommand = false;
   const cc2 = { kind: 'elegoo', host: '192.168.1.53', accessCode: 'ExampleCode', name: 'CC2 atelier' };
   assert.deepEqual(await (await call('/api/machines/test', { body: cc2, cookie })).json(), { ok: true, issue: null, serial: 'CC2TEST01' });
+  const probesAfterTest = cc2Probes;
   const firstCC2 = await call('/api/machines', { body: cc2, cookie });
+  assert.equal(cc2Probes, probesAfterTest);
   assert.equal(firstCC2.status, 201);
   const firstCC2Id = (await firstCC2.json()).id;
   const secondCC2 = await call('/api/machines', { body: { ...cc2, host: '192.168.1.54', name: 'CC2 bureau' }, cookie });
   assert.equal(secondCC2.status, 201);
+  assert.equal(cc2Probes, probesAfterTest + 1);
   assert.equal((await call('/api/machines', { body: { ...cc2, host: '192.168.1.55' }, cookie })).status, 409);
   const movedCC2 = { ...cc2, id: firstCC2Id, host: '192.168.1.55', accessCode: '' };
   assert.deepEqual(await (await call('/api/machines/edit', { body: movedCC2, cookie })).json(), { id: firstCC2Id });

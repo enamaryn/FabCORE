@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { once } from 'node:events';
 import { randomBytes, randomUUID, createHash, scrypt, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -9,15 +10,18 @@ import { discoveryNetworks, reconcileDiscovery, scanNetwork } from './discovery.
 import { connectorCatalog, connectorDefinition, createConnectorRegistry } from './connectors.mjs';
 import { createDiagnostics } from './diagnostics.mjs';
 import { cameraRelay } from './camera-viewers.mjs';
+import { cameraPreview } from './camera-preview.mjs';
 import { createOidc } from './oidc.mjs';
 import { internalNtfy, notificationSettings, publicNotifications, sendNotification } from './notifications.mjs';
 import { openStore } from './store.mjs';
+import { filePath } from './connector-http.mjs';
 
 const derive = promisify(scrypt);
 const digest = (secret) => createHash('sha256').update(secret).digest();
 const sessionAge = 8 * 60 * 60 * 1000;
 const activationAge = 15 * 60 * 1000;
 const minute = 60_000;
+const fileLimit = 512 * 1024 * 1024;
 const shared = readFileSync(new URL('../design/prototype.html', import.meta.url), 'utf8');
 const sharedScript = shared.match(/<script>([\s\S]+)<\/script>/)[1];
 const liveHtml = shared
@@ -28,6 +32,7 @@ const assets = new Map([
   ['/', ['text/html; charset=utf-8', liveHtml]],
   ['/shared.js', ['text/javascript; charset=utf-8', sharedScript]],
   ['/live.js', ['text/javascript; charset=utf-8', `const machineConnectors = ${JSON.stringify(connectorCatalog)};\n` + readFileSync(new URL('./live.js', import.meta.url), 'utf8')]],
+  ['/gcode.mjs', ['text/javascript; charset=utf-8', readFileSync(new URL('./gcode.mjs', import.meta.url), 'utf8')]],
   ['/favicon.svg', ['image/svg+xml', readFileSync(new URL('../design/brand/favicon.svg', import.meta.url))]]
 ]);
 
@@ -88,7 +93,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -102,13 +107,16 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const attempts = new Map();
   const diagnostics = createDiagnostics();
   diagnostics.record('server', 'started');
-  const connectors = createConnectorRegistry({ readPrinter, readOcto, readPrusa, sendCommand, sendGcode, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera });
+  const connectors = createConnectorRegistry({ readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera });
   const snapshot = monitor(async (machine) => {
     const connector = await connectors.get(machine.kind ?? 'klipper');
     const { serial, fingerprint, ...telemetry } = await connector.read(machine);
     return telemetry;
   });
   const pendingCommands = new Set();
+  const pendingUploads = new Set();
+  const cc2Tests = new WeakMap();
+  const xtoolPairings = new Set();
   const terminalUse = new Map();
   let probes = 0;
   let discoveryActive = false;
@@ -220,23 +228,44 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         fleet: store.state.machines.map(({ id, name }) => ({ id, name }))
       });
     }
-    const camera = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera$/);
+    const preview = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera\/preview(?:\/(side|far|near))?$/);
+    const camera = preview ?? path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera(?:\/(side|far|near))?$/);
     if (req.method === 'GET' && camera) {
       if (!activeSession) return error(res, 401, 'sign-in');
       const machine = store.state.machines.find(({ id }) => id === camera[1]);
       const definition = connectorDefinition(machine?.kind);
       if (!definition?.camera) return error(res, 404, 'camera-unsupported');
-      let relay = cameraStreams.get(machine.id);
+      if (camera[2] && machine.kind !== 'xtool-m2') return error(res, 404, 'camera-unsupported');
+      const cameraView = machine.kind === 'xtool-m2' ? camera[2] ?? 'side' : undefined;
+      const streamKey = cameraView ? machine.id + '/' + cameraView : machine.id;
+      if (preview && machine.kind === 'xtool-m2' && !cameraStreams.has(streamKey)) {
+        const abort = new AbortController();
+        const timeout = setTimeout(() => abort.abort(), 15_000);
+        res.once('close', () => abort.abort());
+        try {
+          const connector = await connectors.get(machine.kind);
+          const image = await connector.preview(machine, abort.signal, cameraView);
+          if (abort.signal.aborted) return error(res, 504, 'camera-unavailable');
+          res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+          res.end(image);
+        } catch {
+          if (!res.destroyed) error(res, 502, 'camera-unavailable');
+        } finally { clearTimeout(timeout); }
+        return;
+      }
+      const cameraResponse = preview ? cameraPreview(res) : res;
+      let relay = cameraStreams.get(streamKey);
       const viewerCount = [...cameraStreams.values()].reduce((count, stream) => count + stream.viewers.size, 0);
       if (viewerCount >= 32 || (!relay && cameraStreams.size >= 8)) return error(res, 429, 'camera-busy');
       if (relay) {
         if (relay.controller.signal.aborted) return error(res, 503, 'camera-unavailable');
-        relay.subscribe(res, activeSession, viewer.expires);
+        relay.subscribe(cameraResponse, activeSession, viewer.expires);
         return;
       }
       relay = cameraRelay();
-      cameraStreams.set(machine.id, relay);
-      relay.subscribe(res, activeSession, viewer.expires);
+      relay.machineId = machine.id;
+      cameraStreams.set(streamKey, relay);
+      relay.subscribe(cameraResponse, activeSession, viewer.expires);
       const { controller, output } = relay;
       diagnostics.record('camera', 'opening', machine.id);
       let firstFrame = true;
@@ -248,11 +277,11 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       let failure;
       try {
         const connector = await connectors.get(machine.kind);
-        if (!controller.signal.aborted) failure = await connector.camera(machine, output, controller.signal, onFrame);
+        if (!controller.signal.aborted) failure = await connector.camera(machine, output, controller.signal, onFrame, cameraView);
       } catch {
         failure = 'interrupted';
       } finally {
-        cameraStreams.delete(machine.id);
+        cameraStreams.delete(streamKey);
         if (failure && !controller.signal.aborted) diagnostics.record('camera', failure, machine.id);
         if (!firstFrame) diagnostics.record('camera', 'closed', machine.id);
         for (const viewerResponse of relay.viewers.keys()) {
@@ -329,7 +358,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         return {
           id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial,
           model: definition?.model ?? connectorCatalog.klipper.model,
-          cameraOpen: [...(cameraStreams.get(machine.id)?.viewers.values() ?? [])].some(({ owner }) => owner === activeSession),
+          cameraOpen: [...cameraStreams.values()].some(stream => stream.machineId === machine.id && [...stream.viewers.values()].some(({ owner }) => owner === activeSession)),
           ...telemetry
         };
       }));
@@ -405,11 +434,102 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
           return error(res, 504, 'command-unconfirmed');
         }
       } finally {
-        snapshot.forget(machine.id);
         pendingCommands.delete(machine.id);
       }
     }
-    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/edit', '/api/machines/delete', '/api/observers'].includes(path)) {
+    const fileRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/(files|file|print)(?:\?(.*))?$/);
+    if (fileRoute) {
+      if (!viewer) return error(res, 401, 'sign-in');
+      const [, id, route, query = ''] = fileRoute;
+      const machine = store.state.machines.find(entry => entry.id === id);
+      if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.files) return error(res, 404, 'missing');
+      const files = (await connectors.get(machine.kind ?? 'klipper')).files;
+      const params = new URLSearchParams(query);
+      if (req.method === 'GET' && route === 'files') {
+        try {
+          const list = await files.list(machine);
+          return answer(res, 200, { files: list.sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0)).slice(0, 300) });
+        } catch { return error(res, 502, 'files-unavailable'); }
+      }
+      if (req.method === 'GET' && route === 'file') {
+        const target = filePath(params.get('path'));
+        if (!target) return error(res, 400, 'invalid');
+        const controller = new AbortController();
+        res.once('close', () => controller.abort());
+        let response;
+        try { response = await files.download(machine, target, controller.signal); } catch { return error(res, 502, 'files-unavailable'); }
+        if (!response.ok || !response.body) {
+          await response.body?.cancel();
+          return response.status === 404 ? error(res, 404, 'missing') : error(res, 502, 'files-unavailable');
+        }
+        const length = Number(response.headers.get('content-length'));
+        if (length > fileLimit) {
+          await response.body.cancel();
+          return error(res, 413, 'file-too-large');
+        }
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', ...(length > 0 ? { 'Content-Length': String(length) } : {}) });
+        let sent = 0;
+        try {
+          for await (const chunk of response.body) {
+            sent += chunk.length;
+            if (sent > fileLimit) throw new Error('file too large');
+            if (!res.write(chunk)) await once(res, 'drain');
+          }
+          return res.end();
+        } catch { return res.destroy(); }
+      }
+      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+      if (req.headers.origin !== publicUrl.origin) return error(res, 403, 'origin');
+      if (req.method === 'POST' && route === 'files') {
+        const name = params.get('name');
+        const size = Number(req.headers['content-length']);
+        if (req.headers['content-type'] !== 'application/octet-stream' || !filePath(name) || name.includes('/')) return error(res, 400, 'invalid');
+        if (!Number.isSafeInteger(size) || size < 1) return error(res, 411, 'invalid');
+        if (size > fileLimit) return error(res, 413, 'file-too-large');
+        if (pendingUploads.has(machine.id)) return error(res, 409, 'upload-busy');
+        pendingUploads.add(machine.id);
+        try {
+          const stored = await files.upload(machine, name, req, size);
+          if (!stored) return error(res, 502, 'upload-rejected');
+          diagnostics.record('files', 'uploaded', machine.id);
+          return answer(res, 201, { path: stored });
+        } catch {
+          if (!res.headersSent) return error(res, 502, 'upload-failed');
+          return res.destroy();
+        } finally {
+          pendingUploads.delete(machine.id);
+        }
+      }
+      if (req.method === 'POST' && route === 'print') {
+        if (!requireJson(req, res)) return;
+        let data;
+        try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+        const target = filePath(data.path);
+        if (!target || data.confirm !== true) return error(res, 400, 'invalid');
+        if (pendingCommands.has(machine.id)) return error(res, 409, 'command-busy');
+        pendingCommands.add(machine.id);
+        try {
+          const connector = await connectors.get(machine.kind ?? 'klipper');
+          if (!['ready', 'done'].includes((await connector.read(machine)).status)) return error(res, 409, 'command-state');
+          if (res.destroyed) return;
+          if (!session(req)) return error(res, 401, 'sign-in');
+          try {
+            if (!(await files.start(machine, target))) return error(res, 502, 'command-rejected');
+            diagnostics.record('files', 'print-started', machine.id);
+            for (let attempt = 0; attempt < 6; attempt++) {
+              if ((await connector.read(machine)).status === 'printing') return answer(res, 200, { status: 'printing' });
+              if (attempt < 5) await delay(500);
+            }
+          } catch { /* La demande a pu atteindre la machine : ne jamais la renvoyer automatiquement. */ }
+          return error(res, 504, 'command-unconfirmed');
+        } finally {
+          snapshot.forget(machine.id);
+          pendingCommands.delete(machine.id);
+        }
+      }
+      return error(res, 404, 'missing');
+    }
+    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/pair', '/api/machines/edit', '/api/machines/delete', '/api/observers'].includes(path)) {
       return error(res, 404, 'missing');
     }
     if (!requireJson(req, res)) return;
@@ -437,7 +557,9 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         store.save({ ...store.state, machines });
         snapshot.forget(existing.id);
         connectors.forget(existing.kind ?? 'klipper', existing.id, true);
-        cameraStreams.get(existing.id)?.controller.abort();
+        for (const stream of cameraStreams.values()) {
+          if (stream.machineId === existing.id) stream.controller.abort();
+        }
         return answer(res, 200, { id: existing.id });
       }
       if ((path === '/api/machines/edit' || data.id) && !existing) return error(res, 404, 'missing');
@@ -449,28 +571,56 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (!name || !connection) return error(res, 400, 'machine-invalid');
       const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
       const testing = path === '/api/machines/test';
-      if (testing || definition.verify) {
+      const pairing = path === '/api/machines/pair';
+      if (pairing) {
+        if (kind !== 'xtool-m2') return error(res, 400, 'machine-invalid');
+        if (xtoolPairings.has(machine.origin)) return error(res, 409, 'xtool-pairing-busy');
+        if (store.state.machines.some(entry => entry.origin === machine.origin && entry.id !== existing?.id)) {
+          return error(res, 409, 'machine-duplicate');
+        }
+        if (!existing && store.state.machines.length >= 8) return error(res, 409, 'machine-limit');
+      }
+      const cc2TestKey = kind === 'elegoo' && !existing
+        ? digest(JSON.stringify([machine.origin, machine.accessCode])).toString('hex')
+        : null;
+      const previousTest = cc2Tests.get(viewer);
+      const verifiedCC2 = !testing && cc2TestKey && previousTest?.key === cc2TestKey && previousTest.expires > Date.now();
+      if (verifiedCC2) {
+        machine.serial = previousTest.serial;
+      } else if (testing || definition.verify) {
         if (probes >= 2) return error(res, 429, 'probe-busy');
         probes++;
+        if (pairing) xtoolPairings.add(machine.origin);
         const abort = new AbortController();
         res.once('close', () => abort.abort());
         try {
           const connector = await connectors.get(kind);
           if (abort.signal.aborted) return;
           const sameConnection = existing && existing.origin === machine.origin && existing.accessCode === machine.accessCode;
-          const result = await connector.probe(machine, { signal: abort.signal, testing, sameConnection });
+          const result = await connector.probe(machine, { signal: abort.signal, testing, sameConnection, pairing });
           if (abort.signal.aborted) return;
-          if (testing) return answer(res, 200, {
-            ok: result.ok,
-            issue: result.issue ?? (result.ok ? null : 'elegoo-report'),
-            ...(result.ok && result.serial ? { serial: result.serial } : {})
-          });
+          if (pairing && !session(req)) return error(res, 401, 'sign-in');
+          if (testing) {
+            if (cc2TestKey) {
+              cc2Tests.delete(viewer);
+              if (result.ok && result.serial) {
+                cc2Tests.set(viewer, { key: cc2TestKey, serial: result.serial, expires: Date.now() + 60_000 });
+              }
+            }
+            return answer(res, 200, {
+              ok: result.ok,
+              issue: result.issue ?? (result.ok ? null : 'elegoo-report'),
+              ...(result.ok && result.serial ? { serial: result.serial } : {})
+            });
+          }
           if (!result.ok) return error(res, 422, result.issue ?? 'elegoo-info');
           machine.serial = result.serial;
           if (result.fingerprint) machine.fingerprint = result.fingerprint;
+          if (pairing && result.pairingToken) machine.pairingToken = result.pairingToken;
           if (existing && !store.state.machines.includes(existing)) return error(res, 409, 'machine-changed');
         } finally {
           probes--;
+          if (pairing) xtoolPairings.delete(machine.origin);
         }
       }
       if (store.state.machines.some((entry) => entry.id !== existing?.id &&
@@ -481,10 +631,13 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const machines = existing ? store.state.machines.map((entry) => entry.id === machine.id ? machine : entry)
         : [...store.state.machines, machine];
       store.save({ ...store.state, machines });
+      if (verifiedCC2) cc2Tests.delete(viewer);
       if (existing) {
         snapshot.forget(machine.id);
         connectors.forget(kind, machine.id, existing.origin !== machine.origin || existing.accessCode !== machine.accessCode);
-        cameraStreams.get(machine.id)?.controller.abort();
+        for (const stream of cameraStreams.values()) {
+          if (stream.machineId === machine.id) stream.controller.abort();
+        }
       }
       return answer(res, existing ? 200 : 201, { id: machine.id });
     }
