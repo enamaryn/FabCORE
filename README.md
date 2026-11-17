@@ -51,6 +51,12 @@ Le script télécharge le projet, installe les dépendances manquantes, dont Nod
 
 Ouvrez <http://127.0.0.1:3000> et utilisez le jeton affiché pour créer votre compte administrateur. Pour un serveur distant, suivre le [guide d’accès par tunnel SSH ou reverse proxy HTTPS](poc/README.md#4-ouvrir-linterface).
 
+## Mise à jour
+
+Si FabCore tourne dans le terminal, arrêtez-le avec `Ctrl+C`, puis lancez `fabcore-update` avec le compte utilisé pour l’installation. Relancez ensuite `bash scripts/install.sh` depuis le dossier FabCore. Un service systemd actif nommé `fabcore` est redémarré automatiquement si son dossier de travail correspond à cette installation.
+
+`fabcore-update --check` compare la version installée à la branche `main` sans déployer. Si la commande est absente du PATH, utilisez `/usr/local/bin/fabcore-update` pour une installation root ou `~/.local/bin/fabcore-update` pour une installation utilisateur.
+
 ## Ajoutez votre première machine
 
 Lancez la **découverte réseau** depuis **Ajouter une machine**. FabCore préremplit les informations trouvées. Renseignez le code d’accès si la machine en demande un, puis testez la connexion. Vous pouvez aussi saisir son adresse IP manuellement.
