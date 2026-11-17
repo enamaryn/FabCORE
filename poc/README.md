@@ -121,6 +121,17 @@ Sur la fiche d’une machine Klipper (Moonraker) ou OctoPrint, le panneau **Fich
 
 Le visualiseur gère `G0`/`G1`, les arcs `G2`/`G3` donnés par `I`/`J`, `G90`/`G91`, `M82`/`M83`, `G92`, `G20`/`G21` et `G28`. Les autres trajectoires (`G5`, arcs `R`, plans `G18`/`G19`…) sont ignorées et listées avec leur première ligne. Les fichiers imprimés depuis la carte SD d’OctoPrint ne sont pas lisibles par FabCore.
 
+## Terminal G-code
+
+Sur la fiche d’une machine Klipper (Moonraker) ou OctoPrint, l’administrateur dispose d’un **Terminal G-code**. Saisir une commande sur une ligne (256 caractères ASCII au maximum), puis **Envoyer**.
+
+- **Moonraker** : la commande est marquée **Exécutée** quand Klipper l’a traitée, avec les réponses de la machine. Une erreur Klipper apparaît comme **Refusée** avec son message.
+- **OctoPrint** : l’API ne confirme que la mise en file. La commande est marquée **Acceptée** et la réponse de l’imprimante reste visible dans le terminal d’OctoPrint.
+- Pendant une impression ou une pause, toute commande autre qu’une lecture d’état (`M105`, `M114`, `M115`, `M119`, `M27`, `M31`, `M503`, `STATUS`, `HELP`, `GET_POSITION`, `QUERY_ENDSTOPS`, `QUERY_PROBE`) demande une confirmation. Le serveur refuse l’envoi sans elle.
+- Une machine hors ligne ne reçoit rien. Une commande à la fois par machine, deux par seconde et trente par minute au maximum.
+- Si la réponse n’arrive pas, la commande est marquée **Résultat inconnu** et n’est jamais renvoyée automatiquement. Vérifier la machine avant de la renvoyer.
+- Le journal garde les cinquante dernières commandes de la machine dans l’onglet du navigateur. Le journal de diagnostic note le résultat sans le texte de la commande.
+
 ## Fonctionnement et limites
 
 - Pour la télémétrie, l’adaptateur interroge `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.

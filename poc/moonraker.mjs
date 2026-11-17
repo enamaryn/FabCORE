@@ -115,3 +115,44 @@ export function createMoonrakerFiles(fetcher = fetch) {
     }
   };
 }
+
+// Terminal : Moonraker répond une fois le script exécuté par Klipper. Les réponses sont relues dans gcode_store.
+export async function sendMoonrakerGcode(machine, script, fetcher = fetch) {
+  if (moonrakerOrigin(machine.origin) !== machine.origin) return { outcome: 'rejected', message: '' };
+  const headers = machine.apiKey ? { 'X-Api-Key': machine.apiKey } : {};
+  const response = await fetcher(machine.origin + '/printer/gcode/script', {
+    method: 'POST',
+    redirect: 'error',
+    signal: AbortSignal.timeout(60_000),
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ script })
+  });
+  if (!response.ok) {
+    if (response.status >= 500) {
+      await response.body?.cancel();
+      throw new Error('Moonraker gcode outcome unknown');
+    }
+    let message = '';
+    try { message = String((await readResponse(response))?.error?.message ?? ''); } catch { /* corps illisible */ }
+    return { outcome: 'rejected', message: message.slice(0, 500) };
+  }
+  if ((await readResponse(response))?.result !== 'ok') throw new Error('Moonraker gcode outcome unknown');
+  let responses = null;
+  try {
+    const store = await fetcher(machine.origin + '/server/gcode_store?count=50', {
+      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(2500), headers
+    });
+    if (store.ok) {
+      const entries = (await readResponse(store))?.result?.gcode_store;
+      if (Array.isArray(entries)) {
+        const sent = entries.findLastIndex(entry => entry?.type === 'command' && entry.message === script);
+        if (sent !== -1) {
+          responses = entries.slice(sent + 1)
+            .filter(entry => entry?.type === 'response' && typeof entry.message === 'string')
+            .slice(0, 30).map(entry => entry.message.slice(0, 500));
+        }
+      }
+    } else await store.body?.cancel();
+  } catch { /* La commande est exécutée ; seules les réponses manquent. */ }
+  return { outcome: 'executed', responses };
+}

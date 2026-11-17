@@ -27,8 +27,8 @@ La suppression d’une machine et le correctif d’accès à `fabcore-update` da
 
 ## Ensuite
 
-1. Visualiseur G-code par couches, avec ouverture d’un fichier local et distinction des extrusions et déplacements à vide. [Ticket #31](https://github.com/enamaryn/FabCORE/issues/31) · en PR : panneau **Fichiers de la machine** (liste, envoi, lancement d’impression) et visualiseur en direct sur la fiche Moonraker et OctoPrint, analyse dans `poc/gcode.mjs`. Reste à valider sur l’Ender 3 et OctoPrint avec des fichiers réels de PrusaSlicer, Cura, Orca et Bambu Studio.
-2. Terminal G-code pour les connecteurs compatibles, à valider sur Moonraker et OctoPrint. [Ticket #32](https://github.com/enamaryn/FabCORE/issues/32)
+1. POC-09 · Terminal G-code pour Klipper (Moonraker) et OctoPrint, réservé à l’administrateur, sur la fiche machine. [Ticket #32](https://github.com/enamaryn/FabCORE/issues/32) · en PR. Reste à valider commande par commande sur l’Ender 3 (Moonraker) et sur OctoPrint, en commençant par `M105` puis `G28`, puis à étendre aux autres connecteurs.
+2. Visualiseur G-code et fichiers de la machine ([Ticket #31](https://github.com/enamaryn/FabCORE/issues/31)) : fusionné, à valider sur l’Ender 3 et OctoPrint avec des fichiers réels de PrusaSlicer, Cura, Orca et Bambu Studio.
 
 ## Jalons fusionnés
 
@@ -43,5 +43,6 @@ La suppression d’une machine et le correctif d’accès à `fabcore-update` da
 | POC-07 · Pocket ID et OIDC | [#10](https://github.com/enamaryn/FabCORE/pull/10) |
 | POC-08 · ntfy et SMTP | [#11](https://github.com/enamaryn/FabCORE/pull/11) |
 | OctoPrint, PrusaLink et registre des connecteurs | [#25](https://github.com/enamaryn/FabCORE/pull/25), [#29](https://github.com/enamaryn/FabCORE/pull/29) |
+| Visualiseur G-code en direct et fichiers de la machine | [#42](https://github.com/enamaryn/FabCORE/pull/42) |
 
 [Guide d’exploitation et de configuration](../poc/README.md)
