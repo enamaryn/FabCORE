@@ -189,7 +189,8 @@ async function detectXTool(host, signal) {
   const result = await readXTool({ origin: `wss://${host}:28900` }, {
     identityOnly: true, signal: AbortSignal.any([signal, AbortSignal.timeout(1000)])
   });
-  return result.serial ? { kind: 'xtool-m2', host, serial: result.serial } : null;
+  if (result.serial) return { kind: 'xtool-m2', host, serial: result.serial };
+  return result.candidate ? { kind: 'xtool-m2', host, candidate: true } : null;
 }
 
 async function detectHost(host, signal, cc2) {
