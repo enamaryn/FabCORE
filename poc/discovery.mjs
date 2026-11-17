@@ -1,6 +1,7 @@
 import { createSocket } from 'node:dgram';
 import { readFileSync } from 'node:fs';
 import { setMaxListeners } from 'node:events';
+import { createConnection } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { connect } from 'node:tls';
 import { privateIPv4, readResponse } from './connector-http.mjs';
@@ -28,7 +29,7 @@ export function discoveryNetworks(interfaces = networkInterfaces()) {
   return [...available.values()];
 }
 
-async function httpJSON(url, signal) {
+async function httpJSON(url, signal, inspect = () => null) {
   try {
     const response = await fetch(url, {
       redirect: 'error',
@@ -36,6 +37,7 @@ async function httpJSON(url, signal) {
     });
     if (response.ok) return await readResponse(response);
     await response.body?.cancel();
+    return inspect(response);
   } catch { /* An unavailable or unrelated service is skipped. */ }
   return null;
 }
@@ -48,7 +50,7 @@ function detectBambu(host, signal) {
       checkServerIdentity: () => undefined
     });
     const abort = () => finish(null);
-    const timeout = setTimeout(abort, 550);
+    const timeout = setTimeout(abort, 1000);
     function finish(device) {
       clearTimeout(timeout);
       signal.removeEventListener('abort', abort);
@@ -143,35 +145,83 @@ export async function detectOctoPrint(host, signal, fetcher = fetch) {
   return checks.filter(Boolean);
 }
 
-async function detectHost(host, signal) {
-  const [moonraker, elegoo, bambu, octoprint] = await Promise.all([
+function mqttPortOpen(host, signal) {
+  return new Promise(resolve => {
+    const socket = createConnection({ host, port: 1883 });
+    const abort = () => finish(false);
+    const timer = setTimeout(abort, 550);
+    function finish(open) {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', abort);
+      socket.destroy();
+      resolve(open);
+    }
+    socket.once('error', abort);
+    socket.once('connect', () => finish(true));
+    if (signal.aborted) abort();
+    else signal.addEventListener('abort', abort, { once: true });
+  });
+}
+
+export async function detectCC2(host, signal, machine) {
+  if (machine) {
+    const { identifyElegoo } = await import('./elegoo.mjs');
+    const identity = await identifyElegoo(machine, { signal });
+    if (identity.serial) return { kind: 'elegoo', host, serial: identity.serial };
+  }
+  const elegoo = await httpJSON(`http://${host}/system/info`, signal, response => {
+    const server = response.headers.get('server') ?? '';
+    const headers = response.headers.get('access-control-allow-headers')?.toLowerCase().split(/,\s*/) ?? [];
+    return { candidate: response.status === 401 && /^libhv\//i.test(server) &&
+      ['x-token', 'x-file-name', 'x-file-md5'].every(header => headers.includes(header)) };
+  });
+  const info = elegoo?.system_info;
+  const model = info?.machine_model ?? info?.model ?? info?.hostname;
+  if (typeof model === 'string' && /centauri[ _-]*carbon[ _-]*2/i.test(model) && safeSerial(info.sn)) {
+    return { kind: 'elegoo', host, serial: info.sn };
+  }
+  if (elegoo?.candidate && await mqttPortOpen(host, signal)) return { kind: 'elegoo', host, candidate: true };
+  return null;
+}
+
+async function detectXTool(host, signal) {
+  const { readXTool } = await import('./xtool.mjs');
+  const result = await readXTool({ origin: `wss://${host}:28900` }, {
+    identityOnly: true, signal: AbortSignal.any([signal, AbortSignal.timeout(1000)])
+  });
+  if (result.serial) return { kind: 'xtool-m2', host, serial: result.serial };
+  return result.candidate ? { kind: 'xtool-m2', host, candidate: true } : null;
+}
+
+async function detectHost(host, signal, cc2) {
+  const [moonraker, elegoo, bambu, octoprint, xtool] = await Promise.all([
     httpJSON(`http://${host}:7125/server/info`, signal),
-    httpJSON(`http://${host}/system/info`, signal),
+    detectCC2(host, signal, cc2),
     detectBambu(host, signal),
-    detectOctoPrint(host, signal)
+    detectOctoPrint(host, signal),
+    detectXTool(host, signal)
   ]);
   const found = [];
   if (typeof moonraker?.result?.moonraker_version === 'string') {
     found.push({ kind: 'klipper', host, origin: `http://${host}:7125` });
   }
-  const info = elegoo?.system_info;
-  const model = info?.machine_model ?? info?.model ?? info?.hostname;
-  if (typeof model === 'string' && /centauri[ _-]*carbon[ _-]*2/i.test(model) && safeSerial(info.sn)) {
-    found.push({ kind: 'elegoo', host, serial: info.sn });
-  }
+  if (elegoo) found.push(elegoo);
   if (bambu) found.push(bambu);
+  if (xtool) found.push(xtool);
   return [...found, ...octoprint];
 }
 
-export async function scanNetwork(network, signal, { inspectHost = detectHost, broadcast = detectCC1 } = {}) {
-  setMaxListeners(32, signal);
+export async function scanNetwork(network, signal, { inspectHost = detectHost, broadcast = detectCC1, machines = [] } = {}) {
+  setMaxListeners(128, signal);
+  const cc2 = new Map(machines.filter(machine => machine.kind === 'elegoo' && machine.accessCode)
+    .map(machine => [URL.parse(machine.origin)?.hostname, machine]));
   const found = [];
   const discovery = broadcast(network, signal);
   let cursor = network.start + 1;
   async function worker() {
     while (!signal.aborted && cursor < network.end) {
       const host = toIP(cursor++);
-      if (!network.own.includes(host)) found.push(...await inspectHost(host, signal));
+      if (!network.own.includes(host)) found.push(...await inspectHost(host, signal, cc2.get(host)));
     }
   }
   await Promise.all(Array.from({ length: 20 }, worker));

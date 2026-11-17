@@ -5,6 +5,7 @@ import { readXTool } from './xtool.mjs';
 
 test('M2 lit son identité et son état, et refuse un certificat différent', async () => {
   const requests = [];
+  let authRequired = false;
   class MockSocket extends EventEmitter {
     constructor(url) {
       super();
@@ -23,7 +24,7 @@ test('M2 lit son identité et son état, et refuse un certificat différent', as
       requests.push([method, url]);
       const data = transactionId === 2 ? { sn: 'M2-123456' } : { curMode: { mode: 'Idle' } };
       queueMicrotask(() => this.emit('message', Buffer.from(JSON.stringify({
-        type: 'response', code: 0, transactionId, data
+        type: 'response', code: authRequired ? 406 : 0, transactionId, data: authRequired ? { authState: 0 } : data
       })), false));
     }
 
@@ -35,11 +36,20 @@ test('M2 lit son identité et son état, et refuse un certificat différent', as
   assert.equal(status.status, 'ready');
   assert.equal(status.serial, 'M2-123456');
   assert.equal(status.fingerprint, 'AA:BB');
+  const identity = await readXTool(machine, { identityOnly: true, Socket: MockSocket });
+  assert.deepEqual(identity, { serial: 'M2-123456', fingerprint: 'AA:BB' });
   const rejected = await readXTool({ ...machine, fingerprint: 'CC:DD' }, { Socket: MockSocket });
   assert.equal(rejected.issue, 'xtool-identity');
+  authRequired = true;
+  assert.deepEqual(await readXTool(machine, { identityOnly: true, Socket: MockSocket }), { candidate: true });
+  assert.equal((await readXTool(machine, { Socket: MockSocket })).issue, 'xtool-protocol');
   assert.deepEqual(requests, [
     ['GET', '/v1/user/parity'],
     ['GET', '/v1/platform/device/machine-info'],
-    ['POST', '/v1/platform/device/state/sync']
+    ['POST', '/v1/platform/device/state/sync'],
+    ['GET', '/v1/user/parity'],
+    ['GET', '/v1/platform/device/machine-info'],
+    ['GET', '/v1/user/parity'],
+    ['GET', '/v1/user/parity']
   ]);
 });
