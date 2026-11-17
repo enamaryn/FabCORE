@@ -105,6 +105,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     return telemetry;
   });
   const pendingCommands = new Set();
+  const cc2Tests = new WeakMap();
   let probes = 0;
   let discoveryActive = false;
   const notificationTests = new Set();
@@ -403,7 +404,14 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (!name || !connection) return error(res, 400, 'machine-invalid');
       const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
       const testing = path === '/api/machines/test';
-      if (testing || definition.verify) {
+      const cc2TestKey = kind === 'elegoo' && !existing
+        ? digest(JSON.stringify([machine.origin, machine.accessCode])).toString('hex')
+        : null;
+      const previousTest = cc2Tests.get(viewer);
+      const verifiedCC2 = !testing && cc2TestKey && previousTest?.key === cc2TestKey && previousTest.expires > Date.now();
+      if (verifiedCC2) {
+        machine.serial = previousTest.serial;
+      } else if (testing || definition.verify) {
         if (probes >= 2) return error(res, 429, 'probe-busy');
         probes++;
         const abort = new AbortController();
@@ -414,11 +422,19 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
           const sameConnection = existing && existing.origin === machine.origin && existing.accessCode === machine.accessCode;
           const result = await connector.probe(machine, { signal: abort.signal, testing, sameConnection });
           if (abort.signal.aborted) return;
-          if (testing) return answer(res, 200, {
-            ok: result.ok,
-            issue: result.issue ?? (result.ok ? null : 'elegoo-report'),
-            ...(result.ok && result.serial ? { serial: result.serial } : {})
-          });
+          if (testing) {
+            if (cc2TestKey) {
+              cc2Tests.delete(viewer);
+              if (result.ok && result.serial) {
+                cc2Tests.set(viewer, { key: cc2TestKey, serial: result.serial, expires: Date.now() + 60_000 });
+              }
+            }
+            return answer(res, 200, {
+              ok: result.ok,
+              issue: result.issue ?? (result.ok ? null : 'elegoo-report'),
+              ...(result.ok && result.serial ? { serial: result.serial } : {})
+            });
+          }
           if (!result.ok) return error(res, 422, result.issue ?? 'elegoo-info');
           machine.serial = result.serial;
           if (result.fingerprint) machine.fingerprint = result.fingerprint;
@@ -435,6 +451,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const machines = existing ? store.state.machines.map((entry) => entry.id === machine.id ? machine : entry)
         : [...store.state.machines, machine];
       store.save({ ...store.state, machines });
+      if (verifiedCC2) cc2Tests.delete(viewer);
       if (existing) {
         snapshot.forget(machine.id);
         connectors.forget(kind, machine.id, existing.origin !== machine.origin || existing.accessCode !== machine.accessCode);
