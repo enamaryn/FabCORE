@@ -4,6 +4,10 @@
 
 Finaliser la recette de découverte réseau sur le LXC. Vérifier qu’OctoPrint est trouvé même sans imprimante branchée et que la P2S et les deux Elegoo apparaissent comme déjà ajoutées. Les améliorations de scan sont incluses dans la [PR #29](https://github.com/enamaryn/FabCORE/pull/29), fusionnée. OctoPrint est confirmé sur le réseau réel. La recette porte maintenant sur les CC2 avec ou sans code LAN enregistré, la xTool M2 et la stabilité de la réponse P2S. Le matériel xTool répond au WebSocket LAN mais refuse l’identification avec un code 406. La découverte UDP V2 permet de lire le modèle M2 et le numéro de série avant la connexion de suivi, qui nécessite un appairage sur le firmware testé. Depuis le formulaire xTool, « Appairer la M2 » lance l’attente de la confirmation physique, puis enregistre la machine et son jeton côté serveur. La confirmation physique sur la M2 a renvoyé TOKEN_AUTHORIZED et son identité. Le firmware émet l’état en push puis acquitte state/sync avec une réponse vide. Le connecteur attend ces deux messages et accepte le format push réel {mode: "Idle"}. La recette complète après correction reste à confirmer. Référence de protocole : [ha-xtool](https://github.com/thecodingdad/ha-xtool/blob/main/docs/PROTOCOL.md). Le formulaire affiche le numéro de série fourni par le scan ou le test de connexion pour les connecteurs qui le remontent. Les champs de saisie prévus par Bambu et la CC1 restent disponibles. L’essai du formulaire dans le navigateur reste à confirmer.
 
+## Session xTool
+
+La supervision M2 conserve une session WebSocket et reçoit les rapports d’état. Un heartbeat utilise user/ping. L’ancien chemin ouvrait une nouvelle session toutes les 15 secondes et pouvait provoquer les bips constatés. La caméra M2 reste à intégrer via camera/snap et le canal file_stream.
+
 ## Gestion du parc
 
 « Ajouter une machine » ouvre la détection réseau, avec le choix entre lancer le scan et la saisie manuelle.
