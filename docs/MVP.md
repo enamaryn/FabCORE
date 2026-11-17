@@ -59,7 +59,7 @@ En cours. Décisions prises le 17 novembre 2026, à consigner dans `docs/DECISIO
 
 ## MVP-02 · Interface complète de la maquette UX/UI
 
-À faire. Dépend de MVP-01.7. Reconstruire en React tous les écrans, états et parcours du [prototype](../design/prototype.html) ([revue](../design/README.md)), reliés aux données réelles. Chaque écran est livré quand sa fonction serveur existe (étapes suivantes). En attendant, il affiche clairement que la fonction n’est pas disponible, sans donnée fictive présentée comme réelle. Chaque écran est vérifié en FR/EN, en thème sombre et clair, sur desktop, tablette et mobile.
+À faire. Dépend de MVP-01.7. Reconstruire en React tous les écrans, états et parcours du [prototype](../design/prototype.html) ([revue](../design/README.md)), reliés aux données réelles, en respectant les [règles produit et interface](PRODUCT.md). Chaque écran est livré quand sa fonction serveur existe (étapes suivantes). En attendant, il affiche clairement que la fonction n’est pas disponible, sans donnée fictive présentée comme réelle. Chaque écran est vérifié en FR/EN, en thème sombre et clair, sur desktop, tablette et mobile.
 
 - [ ] MVP-02.1 Navigation : barre latérale desktop, barre mobile (Atelier, Machines, Alertes, Plus), page « Plus ».
 - [ ] MVP-02.2 Connexion : compte local et Pocket ID / OIDC.
@@ -119,7 +119,7 @@ En cours. Décisions prises le 17 novembre 2026, à consigner dans `docs/DECISIO
 - [ ] MVP-05.1 Matrice de compatibilité `docs/COMPATIBILITY.md`, alimentée par la recette.
 - [ ] MVP-05.2 Contrat des connecteurs stabilisé (capacités : découverte, état, événements, caméras, fichiers, lancement, pause, reprise, annulation, actions).
 - [ ] MVP-05.3 Klipper/Moonraker : validé.
-- [ ] MVP-05.4 Bambu Lab : P2S validée, puis A1, P1, X1. Fichiers et lancement.
+- [ ] MVP-05.4 Bambu Lab : P2S validée, puis A1, P1, X1. Fichiers (FTPS) et lancement. Le code MIT de [print-farm-manager](https://github.com/joeltelling/print-farm-manager) peut servir de référence pour le transfert FTPS, Elegoo SDCP et PrusaLink, avec mention de copyright en cas de reprise.
 - [ ] MVP-05.5 Elegoo CC1 et CC2 : commandes et fichiers selon le protocole.
 - [ ] MVP-05.6 OctoPrint : événements, caméras, commandes.
 - [ ] MVP-05.7 PrusaLink : fichiers et commandes.
@@ -186,7 +186,12 @@ En cours. Décisions prises le 17 novembre 2026, à consigner dans `docs/DECISIO
 - [ ] MVP-11.1 Limite de 10 machines en auto-hébergement : comptage côté serveur, message clair à l’ajout de la 11e machine, aucune machine existante désactivée.
 - [ ] MVP-11.2 Comptes FabCore Cloud : inscription, organisation, ateliers.
 - [ ] MVP-11.3 Passage de l’auto-hébergement à l’offre professionnelle : appairage de l’agent, reprise des machines et des réglages.
-- [ ] MVP-11.4 Grille tarifaire (par machine, par atelier ou par paliers) et période d’essai.
+- [ ] MVP-11.0 Positionnement face à la concurrence :
+  - [ ] Étude des offres existantes ([benchmark](../design/README.md#benchmark)) : SimplyPrint (cloud, relevé initial), print-farm-manager (auto-hébergé, relevé initial), OctoEverywhere, Obico et autres acteurs pertinents. Fonctions, matériel pris en charge, auto-hébergement, prix.
+  - [ ] Différences de FabCore à mettre en avant (sécurité et rôles, open source, auto-hébergement gratuit, caméras, lasers et CNC) et fonctions attendues absentes du plan (par exemple tranchage dans le cloud).
+  - [ ] Décider si la file d’impression avec répartition automatique, la validation par l’opérateur entre deux impressions et le mode écran mural (aujourd’hui en [FD-05](FULL-DEVELOPPEMENT.md#fd-05--production-et-multi-ateliers)) remontent dans le MVP pour les fermes d’impression.
+  - [ ] Décisions reportées dans le plan (MVP ou [développement complet](FULL-DEVELOPPEMENT.md)).
+- [ ] MVP-11.4 Grille tarifaire (par machine, par atelier ou par paliers) et période d’essai, en s’appuyant sur MVP-11.0.
 - [ ] MVP-11.5 Abonnement et paiement via un prestataire, factures.
 - [ ] MVP-11.6 Isolation des données entre clients, sauvegardes du cloud.
 - [ ] MVP-11.7 Conditions d’utilisation, politique de confidentialité et conformité RGPD.
