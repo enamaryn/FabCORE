@@ -1,48 +1,169 @@
-# POC FabCore
+# Phase 1 · POC — preuve de concept
 
-## Jalon en cours
+**État : phase active, développement terminé, recette matérielle en cours.**
+Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-concept)) : vérifier les risques techniques sur du matériel réel avant le [MVP](MVP.md).
 
-Finaliser la recette de découverte réseau sur le LXC. Vérifier qu’OctoPrint est trouvé même sans imprimante branchée et que la P2S et les deux Elegoo apparaissent comme déjà ajoutées. Les améliorations de scan sont incluses dans la [PR #29](https://github.com/enamaryn/FabCORE/pull/29), fusionnée. OctoPrint est confirmé sur le réseau réel. La recette porte maintenant sur les CC2 avec ou sans code LAN enregistré, la xTool M2 et la stabilité de la réponse P2S. Le matériel xTool répond au WebSocket LAN mais refuse l’identification avec un code 406. La découverte UDP V2 permet de lire le modèle M2 et le numéro de série avant la connexion de suivi, qui nécessite un appairage sur le firmware testé. Depuis le formulaire xTool, « Appairer la M2 » lance l’attente de la confirmation physique, puis enregistre la machine et son jeton côté serveur. La confirmation physique sur la M2 a renvoyé TOKEN_AUTHORIZED et son identité. Le firmware émet l’état en push puis acquitte state/sync avec une réponse vide. Le connecteur attend ces deux messages et accepte le format push réel {mode: "Idle"}. La recette complète après correction reste à confirmer. Référence de protocole : [ha-xtool](https://github.com/thecodingdad/ha-xtool/blob/main/docs/PROTOCOL.md). Le formulaire affiche le numéro de série fourni par le scan ou le test de connexion pour les connecteurs qui le remontent. Les champs de saisie prévus par Bambu et la CC1 restent disponibles. L’essai du formulaire dans le navigateur reste à confirmer.
+**Prochaine action :** dérouler la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
-## Session xTool
+## Lire ce plan
 
-Vérification matérielle caméra : aperçu JPEG reçu et trois images vidéo side décodées depuis le LXC. Le firmware testé refuse le port 8089 et fournit le H.264 sur media_stream, protocole 34, avec l’identifiant partagé de la session instruction.
+- **Phase** : POC, puis [MVP](MVP.md), puis [développement complet](FULL-DEVELOPPEMENT.md).
+- **Étape** : un jalon identifié `POC-xx`, livré par une ou plusieurs PR.
+- **Sous-étape** : `POC-xx.y`, un résultat vérifiable.
+- **États** : `À faire` · `En cours` · `Ouvert` (PR en revue) · `Fusionné` · `Déployé` · `Testé matériel` · `Reporté`. Une sous-étape cochée est fusionnée. Elle n’est **testée** que si la mention `Testé matériel` figure.
 
- camera/list associe side à 2, near à 1 et far à 0 sur la M2 testée. Le lecteur utilise l’identifiant renvoyé par cette liste. Le nom et l’action de camera/live sont des paramètres de requête. Un échec de filetransfer/finish ne rejette plus un aperçu dont le transfert et le MD5 sont validés, conformément à ha-xtool.
+## Vue d’ensemble
 
+| Étape | Contenu | État |
+| --- | --- | --- |
+| POC-00 | Design UX/UI et identité | Fusionné |
+| POC-01 | Activation et Klipper | Fusionné |
+| POC-02 | Bambu Lab P2S | Fusionné |
+| POC-03 | Elegoo CC1 et CC2 | Fusionné |
+| POC-04 | Découverte réseau | Fusionné · recette en cours |
+| POC-05 | Caméras | Fusionné · M2 testée matériel |
+| POC-06 | Pause, reprise et rôles | Fusionné |
+| POC-07 | Pocket ID et OIDC | Fusionné |
+| POC-08 | ntfy et SMTP | Fusionné |
+| POC-08b | Connecteurs supplémentaires et parc | Fusionné · recette en cours |
+| POC-09 | Fichiers, visualiseur et terminal G-code | Fusionné · recette à faire |
+| POC-10 | Recette matérielle sur le LXC | En cours |
+| POC-11 | Clôture du POC et passage au MVP | À faire |
 
-La supervision M2 conserve une session WebSocket et reçoit les rapports d’état. Un heartbeat utilise user/ping. L’ancien chemin ouvrait une nouvelle session toutes les 15 secondes et pouvait provoquer les bips constatés. Les trois vues caméra utilisent camera/snap avec side (angle, par défaut), far (centrale) et near (outil) et le canal file_stream associé à la session persistante. Une seule capture sert d’aperçu à l’ouverture de la fiche. « Voir la caméra » ouvre la vidéo du canal media_stream via FFmpeg et le relais multi-spectateurs. Les vues side, far et near sont sélectionnables, avec side par défaut. Les fiches Bambu et Elegoo extraient également un aperçu unique de leur caméra. Les vues centrale et outil et le parcours navigateur restent à confirmer après déploiement.
+## POC-00 · Design UX/UI et identité
 
-## Réouverture des caméras M2
+Référence : [design/](../design/README.md) · PR [#1](https://github.com/enamaryn/FabCORE/pull/1) · Fusionné.
 
-Les commandes vidéo start/stop sont ordonnées et l’arrêt est acquitté avant de libérer le canal média. FFmpeg reçoit explicitement du H.264 et reconstruit les horodatages à la cadence de camera/list. Le diagnostic sur la M2 a observé une cadence estimée erronée de 1 200 000 images/s, qui bloquait la production des images par le filtre fps.
+- [x] POC-00.1 Benchmark, parcours et navigation (UX-0).
+- [x] POC-00.2 Identité visuelle : trois concepts de logo, palette sombre et claire, déclinaisons favicon, PWA et avatar (UX-1, [design/brand](../design/brand)).
+- [x] POC-00.3 Prototype interactif FR/EN, desktop et mobile (UX-2, [design/prototype.html](../design/prototype.html)).
 
-## Gestion du parc
+## POC-01 · Activation et Klipper
 
-« Ajouter une machine » ouvre la détection réseau, avec le choix entre lancer le scan et la saisie manuelle.
+PR [#2](https://github.com/enamaryn/FabCORE/pull/2), [#3](https://github.com/enamaryn/FabCORE/pull/3) · Fusionné.
 
-L’ajout d’une nouvelle CC2 réutilise le test réussi pendant une minute dans la même session si l’adresse et le code LAN correspondent. Le parcours HTTP couvre aussi l’ajout direct. Essai sur le LXC à confirmer.
+- [x] POC-01.1 Jeton d’activation affiché dans le terminal, usage unique, expiration de 15 minutes.
+- [x] POC-01.2 Création atomique du premier administrateur, sessions sécurisées.
+- [x] POC-01.3 Adaptateur Moonraker : télémétrie, états Klippy, erreurs distinguées.
+- [x] POC-01.4 Installation Debian/LXC, `fabcore-update` (PR [#16](https://github.com/enamaryn/FabCORE/pull/16), [#26](https://github.com/enamaryn/FabCORE/pull/26), [#33](https://github.com/enamaryn/FabCORE/pull/33)).
 
-La suppression d’une machine et le correctif d’accès à `fabcore-update` dans les LXC sont fusionnés dans la [PR #35](https://github.com/enamaryn/FabCORE/pull/35). Le parcours HTTP couvre les droits Observateur, la suppression persistante et le réajout. Le bouton « Modifier la machine » est dans l’en-tête de la fiche, à côté de « Retour au parc ». La suppression se fait depuis cette fenêtre de modification. La suppression depuis le navigateur sur le LXC reste à confirmer.
+## POC-02 · Bambu Lab P2S
 
-## Ensuite
+PR [#4](https://github.com/enamaryn/FabCORE/pull/4) · Fusionné.
 
-1. POC-09 · Terminal G-code pour Klipper (Moonraker) et OctoPrint, réservé à l’administrateur, sur la fiche machine. [Ticket #32](https://github.com/enamaryn/FabCORE/issues/32) · en PR. Reste à valider commande par commande sur l’Ender 3 (Moonraker) et sur OctoPrint, en commençant par `M105` puis `G28`, puis à étendre aux autres connecteurs.
-2. Visualiseur G-code et fichiers de la machine ([Ticket #31](https://github.com/enamaryn/FabCORE/issues/31)) : fusionné, à valider sur l’Ender 3 et OctoPrint avec des fichiers réels de PrusaSlicer, Cura, Orca et Bambu Studio.
+- [x] POC-02.1 MQTT local avec code LAN, état et progression.
+- [x] POC-02.2 Travail terminé ou effacé correctement affiché (PR [#18](https://github.com/enamaryn/FabCORE/pull/18)).
+- [x] POC-02.3 AMS : emplacements, matière, couleur, emplacement actif (PR [#20](https://github.com/enamaryn/FabCORE/pull/20), [#22](https://github.com/enamaryn/FabCORE/pull/22)).
+- [ ] POC-02.4 Stabilité de la réponse P2S sur la durée : à confirmer en POC-10.
 
-## Jalons fusionnés
+## POC-03 · Elegoo Centauri Carbon 1 et 2
 
-| Jalon | PR |
-| --- | --- |
-| POC-01 · Activation et Klipper | [#2](https://github.com/enamaryn/FabCORE/pull/2) |
-| POC-02 · Bambu P2S | [#4](https://github.com/enamaryn/FabCORE/pull/4) |
-| POC-03 · Elegoo CC1 et CC2 | [#5](https://github.com/enamaryn/FabCORE/pull/5) |
-| POC-04 · Découverte réseau | [#6](https://github.com/enamaryn/FabCORE/pull/6) |
-| POC-05 · Caméras Elegoo | [#7](https://github.com/enamaryn/FabCORE/pull/7) |
-| POC-06 · Pause, reprise et rôles | [#9](https://github.com/enamaryn/FabCORE/pull/9) |
-| POC-07 · Pocket ID et OIDC | [#10](https://github.com/enamaryn/FabCORE/pull/10) |
-| POC-08 · ntfy et SMTP | [#11](https://github.com/enamaryn/FabCORE/pull/11) |
-| OctoPrint, PrusaLink et registre des connecteurs | [#25](https://github.com/enamaryn/FabCORE/pull/25), [#29](https://github.com/enamaryn/FabCORE/pull/29) |
-| Visualiseur G-code en direct et fichiers de la machine | [#42](https://github.com/enamaryn/FabCORE/pull/42) |
+PR [#5](https://github.com/enamaryn/FabCORE/pull/5) · Fusionné.
+
+- [x] POC-03.1 CC2 en MQTT avec session persistante (PR [#12](https://github.com/enamaryn/FabCORE/pull/12), [#13](https://github.com/enamaryn/FabCORE/pull/13)).
+- [x] POC-03.2 CC1 en WebSocket.
+- [x] POC-03.3 Deux CC2 distinctes identifiées par numéro de série.
+- [x] POC-03.4 CANVAS : emplacements et matière.
+- [x] POC-03.5 Ajout d’une CC2 sans reconnexion après un test réussi : le test est réutilisé pendant une minute si l’adresse et le code LAN correspondent (PR [#43](https://github.com/enamaryn/FabCORE/pull/43)).
+
+## POC-04 · Découverte réseau
+
+PR [#6](https://github.com/enamaryn/FabCORE/pull/6), [#29](https://github.com/enamaryn/FabCORE/pull/29), [#38](https://github.com/enamaryn/FabCORE/pull/38), [#41](https://github.com/enamaryn/FabCORE/pull/41), [#45](https://github.com/enamaryn/FabCORE/pull/45) · Fusionné · recette en cours.
+
+- [x] POC-04.1 Scan limité aux réseaux privés, sur action de l’administrateur, annulable.
+- [x] POC-04.2 Machines déjà ajoutées signalées, machine supprimée redécouvrable.
+- [x] POC-04.3 « Ajouter une machine » ouvre la découverte, avec le choix entre scan et saisie manuelle.
+- [x] POC-04.4 Numéro de série affiché en lecture seule quand le scan ou le test le fournit (PR [#39](https://github.com/enamaryn/FabCORE/pull/39), [#40](https://github.com/enamaryn/FabCORE/pull/40)).
+- [x] POC-04.5 Découverte UDP V2 de la xTool M2 : modèle et numéro de série avant la connexion de suivi.
+- [x] POC-04.6 OctoPrint trouvé sur le réseau réel · **Testé matériel**.
+
+## POC-05 · Caméras
+
+PR [#7](https://github.com/enamaryn/FabCORE/pull/7), [#14](https://github.com/enamaryn/FabCORE/pull/14), [#17](https://github.com/enamaryn/FabCORE/pull/17), [#49](https://github.com/enamaryn/FabCORE/pull/49), [#51](https://github.com/enamaryn/FabCORE/pull/51), [#52](https://github.com/enamaryn/FabCORE/pull/52), [#53](https://github.com/enamaryn/FabCORE/pull/53) · Fusionné.
+
+- [x] POC-05.1 Elegoo : flux MJPEG relayé.
+- [x] POC-05.2 Bambu P2S : RTSPS relayé en MJPEG via FFmpeg (port TCP 322).
+- [x] POC-05.3 Aperçu unique à l’ouverture de la fiche, vidéo sur « Voir la caméra », relais partagé entre spectateurs.
+- [x] POC-05.4 xTool M2 : vues angle (`side`, par défaut), centrale (`far`) et outil (`near`), vidéo H.264 sur `media_stream` · **Testé matériel** (confirmé le 17 novembre 2026).
+- [x] POC-05.5 Réouverture des caméras M2 : start/stop ordonnés et acquittés, horodatages reconstruits par FFmpeg.
+
+Notes de recette M2 :
+- Le firmware testé refuse le port 8089 et fournit le H.264 sur `media_stream`, protocole 34, avec l’identifiant de la session instruction.
+- `camera/list` associe `side` à 2, `near` à 1 et `far` à 0. Le lecteur utilise l’identifiant renvoyé par cette liste. Un échec de `filetransfer/finish` ne rejette plus un aperçu dont le transfert et le MD5 sont validés.
+- Une cadence estimée erronée (1 200 000 images/s) bloquait le filtre fps. FFmpeg reçoit désormais explicitement du H.264 à la cadence de `camera/list`.
+
+## POC-06 · Pause, reprise et rôles
+
+PR [#9](https://github.com/enamaryn/FabCORE/pull/9) · Fusionné.
+
+- [x] POC-06.1 Pause et reprise Moonraker, état vérifié après la commande, jamais de renvoi automatique.
+- [x] POC-06.2 Rôles Administrateur et Observateur, droits vérifiés côté serveur.
+- [x] POC-06.3 Journal de diagnostic global et par machine (PR [#19](https://github.com/enamaryn/FabCORE/pull/19)).
+
+## POC-07 · Pocket ID et OIDC
+
+PR [#10](https://github.com/enamaryn/FabCORE/pull/10) · Fusionné.
+
+- [x] POC-07.1 Authorization Code Flow avec PKCE, state, nonce, issuer et audience.
+- [x] POC-07.2 Identité liée à `issuer + subject`, compte local de secours conservé.
+
+## POC-08 · ntfy et SMTP
+
+PR [#11](https://github.com/enamaryn/FabCORE/pull/11) · Fusionné.
+
+- [x] POC-08.1 ntfy interne (installé avec FabCore) ou externe.
+- [x] POC-08.2 SMTP avec STARTTLS ou TLS.
+- [x] POC-08.3 Notification de test. Les alertes automatiques de fabrication relèvent du MVP ([MVP-07](MVP.md#mvp-07--notifications-et-alertes)).
+
+## POC-08b · Connecteurs supplémentaires et gestion du parc
+
+Fusionné · recette en cours.
+
+- [x] POC-08b.1 OctoPrint et PrusaLink en lecture, registre des connecteurs chargés à la demande (PR [#25](https://github.com/enamaryn/FabCORE/pull/25), [#29](https://github.com/enamaryn/FabCORE/pull/29), [contrat](../poc/CONNECTORS.md)).
+- [x] POC-08b.2 xTool M2 : appairage par confirmation physique, jeton conservé côté serveur (PR [#15](https://github.com/enamaryn/FabCORE/pull/15), [#44](https://github.com/enamaryn/FabCORE/pull/44)). La confirmation sur la M2 a renvoyé `TOKEN_AUTHORIZED` et son identité · **Testé matériel**.
+- [x] POC-08b.3 xTool M2 : session WebSocket persistante, heartbeat `user/ping`, état reçu en push au format `{mode: "Idle"}` (PR [#46](https://github.com/enamaryn/FabCORE/pull/46) à [#48](https://github.com/enamaryn/FabCORE/pull/48)). L’ancienne reconnexion toutes les 15 secondes provoquait des bips. Sans appairage, le firmware testé refuse l’identification WebSocket (code 406). Après appairage, il émet l’état en push puis acquitte `state/sync` avec une réponse vide. Référence : [ha-xtool](https://github.com/thecodingdad/ha-xtool/blob/main/docs/PROTOCOL.md).
+- [x] POC-08b.4 Suppression d’une machine et réajout (PR [#35](https://github.com/enamaryn/FabCORE/pull/35)).
+- [x] POC-08b.5 « Modifier la machine » dans l’en-tête de la fiche, suppression depuis la fenêtre de modification (PR [#37](https://github.com/enamaryn/FabCORE/pull/37)).
+
+## POC-09 · Fichiers, visualiseur et terminal G-code
+
+Tickets [#31](https://github.com/enamaryn/FabCORE/issues/31) et [#32](https://github.com/enamaryn/FabCORE/issues/32) · PR [#42](https://github.com/enamaryn/FabCORE/pull/42) et [#54](https://github.com/enamaryn/FabCORE/pull/54) · Fusionné · recette à faire.
+
+- [x] POC-09.1 Fichiers de la machine (Moonraker, OctoPrint) : liste, envoi, lancement d’impression confirmé.
+- [x] POC-09.2 Visualiseur par couches depuis la fiche machine : extrusions, déplacements à vide, zoom, déplacement.
+- [x] POC-09.3 Suivi en direct : couche en cours, partie imprimée et position de la buse.
+- [x] POC-09.4 Terminal G-code administrateur : réponses Moonraker, statut « Acceptée » OctoPrint, confirmation pendant une impression, débit borné, aucun renvoi automatique.
+
+## POC-10 · Recette matérielle sur le LXC
+
+En cours. Chaque sous-étape passe à `Testé matériel` une fois vérifiée sur la machine réelle, après déploiement de `main` sur le LXC.
+
+- [ ] POC-10.1 Terminal (POC-09.4) :
+  - [ ] Ender 3 (Moonraker) : `M105` affiche la réponse, `G28` est « Exécutée », une commande inconnue est « Refusée ».
+  - [ ] OctoPrint : `M105` est « Acceptée ».
+- [ ] POC-10.2 Fichiers et visualiseur (POC-09.1 à 09.3) :
+  - [ ] Envoi, visualisation, lancement et suivi en direct sur l’Ender 3.
+  - [ ] Même parcours sur OctoPrint. Vérifier que `/downloads/files/local/…` accepte la clé API.
+  - [ ] Fichiers réels PrusaSlicer, Cura, Orca et Bambu Studio.
+- [ ] POC-10.3 Découverte : CC2 avec et sans code LAN enregistré, P2S et deux Elegoo signalées comme déjà ajoutées.
+- [ ] POC-10.4 xTool M2 : parcours complet après appairage, vues centrale et outil après déploiement.
+- [ ] POC-10.5 Parc : ajout d’une CC2 après test, suppression depuis le navigateur.
+- [ ] POC-10.6 P2S : stabilité de la réponse sur une impression complète (POC-02.4).
+- [ ] POC-10.7 Formulaire d’ajout dans le navigateur : numéro de série affiché, champs Bambu et CC1 disponibles.
+
+## POC-11 · Clôture du POC et passage au MVP
+
+À faire. Critères du [prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-concept) :
+
+- [ ] POC-11.1 Une Bambu P2S connectée.
+- [ ] POC-11.2 Deux Elegoo CC2 distinctes, sans confusion entre machines.
+- [ ] POC-11.3 Une machine Klipper.
+- [ ] POC-11.4 Permissions vérifiées (administrateur, observateur, routes et flux).
+- [ ] POC-11.5 Commandes fiables : pause, reprise, terminal, lancement, sans renvoi automatique.
+- [ ] POC-11.6 Erreurs détectables : hors ligne, accès refusé, firmware en erreur.
+- [ ] POC-11.7 Authentification locale et OIDC fonctionnelles.
+- [ ] POC-11.8 Limites documentées dans le [guide](../poc/README.md) et la [matrice de compatibilité](MVP.md#mvp-04--connecteurs-p0-validés-modèle-par-modèle).
+- [x] POC-11.9 Simulateurs et connecteurs des autres marques : **décidé**, reportés au [MVP-04](MVP.md#mvp-04--connecteurs-p0-validés-modèle-par-modèle) (17 novembre 2026).
+- [ ] POC-11.10 Bilan technique et décisions d’architecture pour [MVP-00](MVP.md#mvp-00--cadrage).
 
 [Guide d’exploitation et de configuration](../poc/README.md)
