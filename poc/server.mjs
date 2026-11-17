@@ -28,6 +28,7 @@ const assets = new Map([
   ['/', ['text/html; charset=utf-8', liveHtml]],
   ['/shared.js', ['text/javascript; charset=utf-8', sharedScript]],
   ['/live.js', ['text/javascript; charset=utf-8', `const machineConnectors = ${JSON.stringify(connectorCatalog)};\n` + readFileSync(new URL('./live.js', import.meta.url), 'utf8')]],
+  ['/gcode.mjs', ['text/javascript; charset=utf-8', readFileSync(new URL('./gcode.mjs', import.meta.url), 'utf8')]],
   ['/favicon.svg', ['image/svg+xml', readFileSync(new URL('../design/brand/favicon.svg', import.meta.url))]]
 ]);
 

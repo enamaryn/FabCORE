@@ -10,7 +10,7 @@ La suppression d’une machine et le correctif d’accès à `fabcore-update` da
 
 ## Ensuite
 
-1. Visualiseur G-code par couches, avec ouverture d’un fichier local et distinction des extrusions et déplacements à vide. [Ticket #31](https://github.com/enamaryn/FabCORE/issues/31)
+1. Visualiseur G-code par couches, avec ouverture d’un fichier local et distinction des extrusions et déplacements à vide. [Ticket #31](https://github.com/enamaryn/FabCORE/issues/31) · première version ouverte en PR : page **Visualiseur G-code**, analyse dans `poc/gcode.mjs`. Reste à tester sur des fichiers réels de PrusaSlicer, Cura, Orca et Bambu Studio, puis à ouvrir le fichier de l’impression en cours.
 2. Terminal G-code pour les connecteurs compatibles, à valider sur Moonraker et OctoPrint. [Ticket #32](https://github.com/enamaryn/FabCORE/issues/32)
 
 ## Jalons fusionnés

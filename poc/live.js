@@ -162,7 +162,8 @@ function liveNavigation() {
   return [
     ['home', t('Vue d’ensemble', 'Overview'), 'grid'],
     ['machines', t('Machines', 'Machines'), 'machine'],
-    ['history', t('Activité récente', 'Recent activity'), 'activity']
+    ['history', t('Activité récente', 'Recent activity'), 'activity'],
+    ['gcode', t('Visualiseur G-code', 'G-code viewer'), 'file']
   ].map(([id, title, glyph]) => btn('nav:' + id, title, glyph, '', live.page === id ? 'aria-current="page"' : '')).join('');
 }
 
@@ -484,7 +485,7 @@ function renderLive() {
   document.documentElement.lang = state.lang;
   document.documentElement.dataset.theme = state.theme === 'system' ? (media.matches ? 'light' : 'dark') : state.theme;
   const signedIn = live.phase === 'workshop';
-  const screens = { diagnostics: diagnosticsPage, notifications: notificationPage, home: dashboard, machines: liveFleet, detail: liveDetail, history: () =>
+  const screens = { diagnostics: diagnosticsPage, notifications: notificationPage, home: dashboard, machines: liveFleet, detail: liveDetail, gcode: gcodePage, history: () =>
     title(t('Activité récente','Recent activity')) + `<section class="panel">${listEvents()}</section>` };
   app.innerHTML = `<a class="skip" href="#content">${t('Aller au contenu','Skip to content')}</a><div class="${signedIn?'layout':''}">
     ${signedIn?`<aside class="sidebar">${brand()}<nav aria-label="${t('Navigation principale','Main navigation')}">${liveNavigation()}</nav><div class="sidefoot"><small class="signal">POC${state.role === 'viewer' ? ' · ' + t('Observateur','Observer') : ''}</small></div></aside>`:''}
@@ -499,7 +500,8 @@ function renderLive() {
       ${live.refreshError?`<p class="notice" role="status">${t('Actualisation indisponible. Les données affichées datent de la dernière réponse.','Refresh unavailable. Showing the last response.')}</p>`:''}
       ${signedIn?screens[live.page]():credentialsPage()}
     </main></div></div>
-    ${signedIn?`<nav class="mobile" style="grid-template-columns:repeat(3,1fr)" aria-label="${t('Navigation mobile','Mobile navigation')}">${liveNavigation()}</nav>`:''}`;
+    ${signedIn?`<nav class="mobile" style="grid-template-columns:repeat(4,1fr)" aria-label="${t('Navigation mobile','Mobile navigation')}">${liveNavigation()}</nav>`:''}`;
+  if (signedIn && live.page === 'gcode') mountGcode();
 }
 
 const statusLabels = {
@@ -546,7 +548,7 @@ async function refresh() {
     }
     const checkedAt = current?.checkedAt;
     if (timestamp && checkedAt) timestamp.textContent = new Date(checkedAt).toLocaleTimeString(state.lang);
-    if ((changed || hadRefreshError) && !dialog.open && !['notifications', 'diagnostics'].includes(live.page)) {
+    if ((changed || hadRefreshError) && !dialog.open && !['notifications', 'diagnostics', 'gcode'].includes(live.page)) {
       const action = document.activeElement?.dataset.action;
       const telemetry = app.querySelector('[data-live-telemetry]');
       if (!hadRefreshError && telemetry && current) {
@@ -579,6 +581,7 @@ function openWorkshop(username, role) {
   state.role = role === 'admin' ? 'admin' : 'viewer';
   live.username = username;
   temperatureHistory.clear();
+  Object.assign(gcode, { name: '', size: 0, result: null, layer: 0, loading: null, error: '', view: null });
   live.phase = 'workshop';
   live.page = 'home';
   live.error = '';
@@ -929,6 +932,240 @@ document.addEventListener('submit', async (event) => {
   } finally {
     controls.forEach((element) => { element.disabled = false; });
   }
+});
+
+// Visualiseur G-code : lecture locale du fichier, aucun envoi vers une machine.
+const gcodeLimit = 512 * 1024 * 1024;
+const gcode = { name: '', size: 0, result: null, layer: 0, read: 0, loading: null, error: '', travel: true, previous: true, view: null };
+
+function gcodePage() {
+  const result = gcode.result;
+  const layer = result?.layers[gcode.layer];
+  const percent = gcode.loading && gcode.size ? Math.floor(gcode.read / gcode.size * 100) : 0;
+  const unsupported = result?.unsupported.length ? `<p class="notice" role="status">${t('Trajectoires non prises en charge, ignorées dans l’aperçu :','Unsupported moves, skipped in the preview:')}
+    ${result.unsupported.map(({ command, count, line }) => `<code>${esc(command)}</code> × ${count} (${t('première ligne','first line')} ${line})`).join(', ')}</p>` : '';
+  return title(t('Visualiseur G-code','G-code viewer'), t('Ouvre un fichier .gcode de cet ordinateur. Le fichier reste dans le navigateur et rien n’est envoyé aux machines.','Open a .gcode file from this computer. The file stays in the browser and nothing is sent to machines.')) +
+    `<style>
+      .gcode-canvas{position:relative;height:min(68vh,640px);min-height:320px;border:1px solid var(--line);border-radius:10px;background:var(--raised);overflow:hidden;touch-action:none;cursor:grab}
+      .gcode-canvas canvas{display:block;width:100%;height:100%}
+      .gcode-canvas.dragging{cursor:grabbing}
+      .gcode-layer{flex:1 1 220px;min-width:0}
+      .gcode-layer input{width:100%;min-height:0;padding:0}
+      .gcode-legend{display:inline-flex;align-items:center;gap:6px}
+      .gcode-legend::before{content:"";width:16px;height:3px;border-radius:2px;background:currentColor}
+    </style>
+    <div class="stack"><section class="panel stack">
+      <label class="stack"><span>${t('Fichier G-code','G-code file')}</span>
+        <input type="file" accept=".gcode,.gco,.g,.nc,text/plain" data-gcode-file></label>
+      ${gcode.loading ? `<p role="status">${t('Lecture de','Reading')} ${esc(gcode.name)}… ${percent} %</p><progress value="${percent}" max="100"></progress>` : ''}
+      ${gcode.error ? `<p class="error" role="alert">${esc(gcode.error)}</p>` : ''}
+      ${result && !gcode.loading ? `<p class="muted">${esc(gcode.name)} · ${result.lines.toLocaleString(state.lang)} ${t('lignes','lines')} · ${result.layers.length} ${t('couches','layers')} · ${(result.types.length).toLocaleString(state.lang)} ${t('segments','segments')}</p>${unsupported}` : ''}
+    </section>
+    ${result && !gcode.loading ? (result.layers.length ? `<section class="panel stack">
+      <div class="row wrap">
+        ${btn('gcode-layer:-1', t('Couche précédente','Previous layer'), '', '', `aria-label="${t('Couche précédente','Previous layer')}"`)}
+        <label class="gcode-layer stack"><span data-gcode-label>${gcodeLayerLabel()}</span>
+          <input type="range" min="1" max="${result.layers.length}" value="${gcode.layer + 1}" data-gcode-layer></label>
+        ${btn('gcode-layer:1', t('Couche suivante','Next layer'))}
+      </div>
+      <div class="row wrap between">
+        <div class="row wrap">
+          <label class="row"><input type="checkbox" data-gcode-option="travel" ${gcode.travel ? 'checked' : ''}> ${t('Déplacements à vide','Travel moves')}</label>
+          <label class="row"><input type="checkbox" data-gcode-option="previous" ${gcode.previous ? 'checked' : ''}> ${t('Couche précédente en fond','Previous layer underneath')}</label>
+        </div>
+        <div class="row wrap">
+          ${btn('gcode-zoom:out', '−', '', '', `aria-label="${t('Dézoomer','Zoom out')}"`)}
+          ${btn('gcode-zoom:in', '+', '', '', `aria-label="${t('Zoomer','Zoom in')}"`)}
+          ${btn('gcode-fit', t('Ajuster','Fit'))}
+        </div>
+      </div>
+      <div class="gcode-canvas" data-gcode-canvas><canvas role="img" aria-label="${t('Trajectoires de la couche','Layer toolpaths')}"></canvas></div>
+      <div class="row wrap"><small class="gcode-legend good">${t('Extrusion','Extrusion')}</small><small class="gcode-legend info">${t('Déplacement à vide','Travel move')}</small><small class="gcode-legend neutral">${t('Couche précédente','Previous layer')}</small>
+        <small>${t('Molette ou boutons pour zoomer, glisser pour déplacer.','Wheel or buttons to zoom, drag to pan.')}</small></div>
+    </section>` : `<p class="notice">${t('Aucune extrusion trouvée dans ce fichier.','No extrusion found in this file.')}</p>`) : ''}</div>`;
+}
+
+function gcodeLayerLabel() {
+  const layer = gcode.result?.layers[gcode.layer];
+  if (!layer) return '';
+  return `${t('Couche','Layer')} ${gcode.layer + 1} / ${gcode.result.layers.length} · Z ${layer.z.toLocaleString(state.lang)} mm`;
+}
+
+async function loadGcode(file) {
+  const token = {};
+  gcode.loading = token;
+  Object.assign(gcode, { name: file.name, size: file.size, read: 0, result: null, layer: 0, error: '', view: null });
+  if (file.size > gcodeLimit) {
+    gcode.loading = null;
+    gcode.error = t('Fichier trop volumineux (512 Mo au maximum).', 'File too large (512 MB maximum).');
+    return renderLive();
+  }
+  renderLive();
+  try {
+    const { createGcodeParser } = await import('/gcode.mjs');
+    const parser = createGcodeParser();
+    const reader = file.stream().pipeThrough(new TextDecoderStream()).getReader();
+    let shown = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (gcode.loading !== token) return reader.cancel();
+      if (done) break;
+      parser.write(value);
+      gcode.read += value.length;
+      if (Date.now() - shown > 150) {
+        shown = Date.now();
+        const percent = Math.min(100, Math.floor(gcode.read / gcode.size * 100));
+        const status = app.querySelector('[data-gcode-file]')?.closest('section')?.querySelector('[role="status"]');
+        const bar = app.querySelector('[data-gcode-file]')?.closest('section')?.querySelector('progress');
+        if (status) status.textContent = `${t('Lecture de','Reading')} ${gcode.name}… ${percent} %`;
+        if (bar) bar.value = percent;
+        await new Promise(resolve => setTimeout(resolve));
+      }
+    }
+    gcode.result = parser.finish();
+  } catch {
+    if (gcode.loading !== token) return;
+    gcode.error = t('Lecture du fichier impossible.', 'Could not read the file.');
+  }
+  gcode.loading = null;
+  if (live.page === 'gcode') renderLive();
+}
+
+function gcodeFit(canvas) {
+  const bounds = gcode.result?.bounds;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (!bounds) return { scale: 1, x: width / 2, y: height / 2 };
+  const margin = 24;
+  const scale = Math.min((width - margin * 2) / Math.max(bounds.maxX - bounds.minX, 1), (height - margin * 2) / Math.max(bounds.maxY - bounds.minY, 1));
+  return {
+    scale,
+    x: width / 2 - (bounds.minX + bounds.maxX) / 2 * scale,
+    y: height / 2 + (bounds.minY + bounds.maxY) / 2 * scale
+  };
+}
+
+function drawGcode() {
+  const canvas = app.querySelector('[data-gcode-canvas] canvas');
+  const result = gcode.result;
+  if (!canvas || !result?.layers.length) return;
+  const ratio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  gcode.view ??= gcodeFit(canvas);
+  const { scale, x: offsetX, y: offsetY } = gcode.view;
+  const context = canvas.getContext('2d');
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, width, height);
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  const colors = getComputedStyle(document.documentElement);
+  const color = (name) => colors.getPropertyValue(name).trim();
+  const stroke = (layer, type, style, lineWidth, alpha) => {
+    const { segments, types } = result;
+    context.beginPath();
+    for (let index = layer.start; index < layer.end; index++) {
+      if (types[index] !== type) continue;
+      const at = index * 4;
+      context.moveTo(offsetX + segments[at] * scale, offsetY - segments[at + 1] * scale);
+      context.lineTo(offsetX + segments[at + 2] * scale, offsetY - segments[at + 3] * scale);
+    }
+    context.globalAlpha = alpha;
+    context.strokeStyle = style;
+    context.lineWidth = lineWidth;
+    context.stroke();
+  };
+  const current = result.layers[gcode.layer];
+  const below = result.layers[gcode.layer - 1];
+  if (gcode.previous && below) stroke(below, 1, color('--dim'), 1.5, 0.35);
+  stroke(current, 1, color('--accent'), 1.8, 1);
+  if (gcode.travel) stroke(current, 0, color('--blue'), 1, 0.7);
+  context.globalAlpha = 1;
+}
+
+function zoomGcode(factor, x, y) {
+  const canvas = app.querySelector('[data-gcode-canvas] canvas');
+  if (!canvas || !gcode.view) return;
+  const view = gcode.view;
+  const scale = Math.min(Math.max(view.scale * factor, 0.05), 2000);
+  const centerX = x ?? canvas.clientWidth / 2;
+  const centerY = y ?? canvas.clientHeight / 2;
+  view.x = centerX - (centerX - view.x) * scale / view.scale;
+  view.y = centerY - (centerY - view.y) * scale / view.scale;
+  view.scale = scale;
+  drawGcode();
+}
+
+function setGcodeLayer(index) {
+  const layers = gcode.result?.layers;
+  if (!layers?.length) return;
+  gcode.layer = Math.min(Math.max(index, 0), layers.length - 1);
+  const slider = app.querySelector('[data-gcode-layer]');
+  if (slider) slider.value = gcode.layer + 1;
+  const label = app.querySelector('[data-gcode-label]');
+  if (label) label.textContent = gcodeLayerLabel();
+  drawGcode();
+}
+
+function mountGcode() {
+  const area = app.querySelector('[data-gcode-canvas]');
+  if (!area) return;
+  const canvas = area.querySelector('canvas');
+  let drag = null;
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    const box = canvas.getBoundingClientRect();
+    zoomGcode(event.deltaY < 0 ? 1.2 : 1 / 1.2, event.clientX - box.left, event.clientY - box.top);
+  }, { passive: false });
+  canvas.addEventListener('pointerdown', (event) => {
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    canvas.setPointerCapture(event.pointerId);
+    area.classList.add('dragging');
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (drag?.id !== event.pointerId || !gcode.view) return;
+    gcode.view.x += event.clientX - drag.x;
+    gcode.view.y += event.clientY - drag.y;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    drawGcode();
+  });
+  const release = () => {
+    drag = null;
+    area.classList.remove('dragging');
+  };
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+  drawGcode();
+}
+
+app.addEventListener('change', (event) => {
+  if (event.target.matches('[data-gcode-file]') && event.target.files[0]) loadGcode(event.target.files[0]);
+  if (event.target.matches('[data-gcode-option]')) {
+    gcode[event.target.dataset.gcodeOption] = event.target.checked;
+    drawGcode();
+  }
+});
+
+app.addEventListener('input', (event) => {
+  if (event.target.matches('[data-gcode-layer]')) setGcodeLayer(Number(event.target.value) - 1);
+});
+
+app.addEventListener('click', (event) => {
+  const action = event.target.closest('[data-action]')?.dataset.action ?? '';
+  if (action.startsWith('gcode-layer:')) setGcodeLayer(gcode.layer + Number(action.split(':')[1]));
+  if (action === 'gcode-zoom:in') zoomGcode(1.5);
+  if (action === 'gcode-zoom:out') zoomGcode(1 / 1.5);
+  if (action === 'gcode-fit') {
+    gcode.view = null;
+    drawGcode();
+  }
+});
+
+window.addEventListener('resize', () => {
+  if (live.page === 'gcode') drawGcode();
 });
 
 dialog.addEventListener('close', () => {

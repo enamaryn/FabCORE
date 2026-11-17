@@ -110,6 +110,12 @@ Pour un **serveur existant**, indiquer l’URL HTTPS, le sujet et le mode d’au
 
 FabCore relaie la vidéo RTSPS de la P2S au navigateur sous forme de MJPEG. Vérifier que le port local TCP 322 est joignable et que la caméra est annoncée dans les réglages de diffusion locale de la P2S. L’installateur FabCore installe FFmpeg depuis les dépôts du système. Sur une installation existante faite à la main, installer le paquet `ffmpeg`. Le flux s’ouvre sur la fiche de la P2S et utilise le code d’accès LAN déjà enregistré.
 
+## Visualiseur G-code
+
+Ouvrir **Visualiseur G-code** dans la navigation, puis choisir un fichier `.gcode` de l’ordinateur. Le fichier est lu dans le navigateur : il n’est ni envoyé au serveur ni à une machine. Le curseur choisit la couche, la molette ou les boutons zooment et un glisser déplace la vue. Les extrusions, les déplacements à vide et la couche précédente ont chacun leur couleur.
+
+Le visualiseur gère `G0`/`G1`, les arcs `G2`/`G3` donnés par `I`/`J`, `G90`/`G91`, `M82`/`M83`, `G92`, `G20`/`G21` et `G28`. Les autres trajectoires (`G5`, arcs `R`, plans `G18`/`G19`…) sont ignorées et listées avec leur première ligne. Taille maximale : 512 Mo.
+
 ## Fonctionnement et limites
 
 - Pour la télémétrie, l’adaptateur interroge `GET /printer/objects/query`. Les requêtes ne suivent pas les redirections. Une indisponibilité de Klippy, un refus Moonraker et une perte de liaison sont distingués.
