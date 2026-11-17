@@ -265,9 +265,9 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.ok(cameraInputs.get('192.168.1.55').destroyed);
   cameraContentType = 'multipart/x-mixed-replace; boundary=frame';
   const clients = [];
-  const openStream = (id) => new Promise((resolve, reject) => {
+  const openStream = (id, viewerCookie = cookie) => new Promise((resolve, reject) => {
     const client = request(base + cameraPath(id), {
-      headers: { Host: 'fabcore.test', Cookie: cookie }
+      headers: { Host: 'fabcore.test', Cookie: viewerCookie }
     }, resolve);
     client.setTimeout(3000, () => client.destroy(new Error('Camera test timed out')));
     client.on('error', reject);
@@ -283,8 +283,27 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
     const [frame1, frame2] = await Promise.all([once(first, 'data'), once(second, 'data')]);
     assert.equal(frame1[0].toString(), 'frame from 192.168.1.55');
     assert.equal(frame2[0].toString(), 'frame from 192.168.1.54');
-    const upstreamClosed = new Promise((resolve) => cameraInputs.get('192.168.1.55').once('close', resolve));
+    const upstream = cameraInputs.get('192.168.1.55');
+    const joined = openStream(firstCC2Id, watchCookie);
+    let watching = false;
+    for (let i = 0; i < 20 && !watching; i++) {
+      const { machines } = await (await call('/api/machines', { cookie: watchCookie })).json();
+      watching = machines.find(({ id }) => id === firstCC2Id).cameraOpen;
+    }
+    assert.ok(watching);
+    upstream.write('discard\r\n--fra');
+    upstream.write('me\r\nnext image');
+    const observerStream = await joined;
+    assert.equal(observerStream.statusCode, 200);
+    assert.equal((await once(observerStream, 'data'))[0].toString(), '--frame\r\nnext image');
+    assert.equal(cameraInputs.get('192.168.1.55'), upstream);
     first.destroy();
+    const observerData = once(observerStream, 'data');
+    upstream.write('still watching');
+    assert.equal((await observerData)[0].toString(), 'still watching');
+    assert.equal(upstream.destroyed, false);
+    const upstreamClosed = new Promise(resolve => upstream.once('close', resolve));
+    assert.equal((await call('/api/logout', { body: {}, cookie: watchCookie })).status, 200);
     await upstreamClosed;
     const nextFrame = once(second, 'data');
     cameraInputs.get('192.168.1.54').write('another frame');
