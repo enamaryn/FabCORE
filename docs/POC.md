@@ -13,6 +13,10 @@ Vérification matérielle caméra : aperçu JPEG reçu et trois images vidéo si
 
 La supervision M2 conserve une session WebSocket et reçoit les rapports d’état. Un heartbeat utilise user/ping. L’ancien chemin ouvrait une nouvelle session toutes les 15 secondes et pouvait provoquer les bips constatés. Les trois vues caméra utilisent camera/snap avec side (angle, par défaut), far (centrale) et near (outil) et le canal file_stream associé à la session persistante. Une seule capture sert d’aperçu à l’ouverture de la fiche. « Voir la caméra » ouvre la vidéo du canal media_stream via FFmpeg et le relais multi-spectateurs. Les vues side, far et near sont sélectionnables, avec side par défaut. Les fiches Bambu et Elegoo extraient également un aperçu unique de leur caméra. Les vues centrale et outil et le parcours navigateur restent à confirmer après déploiement.
 
+## Réouverture des caméras M2
+
+Les commandes vidéo start/stop sont ordonnées et l’arrêt est acquitté avant de libérer le canal média. FFmpeg reçoit explicitement du H.264 et reconstruit les horodatages à la cadence de camera/list. Le diagnostic sur la M2 a observé une cadence estimée erronée de 1 200 000 images/s, qui bloquait la production des images par le filtre fps.
+
 ## Gestion du parc
 
 « Ajouter une machine » ouvre la détection réseau, avec le choix entre lancer le scan et la saisie manuelle.
