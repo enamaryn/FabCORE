@@ -35,7 +35,7 @@ function encode(value) {
 
 const result = (status, issue = null) => ({ status, issue, nozzle: null, bed: null, progress: 0, file: '' });
 
-export function readXTool(machine, { signal, Socket = WebSocket } = {}) {
+export function readXTool(machine, { signal, identityOnly = false, Socket = WebSocket } = {}) {
   const url = new URL(machine.origin);
   if (url.protocol !== 'wss:' || !privateIPv4(url.hostname) || url.port !== '28900' || signal?.aborted) {
     return Promise.resolve(result('offline', 'xtool-connection'));
@@ -89,6 +89,7 @@ export function readXTool(machine, { signal, Socket = WebSocket } = {}) {
         if (typeof serial !== 'string' || !/^[A-Za-z0-9_-]{6,64}$/.test(serial) || (machine.serial && machine.serial !== serial)) {
           return finish(result('error', 'xtool-identity'));
         }
+        if (identityOnly) return finish({ serial, fingerprint });
       }
       if (transaction < 3) sendNext();
       else {
