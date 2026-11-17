@@ -304,7 +304,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       res.once('close', stop);
       discoveryActive = true;
       try {
-        const found = await scan(network, abort.signal);
+        const found = await scan(network, abort.signal, { machines: store.state.machines });
         if (abort.signal.aborted) return;
         const devices = reconcileDiscovery(network, found, store.state.machines);
         return answer(res, 200, { devices });
