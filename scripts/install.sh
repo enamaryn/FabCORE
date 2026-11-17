@@ -17,10 +17,7 @@ if ! command -v apt-get >/dev/null || ! command -v dpkg >/dev/null; then
   exit 1
 fi
 
-required=(ca-certificates curl ffmpeg)
-if "$bootstrap"; then
-  required+=(git)
-fi
+required=(ca-certificates curl ffmpeg git util-linux)
 packages=()
 for package in "${required[@]}"; do
   if [[ $(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true) != 'install ok installed' ]]; then
@@ -78,4 +75,26 @@ fi
 
 npm ci --no-audit --no-fund
 ffmpeg -version >/dev/null
+if (( EUID == 0 )); then
+  update_bin=/usr/local/bin
+else
+  update_bin="$HOME/.local/bin"
+fi
+mkdir -p -- "$update_bin"
+launcher=$(mktemp "$update_bin/.fabcore-update.XXXXXXXX")
+trap 'rm -f -- "$launcher"' EXIT
+{
+  printf '#!/usr/bin/env bash\n'
+  printf 'export PATH=%q:"$PATH"\n' "$(dirname -- "$(command -v node)")"
+  printf 'exec bash %q "$@"\n' "$(pwd -P)/scripts/update.sh"
+} > "$launcher"
+chmod 0755 "$launcher"
+mv -Tf -- "$launcher" "$update_bin/fabcore-update"
+trap - EXIT
+
+if [[ :$PATH: == *:"$update_bin":* ]]; then
+  echo 'Pour mettre FabCore à jour : fabcore-update'
+else
+  printf 'Pour mettre FabCore à jour : %q\n' "$update_bin/fabcore-update"
+fi
 exec npm start
