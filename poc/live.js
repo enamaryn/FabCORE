@@ -507,12 +507,14 @@ const statusLabels = {
   connecting: ['Connexion…','Connecting…']
 };
 let telemetryTimer;
+let fleetRevision = 0;
 async function refresh() {
   if (live.pending || live.phase !== 'workshop') return;
   live.pending = true;
   try {
+    const revision = fleetRevision;
     const { machines } = await api('machines');
-    if (live.phase !== 'workshop') return;
+    if (live.phase !== 'workshop' || revision !== fleetRevision) return;
     const hadRefreshError = live.refreshError;
     live.refreshError = false;
     const previous = new Map(state.machines.map(machine => [machine.id, machine]));
@@ -631,7 +633,7 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
     ${existing && !isCC1 && !isM2 ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
     <p class="error" role="alert"></p>
     <p role="status" hidden></p>
-    <div class="row wrap">${btn('close',t('Annuler','Cancel'))}<button type="submit" value="test">${t('Tester la connexion','Test connection')}</button><button class="primary" type="submit" value="save">${existing ? t('Enregistrer','Save') : t('Ajouter','Add')}</button></div>
+    <div class="row wrap">${existing ? `<button class="danger" type="button" data-action="delete-machine:${esc(existing.id)}">${t('Supprimer la machine', 'Delete machine')}</button>` : ''}${btn('close',t('Annuler','Cancel'))}<button type="submit" value="test">${t('Tester la connexion','Test connection')}</button><button class="primary" type="submit" value="save">${existing ? t('Enregistrer','Save') : t('Ajouter','Add')}</button></div>
   </form>`;
   if (!dialog.open) dialog.showModal();
 }
@@ -781,6 +783,30 @@ document.addEventListener('click', async (event) => {
   if (action === 'edit') {
     const current = machine(state.machine);
     if (current) openMachineForm(current.kind, current.name, current);
+  }
+  if (action === 'delete-machine' && state.role === 'admin') {
+    const current = machine(value);
+    if (!current || !window.confirm(t('Retirer cette machine de FabCore ?', 'Remove this machine from FabCore?') + '\n' + current.name)) return;
+    const form = target.form;
+    const controls = [...form.elements].filter(element => !element.disabled);
+    controls.forEach(element => { element.disabled = true; });
+    try {
+      await api('machines/delete', { id: current.id });
+      fleetRevision++;
+      state.machines = state.machines.filter(({ id }) => id !== current.id);
+      state.events = state.events.filter(({ id }) => id !== current.id);
+      temperatureHistory.delete(current.id);
+      state.machine = null;
+      live.page = 'machines';
+      dialog.close();
+      renderLive();
+      app.querySelector('h1')?.focus();
+      toast(t('Machine supprimée.', 'Machine deleted.'));
+    } catch (error) {
+      form.querySelector('[role="alert"]').textContent = problem(error.code);
+    } finally {
+      controls.forEach(element => { element.disabled = false; });
+    }
   }
   if (action === 'logout') {
     try {
