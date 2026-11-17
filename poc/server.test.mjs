@@ -240,7 +240,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.equal(commands.length, 3);
   ambiguousCommand = false;
   const cc2 = { kind: 'elegoo', host: '192.168.1.53', accessCode: 'ExampleCode', name: 'CC2 atelier' };
-  assert.deepEqual(await (await call('/api/machines/test', { body: cc2, cookie })).json(), { ok: true, issue: null });
+  assert.deepEqual(await (await call('/api/machines/test', { body: cc2, cookie })).json(), { ok: true, issue: null, serial: 'CC2TEST01' });
   const firstCC2 = await call('/api/machines', { body: cc2, cookie });
   assert.equal(firstCC2.status, 201);
   const firstCC2Id = (await firstCC2.json()).id;
