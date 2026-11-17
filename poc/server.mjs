@@ -222,13 +222,16 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         fleet: store.state.machines.map(({ id, name }) => ({ id, name }))
       });
     }
-    const camera = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera$/);
+    const camera = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera(?:\/(side|far|near))?$/);
     if (req.method === 'GET' && camera) {
       if (!activeSession) return error(res, 401, 'sign-in');
       const machine = store.state.machines.find(({ id }) => id === camera[1]);
       const definition = connectorDefinition(machine?.kind);
       if (!definition?.camera) return error(res, 404, 'camera-unsupported');
-      let relay = cameraStreams.get(machine.id);
+      if (camera[2] && machine.kind !== 'xtool-m2') return error(res, 404, 'camera-unsupported');
+      const cameraView = machine.kind === 'xtool-m2' ? camera[2] ?? 'side' : undefined;
+      const streamKey = cameraView ? machine.id + '/' + cameraView : machine.id;
+      let relay = cameraStreams.get(streamKey);
       const viewerCount = [...cameraStreams.values()].reduce((count, stream) => count + stream.viewers.size, 0);
       if (viewerCount >= 32 || (!relay && cameraStreams.size >= 8)) return error(res, 429, 'camera-busy');
       if (relay) {
@@ -237,7 +240,8 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         return;
       }
       relay = cameraRelay();
-      cameraStreams.set(machine.id, relay);
+      relay.machineId = machine.id;
+      cameraStreams.set(streamKey, relay);
       relay.subscribe(res, activeSession, viewer.expires);
       const { controller, output } = relay;
       diagnostics.record('camera', 'opening', machine.id);
@@ -250,11 +254,11 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       let failure;
       try {
         const connector = await connectors.get(machine.kind);
-        if (!controller.signal.aborted) failure = await connector.camera(machine, output, controller.signal, onFrame);
+        if (!controller.signal.aborted) failure = await connector.camera(machine, output, controller.signal, onFrame, cameraView);
       } catch {
         failure = 'interrupted';
       } finally {
-        cameraStreams.delete(machine.id);
+        cameraStreams.delete(streamKey);
         if (failure && !controller.signal.aborted) diagnostics.record('camera', failure, machine.id);
         if (!firstFrame) diagnostics.record('camera', 'closed', machine.id);
         for (const viewerResponse of relay.viewers.keys()) {
@@ -331,7 +335,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         return {
           id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial,
           model: definition?.model ?? connectorCatalog.klipper.model,
-          cameraOpen: [...(cameraStreams.get(machine.id)?.viewers.values() ?? [])].some(({ owner }) => owner === activeSession),
+          cameraOpen: [...cameraStreams.values()].some(stream => stream.machineId === machine.id && [...stream.viewers.values()].some(({ owner }) => owner === activeSession)),
           ...telemetry
         };
       }));
@@ -490,7 +494,9 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         store.save({ ...store.state, machines });
         snapshot.forget(existing.id);
         connectors.forget(existing.kind ?? 'klipper', existing.id, true);
-        cameraStreams.get(existing.id)?.controller.abort();
+        for (const stream of cameraStreams.values()) {
+          if (stream.machineId === existing.id) stream.controller.abort();
+        }
         return answer(res, 200, { id: existing.id });
       }
       if ((path === '/api/machines/edit' || data.id) && !existing) return error(res, 404, 'missing');
@@ -566,7 +572,9 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (existing) {
         snapshot.forget(machine.id);
         connectors.forget(kind, machine.id, existing.origin !== machine.origin || existing.accessCode !== machine.accessCode);
-        cameraStreams.get(machine.id)?.controller.abort();
+        for (const stream of cameraStreams.values()) {
+          if (stream.machineId === machine.id) stream.controller.abort();
+        }
       }
       return answer(res, existing ? 200 : 201, { id: machine.id });
     }
