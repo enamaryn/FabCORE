@@ -59,12 +59,33 @@ test('les caméras partagent le canal média authentifié et démultiplexent les
   assert.equal(opened, 1);
   assert.equal(side.length, 2);
   assert.equal(far.length, 0);
-  stopSide();
+  await stopSide();
   socket.emit('message', frame(0, Buffer.from([0, 0, 1, 0x65])), true);
   assert.equal(far.length, 1);
-  stopFar();
+  await stopFar();
+  const originalRequest = session.request;
+  let releaseStop;
+  session.request = async (method, url, body, params) => {
+    if (params.action === 'stop') await new Promise(resolve => { releaseStop = resolve; });
+    return originalRequest(method, url, body, params);
+  };
+  const first = await subscribeXToolVideo(session, { id: 1, name: 'near' },
+    new AbortController().signal, () => {}, assert.fail);
+  const stopping = first();
+  const reopened = subscribeXToolVideo(session, { id: 1, name: 'near' },
+    new AbortController().signal, () => {}, assert.fail);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(opened, 2);
+  releaseStop();
+  await stopping;
+  const stopReopened = await reopened;
+  assert.equal(opened, 3);
+  session.request = originalRequest;
+  await stopReopened();
   assert.deepEqual(calls, [
     { action: 'start', name: 'side' }, { action: 'start', name: 'far' },
-    { action: 'stop', name: 'side' }, { action: 'stop', name: 'far' }
+    { action: 'stop', name: 'side' }, { action: 'stop', name: 'far' },
+    { action: 'start', name: 'near' }, { action: 'stop', name: 'near' },
+    { action: 'start', name: 'near' }, { action: 'stop', name: 'near' }
   ]);
 });
