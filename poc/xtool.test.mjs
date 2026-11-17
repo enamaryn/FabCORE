@@ -35,11 +35,15 @@ test('M2 lit son identité et son état, et refuse un certificat différent', as
   assert.equal(status.status, 'ready');
   assert.equal(status.serial, 'M2-123456');
   assert.equal(status.fingerprint, 'AA:BB');
+  const identity = await readXTool(machine, { identityOnly: true, Socket: MockSocket });
+  assert.deepEqual(identity, { serial: 'M2-123456', fingerprint: 'AA:BB' });
   const rejected = await readXTool({ ...machine, fingerprint: 'CC:DD' }, { Socket: MockSocket });
   assert.equal(rejected.issue, 'xtool-identity');
   assert.deepEqual(requests, [
     ['GET', '/v1/user/parity'],
     ['GET', '/v1/platform/device/machine-info'],
-    ['POST', '/v1/platform/device/state/sync']
+    ['POST', '/v1/platform/device/state/sync'],
+    ['GET', '/v1/user/parity'],
+    ['GET', '/v1/platform/device/machine-info']
   ]);
 });
