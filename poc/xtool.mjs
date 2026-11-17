@@ -56,6 +56,8 @@ export function readXTool(machine, { signal, identityOnly = false, pairing = fal
     let awaitingConfirmation = false;
     let sessionToken;
     let pairingToken;
+    let reportedState;
+    let syncAcknowledged = false;
     const requests = [
       ['GET', '/v1/user/parity', { userID: 'mk-guest', userKey: 'bWFrZWJsb2NrLXh0b29s', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         ...(pairing || machine.pairingToken ? { token: pairing ? '' : machine.pairingToken } : {}) }],
@@ -95,9 +97,23 @@ export function readXTool(machine, { signal, identityOnly = false, pairing = fal
       }
     });
     ws.on('open', () => { if (!finished) sendNext(); });
+    function completeStatus() {
+      if (!serial || !syncAcknowledged || !reportedState) return;
+      finish({ ...result(reportedState, reportedState === 'error' ? 'xtool-device' : null),
+        serial, fingerprint, ...(pairingToken ? { pairingToken } : {}) });
+    }
     function handleResponse(payload) {
       let message;
       try { message = JSON.parse(payload); } catch { return finish(result('error', 'xtool-protocol')); }
+      const push = message?.data?.['/v1/platform/device/state'];
+      if (message?.type === 'request' || message?.method === 'REPORT') {
+        const state = states.get(push?.curMode?.mode);
+        if (state) {
+          reportedState = state;
+          completeStatus();
+        }
+        return;
+      }
       if (message?.type !== 'response' || (message.transactionId ?? message.data?.transactionId) !== transaction) return;
       if (step === 1 && message.code === 406) {
         if (pairing && (message.data?.authState === 'WAITING_BUTTON_CONFIRM' ||
@@ -122,9 +138,10 @@ export function readXTool(machine, { signal, identityOnly = false, pairing = fal
       }
       if (step < 3) sendNext();
       else {
+        syncAcknowledged = true;
         const state = states.get(message.data?.curMode?.mode);
-        if (!state) return finish(result('error', 'xtool-protocol'));
-        finish({ ...result(state, state === 'error' ? 'xtool-device' : null), serial, fingerprint, ...(pairingToken ? { pairingToken } : {}) });
+        if (state) reportedState = state;
+        completeStatus();
       }
     }
     ws.on('message', (data, binary) => {
