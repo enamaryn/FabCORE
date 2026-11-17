@@ -375,7 +375,7 @@ function liveDetail() {
       <div data-live-camera></div>
       <div class="machine-camera-idle" data-camera-placeholder>${icon('camera')}<p>${t('Flux fermé','Stream closed')}</p></div>
       <p data-camera-status role="status" hidden></p>
-      <div class="row wrap">${btn('camera-start',t('Ouvrir le flux','Open stream'))}
+      <div class="row wrap">${btn('camera-start',t('Voir la caméra','View camera'))}
       ${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
     </section>` : '';
   const edit = state.role === 'admin' ? btn('edit',t('Modifier la machine','Edit machine')) : '';
@@ -402,6 +402,29 @@ function liveDetail() {
     </div>`;
 }
 
+function showPreview() {
+  const camera = app.querySelector('[data-live-camera]');
+  const m = machine(state.machine);
+  if (!camera || !m) return;
+  camera.querySelector('img')?.removeAttribute('src');
+  camera.replaceChildren();
+  const view = app.querySelector('[data-camera-view]')?.value;
+  const image = document.createElement('img');
+  image.alt = t('Aperçu de ', 'Preview of ') + m.name;
+  image.style.cssText = 'display:block;width:100%;max-width:850px;border-radius:12px';
+  image.addEventListener('load', () => {
+    if (image.isConnected) app.querySelector('[data-camera-placeholder]').hidden = true;
+  }, { once: true });
+  image.addEventListener('error', () => {
+    if (!image.isConnected) return;
+    image.remove();
+    app.querySelector('[data-camera-placeholder]').hidden = false;
+    app.querySelector('[data-camera-placeholder] p').textContent = t('Aperçu indisponible', 'Preview unavailable');
+  }, { once: true });
+  camera.append(image);
+  image.src = '/api/machines/' + encodeURIComponent(m.id) + '/camera/preview' + (view ? '/' + view : '');
+}
+
 function showCamera(open, failed = false) {
   const camera = app.querySelector('[data-live-camera]');
   const m = machine(state.machine);
@@ -419,10 +442,12 @@ function showCamera(open, failed = false) {
   start.hidden = open;
   stop.hidden = !open;
   if (!open) {
+    if (!failed) showPreview();
     start.focus();
     return;
   }
   const image = document.createElement('img');
+  image.dataset.cameraLive = 'true';
   image.alt = t('Vue en direct de ', 'Live view of ') + m.name;
   image.style.cssText = 'display:block;width:100%;max-width:850px;border-radius:12px';
   image.addEventListener('error', () => {
@@ -519,6 +544,7 @@ function renderLive() {
       ${signedIn?screens[live.page]():credentialsPage()}
     </main></div></div>
     ${signedIn?`<nav class="mobile" style="grid-template-columns:repeat(3,1fr)" aria-label="${t('Navigation mobile','Mobile navigation')}">${liveNavigation()}</nav>`:''}`;
+  if (signedIn && live.page === 'detail') showPreview();
   if (signedIn && live.page === 'viewer') mountGcode();
   if (signedIn && live.page === 'detail' && state.machine && machineConnectors[machine(state.machine)?.kind]?.files && filesState(state.machine).files === null) loadFiles(state.machine);
 }
@@ -556,7 +582,7 @@ async function refresh() {
     recordTemperatures(machines);
     const timestamp = live.page === 'detail' && app.querySelector('#last-check');
     const current = machine(state.machine);
-    const cameraImage = app.querySelector('[data-live-camera] img');
+    const cameraImage = app.querySelector('[data-camera-live]');
     if (cameraImage && current?.cameraOpen) cameraImage.dataset.streamOpened = 'true';
     if (cameraImage?.dataset.streamOpened && !current?.cameraOpen) showCamera(false, true);
     updateViewer();
@@ -862,10 +888,9 @@ dialog.addEventListener('input', (event) => {
 
 app.addEventListener('change', event => {
   if (!event.target.matches('[data-camera-view]')) return;
-  if (app.querySelector('[data-live-camera] img')) {
-    showCamera(true);
-    event.target.focus();
-  }
+  if (app.querySelector('[data-camera-live]')) showCamera(true);
+  else showPreview();
+  event.target.focus();
 });
 
 dialog.addEventListener('change', (event) => {
