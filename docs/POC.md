@@ -6,7 +6,7 @@ Finaliser la recette de découverte réseau sur le LXC. Vérifier qu’OctoPrint
 
 ## Session xTool
 
-La supervision M2 conserve une session WebSocket et reçoit les rapports d’état. Un heartbeat utilise user/ping. L’ancien chemin ouvrait une nouvelle session toutes les 15 secondes et pouvait provoquer les bips constatés. La caméra M2 reste à intégrer via camera/snap et le canal file_stream.
+La supervision M2 conserve une session WebSocket et reçoit les rapports d’état. Un heartbeat utilise user/ping. L’ancien chemin ouvrait une nouvelle session toutes les 15 secondes et pouvait provoquer les bips constatés. La caméra centrale utilise camera/snap (vue globale far) et le canal file_stream associé à la session persistante. Elle fournit des images actualisées à la demande avec le relais multi-spectateurs existant. Validation sur matériel après déploiement.
 
 ## Gestion du parc
 
