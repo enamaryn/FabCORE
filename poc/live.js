@@ -613,7 +613,11 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
   const isBambu = form === 'bambu';
   const isCC1 = form === 'elegoo-cc1';
   const isM2 = form === 'xtool-m2';
-  const xtoolSerial = isM2 ? existing?.serial ?? detected?.serial : null;
+  const serial = existing?.serial ?? detected?.serial ?? '';
+  const manualSerial = isBambu || (isCC1 && !existing && !serial);
+  const serialField = manualSerial
+    ? `name="serial" ${isBambu ? 'required maxlength="32"' : 'maxlength="64"'}`
+    : `readonly class="muted" data-machine-serial ${isCC1 ? 'name="serial"' : ''} placeholder="${t('Non communiqué', 'Not reported')}"`;
   const addressLabel = kind === 'klipper' ? 'Moonraker' : connector.model;
   dialog.innerHTML = `<form id="add-machine" class="stack" autocomplete="off">
     <h2>${existing ? t('Modifier une machine','Edit a machine') : t('Ajouter une machine','Add a machine')}</h2>
@@ -625,14 +629,12 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
       <label>${t('Nom de la machine','Machine name')}<input name="name" required maxlength="80" value="${esc(name)}"></label>
       ${form !== 'http' ? `
       <label>${t('Adresse IPv4 locale','Local IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : esc(detected?.host ?? '')}"></label>
-      ${isBambu ? `<label>${t('Numéro de série','Serial number')}<input name="serial" required maxlength="32" value="${esc(existing?.serial ?? detected?.serial ?? '')}"></label>` : ''}
-      ${xtoolSerial ? `<label>${t('Numéro de série','Serial number')}<input readonly class="muted" value="${esc(xtoolSerial)}"></label>` : ''}
-      ${isCC1 && !existing ? `<label>${t('MainboardID (facultatif)', 'MainboardID (optional)')}<input name="serial" maxlength="64" value="${esc(detected?.serial ?? '')}"></label>` : ''}
       ${isCC1 || isM2 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
       ` : `
       <label>${t('Adresse ', 'Address for ')}${esc(addressLabel)}<input name="origin" type="url" placeholder="http://192.168.1.50${port === 80 ? '' : ':' + port}" required maxlength="200" value="${esc(existing?.origin ?? detected?.origin ?? '')}"></label>
       <label>${t('Clé API', 'API key')}${required ? '' : ' ' + t('(facultative)', '(optional)')}<input name="apiKey" type="password" ${required && !existing ? 'required' : ''} maxlength="256" autocomplete="new-password"></label>
       `}
+      <label>${isCC1 ? t('MainboardID (facultatif)', 'MainboardID (optional)') : t('Numéro de série', 'Serial number')}<input ${serialField} value="${esc(serial)}"></label>
     </div>
     ${existing && !isCC1 && !isM2 ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
     <p class="error" role="alert"></p>
@@ -840,6 +842,10 @@ dialog.addEventListener('change', (event) => {
 
 document.addEventListener('input', (event) => {
   const form = event.target.form;
+  if (form?.id === 'add-machine' && ['host', 'origin'].includes(event.target.name)) {
+    const serialField = form.querySelector('[data-machine-serial]:not([name])');
+    if (serialField) serialField.value = '';
+  }
   if (form?.id !== 'notifications-settings') return;
   const { ntfyMode, smtpEnabled } = form.elements;
   form.querySelector('[data-ntfy-internal]').hidden = ntfyMode.value !== 'internal';
@@ -897,6 +903,8 @@ document.addEventListener('submit', async (event) => {
         status.hidden = false;
         status.textContent = t('Test en cours…', 'Testing connection…');
         const result = await api('machines/test', data);
+        const serialField = form.querySelector('[data-machine-serial]');
+        if (serialField && result.serial) serialField.value = result.serial;
         status.hidden = !result.ok;
         status.textContent = result.ok ? liveIssue(result.issue) || t('Connexion réussie. Télémétrie reçue.', 'Connection successful. Telemetry received.') : '';
         if (!result.ok) errorText.textContent = liveIssue(result.issue) || problem(result.issue);

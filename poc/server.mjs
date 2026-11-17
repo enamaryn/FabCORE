@@ -414,7 +414,11 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
           const sameConnection = existing && existing.origin === machine.origin && existing.accessCode === machine.accessCode;
           const result = await connector.probe(machine, { signal: abort.signal, testing, sameConnection });
           if (abort.signal.aborted) return;
-          if (testing) return answer(res, 200, { ok: result.ok, issue: result.issue ?? (result.ok ? null : 'elegoo-report') });
+          if (testing) return answer(res, 200, {
+            ok: result.ok,
+            issue: result.issue ?? (result.ok ? null : 'elegoo-report'),
+            ...(result.ok && result.serial ? { serial: result.serial } : {})
+          });
           if (!result.ok) return error(res, 422, result.issue ?? 'elegoo-info');
           machine.serial = result.serial;
           if (result.fingerprint) machine.fingerprint = result.fingerprint;
