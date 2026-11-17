@@ -88,13 +88,31 @@ async function download(session, filename, signal) {
     if (signal.aborted) stop();
     else signal.addEventListener('abort', stop, { once: true });
   });
+  const end = image.lastIndexOf(Buffer.from([0xff, 0xd9]));
   if (createHash('md5').update(image).digest('hex') !== info.digestdata.toLowerCase() ||
-      image.readUInt16BE(0) !== 0xffd8 || image.readUInt16BE(image.length - 2) !== 0xffd9) throw new Error('invalid-image');
+      image.readUInt16BE(0) !== 0xffd8 || end < 2 ||
+      image.subarray(end + 2).some(byte => byte !== 0)) throw new Error('invalid-image');
   await session.request('PUT', '/v1/filetransfer/finish', { code: 0, message: 'file transfer finish', channel });
-  return image;
+  return image.subarray(0, end + 2);
 }
 
-export async function streamXToolCamera(getSession, output, signal, onFrame) {
+const transfers = new WeakMap();
+
+async function capture(session, view, signal) {
+  const previous = transfers.get(session) ?? Promise.resolve();
+  const transfer = previous.catch(() => {}).then(async () => {
+    signal.throwIfAborted();
+    const snap = await session.request('POST', '/v1/platform/camera/snap', {}, { name: view });
+    if (typeof snap?.filename !== 'string' || !snap.filename || snap.filename.length > 512) throw new Error('invalid-stream');
+    return download(session, snap.filename, signal);
+  });
+  transfers.set(session, transfer);
+  try { return await transfer; }
+  finally { if (transfers.get(session) === transfer) transfers.delete(session); }
+}
+
+export async function streamXToolCamera(getSession, output, signal, onFrame, view = 'side') {
+  if (!['side', 'far', 'near'].includes(view)) return 'invalid-stream';
   try {
     // A camera viewer shares the existing authenticated instruction session.
     for (let attempt = 0; !getSession() && attempt < 24; attempt++) {
@@ -104,9 +122,7 @@ export async function streamXToolCamera(getSession, output, signal, onFrame) {
     while (!signal.aborted) {
       const session = getSession();
       if (!session) return 'xtool-connection';
-      const snap = await session.request('POST', '/v1/platform/camera/snap', {}, { name: 'far' });
-      if (typeof snap?.filename !== 'string' || !snap.filename || snap.filename.length > 512) return 'invalid-stream';
-      const image = await download(session, snap.filename, signal);
+      const image = await capture(session, view, signal);
       if (signal.aborted) return;
       if (!started) {
         output.writeHead(200, { 'Content-Type': 'multipart/x-mixed-replace; boundary=xtool',
