@@ -53,3 +53,59 @@ test('M2 lit son identité et son état, et refuse un certificat différent', as
     ['GET', '/v1/user/parity']
   ]);
 });
+
+test('M2 attend la confirmation et réutilise le jeton lors de la connexion suivante', async () => {
+  let confirmationRequested = false;
+  let pair = true;
+  class MockSocket extends EventEmitter {
+    constructor() {
+      super();
+      queueMicrotask(() => {
+        this.emit('upgrade', { socket: { getPeerCertificate: () => ({ fingerprint256: 'AA:BB' }) } });
+        this.emit('open');
+      });
+    }
+    send(frame) {
+      const request = JSON.parse(frame.subarray(10));
+      let code = 0;
+      let data;
+      switch (request.url) {
+        case '/v1/user/parity':
+          assert.equal(request.data.token, pair ? '' : 'persistent-token');
+          if (pair) {
+            code = 406;
+            data = { authState: 'WAITING_BUTTON_CONFIRM' };
+          } else data = { sessionToken: 'temporary-token' };
+          break;
+        case '/v1/user/auth-status':
+          confirmationRequested = true;
+          data = { token: 'persistent-token', sessionToken: 'temporary-token' };
+          break;
+        case '/v1/platform/device/machine-info':
+          assert.equal(request.sessionToken, 'temporary-token');
+          if (pair) assert.ok(confirmationRequested);
+          data = { sn: 'M2-123456' };
+          break;
+        case '/v1/platform/device/state/sync':
+          assert.equal(request.sessionToken, 'temporary-token');
+          data = { curMode: { mode: 'Idle' } };
+          break;
+        default:
+          assert.fail(request.url);
+      }
+      queueMicrotask(() => this.emit('message', Buffer.from(JSON.stringify({
+        type: 'response', transactionId: request.transactionId, code, data
+      })), false));
+    }
+    terminate() {}
+  }
+  const machine = { origin: 'wss://192.168.1.12:28900' };
+  const paired = await readXTool(machine, { Socket: MockSocket, pairing: true });
+  assert.equal(paired.status, 'ready');
+  assert.equal(paired.pairingToken, 'persistent-token');
+  pair = false;
+  const status = await readXTool({ ...machine, pairingToken: paired.pairingToken, fingerprint: paired.fingerprint },
+    { Socket: MockSocket });
+  assert.equal(status.status, 'ready');
+  assert.equal(status.pairingToken, undefined);
+});
