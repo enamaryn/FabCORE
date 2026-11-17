@@ -59,7 +59,7 @@ En cours. Décisions prises le 17 novembre 2026, à consigner dans `docs/DECISIO
 
 ## MVP-02 · Interface complète de la maquette UX/UI
 
-À faire. Dépend de MVP-01.7. Reconstruire en React tous les écrans, états et parcours du [prototype](../design/prototype.html) ([revue](../design/README.md)), reliés aux données réelles. Chaque écran est livré quand sa fonction serveur existe (étapes suivantes). En attendant, il affiche clairement que la fonction n’est pas disponible, sans donnée fictive présentée comme réelle. Chaque écran est vérifié en FR/EN, en thème sombre et clair, sur desktop, tablette et mobile.
+À faire. Dépend de MVP-01.7. Reconstruire en React tous les écrans, états et parcours du [prototype](../design/prototype.html) ([revue](../design/README.md)), reliés aux données réelles, en respectant les [règles produit et interface](PRODUCT.md). Chaque écran est livré quand sa fonction serveur existe (étapes suivantes). En attendant, il affiche clairement que la fonction n’est pas disponible, sans donnée fictive présentée comme réelle. Chaque écran est vérifié en FR/EN, en thème sombre et clair, sur desktop, tablette et mobile.
 
 - [ ] MVP-02.1 Navigation : barre latérale desktop, barre mobile (Atelier, Machines, Alertes, Plus), page « Plus ».
 - [ ] MVP-02.2 Connexion : compte local et Pocket ID / OIDC.
