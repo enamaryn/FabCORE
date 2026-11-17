@@ -106,6 +106,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   });
   const pendingCommands = new Set();
   const cc2Tests = new WeakMap();
+  const xtoolPairings = new Set();
   let probes = 0;
   let discoveryActive = false;
   const notificationTests = new Set();
@@ -364,7 +365,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         pendingCommands.delete(machine.id);
       }
     }
-    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/edit', '/api/machines/delete', '/api/observers'].includes(path)) {
+    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/pair', '/api/machines/edit', '/api/machines/delete', '/api/observers'].includes(path)) {
       return error(res, 404, 'missing');
     }
     if (!requireJson(req, res)) return;
@@ -404,6 +405,15 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (!name || !connection) return error(res, 400, 'machine-invalid');
       const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
       const testing = path === '/api/machines/test';
+      const pairing = path === '/api/machines/pair';
+      if (pairing) {
+        if (kind !== 'xtool-m2') return error(res, 400, 'machine-invalid');
+        if (xtoolPairings.has(machine.origin)) return error(res, 409, 'xtool-pairing-busy');
+        if (store.state.machines.some(entry => entry.origin === machine.origin && entry.id !== existing?.id)) {
+          return error(res, 409, 'machine-duplicate');
+        }
+        if (!existing && store.state.machines.length >= 8) return error(res, 409, 'machine-limit');
+      }
       const cc2TestKey = kind === 'elegoo' && !existing
         ? digest(JSON.stringify([machine.origin, machine.accessCode])).toString('hex')
         : null;
@@ -414,14 +424,16 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       } else if (testing || definition.verify) {
         if (probes >= 2) return error(res, 429, 'probe-busy');
         probes++;
+        if (pairing) xtoolPairings.add(machine.origin);
         const abort = new AbortController();
         res.once('close', () => abort.abort());
         try {
           const connector = await connectors.get(kind);
           if (abort.signal.aborted) return;
           const sameConnection = existing && existing.origin === machine.origin && existing.accessCode === machine.accessCode;
-          const result = await connector.probe(machine, { signal: abort.signal, testing, sameConnection });
+          const result = await connector.probe(machine, { signal: abort.signal, testing, sameConnection, pairing });
           if (abort.signal.aborted) return;
+          if (pairing && !session(req)) return error(res, 401, 'sign-in');
           if (testing) {
             if (cc2TestKey) {
               cc2Tests.delete(viewer);
@@ -438,9 +450,11 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
           if (!result.ok) return error(res, 422, result.issue ?? 'elegoo-info');
           machine.serial = result.serial;
           if (result.fingerprint) machine.fingerprint = result.fingerprint;
+          if (pairing && result.pairingToken) machine.pairingToken = result.pairingToken;
           if (existing && !store.state.machines.includes(existing)) return error(res, 409, 'machine-changed');
         } finally {
           probes--;
+          if (pairing) xtoolPairings.delete(machine.origin);
         }
       }
       if (store.state.machines.some((entry) => entry.id !== existing?.id &&
