@@ -50,6 +50,9 @@ function liveIssue(issue) {
     'octoprint-disconnected': t('OctoPrint répond, mais l’imprimante est déconnectée.', 'OctoPrint is reachable, but the printer is disconnected.'),
     'octoprint-printer-error': t('OctoPrint signale une erreur de l’imprimante.', 'OctoPrint reports a printer error.'),
     'xtool-connection': t('FabCore ne peut pas joindre la M2 sur le port 28900.', 'FabCore cannot reach the M2 on port 28900.'),
+    'xtool-authorization': t('La M2 demande une autorisation. Utilisez « Appairer la M2 ».', 'The M2 requires authorization. Use “Pair M2”.'),
+    'xtool-pairing-timeout': t('Délai écoulé. Relancez l’appairage et confirmez sur la M2.', 'Pairing timed out. Try again and confirm on the M2.'),
+    'xtool-pairing-busy': t('Appairage indisponible. Fermez xTool Studio si la machine y est connectée, puis réessayez.', 'Pairing is unavailable. Close xTool Studio if it is connected, then try again.'),
     'xtool-protocol': t('La M2 n’a pas renvoyé un état compatible WS-V2.', 'The M2 did not return a compatible WS-V2 status.'),
     'xtool-identity': t('Le certificat ou le numéro de série de la M2 a changé.', 'The M2 certificate or serial number changed.'),
     'xtool-device': t('La M2 signale une erreur.', 'The M2 reports an error.'),
@@ -78,7 +81,8 @@ function liveIssue(issue) {
 }
 
 async function api(path, data, cancel) {
-  const timeout = AbortSignal.timeout(path === 'discovery' || path.startsWith('machines') || path.startsWith('notifications') ? 18000 : 5000);
+  const timeout = AbortSignal.timeout(path === 'machines/pair' ? 50_000
+    : path === 'discovery' || path.startsWith('machines') || path.startsWith('notifications') ? 18000 : 5000);
   const signal = cancel ? AbortSignal.any([timeout, cancel]) : timeout;
   const response = await fetch('/api/' + path, data === undefined ? { signal } : {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal
@@ -628,6 +632,11 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
   const isBambu = form === 'bambu';
   const isCC1 = form === 'elegoo-cc1';
   const isM2 = form === 'xtool-m2';
+  const serial = existing?.serial ?? detected?.serial ?? '';
+  const manualSerial = isBambu || (isCC1 && !existing && !serial);
+  const serialField = manualSerial
+    ? `name="serial" ${isBambu ? 'required maxlength="32"' : 'maxlength="64"'}`
+    : `readonly class="muted" data-machine-serial ${isCC1 ? 'name="serial"' : ''} placeholder="${t('Non communiqué', 'Not reported')}"`;
   const addressLabel = kind === 'klipper' ? 'Moonraker' : connector.model;
   dialog.innerHTML = `<form id="add-machine" class="stack" autocomplete="off">
     <h2>${existing ? t('Modifier une machine','Edit a machine') : t('Ajouter une machine','Add a machine')}</h2>
@@ -639,18 +648,17 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
       <label>${t('Nom de la machine','Machine name')}<input name="name" required maxlength="80" value="${esc(name)}"></label>
       ${form !== 'http' ? `
       <label>${t('Adresse IPv4 locale','Local IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : esc(detected?.host ?? '')}"></label>
-      ${isBambu ? `<label>${t('Numéro de série','Serial number')}<input name="serial" required maxlength="32" value="${esc(existing?.serial ?? detected?.serial ?? '')}"></label>` : ''}
-      ${isCC1 && !existing ? `<label>${t('MainboardID (facultatif)', 'MainboardID (optional)')}<input name="serial" maxlength="64" value="${esc(detected?.serial ?? '')}"></label>` : ''}
       ${isCC1 || isM2 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
       ` : `
       <label>${t('Adresse ', 'Address for ')}${esc(addressLabel)}<input name="origin" type="url" placeholder="http://192.168.1.50${port === 80 ? '' : ':' + port}" required maxlength="200" value="${esc(existing?.origin ?? detected?.origin ?? '')}"></label>
       <label>${t('Clé API', 'API key')}${required ? '' : ' ' + t('(facultative)', '(optional)')}<input name="apiKey" type="password" ${required && !existing ? 'required' : ''} maxlength="256" autocomplete="new-password"></label>
       `}
+      <label>${isCC1 ? t('MainboardID (facultatif)', 'MainboardID (optional)') : t('Numéro de série', 'Serial number')}<input ${serialField} value="${esc(serial)}"></label>
     </div>
     ${existing && !isCC1 && !isM2 ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
     <p class="error" role="alert"></p>
     <p role="status" hidden></p>
-    <div class="row wrap">${existing ? `<button class="danger" type="button" data-action="delete-machine:${esc(existing.id)}">${t('Supprimer la machine', 'Delete machine')}</button>` : ''}${btn('close',t('Annuler','Cancel'))}<button type="submit" value="test">${t('Tester la connexion','Test connection')}</button><button class="primary" type="submit" value="save">${existing ? t('Enregistrer','Save') : t('Ajouter','Add')}</button></div>
+    <div class="row wrap">${existing ? `<button class="danger" type="button" data-action="delete-machine:${esc(existing.id)}">${t('Supprimer la machine', 'Delete machine')}</button>` : ''}${btn('close',t('Annuler','Cancel'))}<button type="submit" value="test">${t('Tester la connexion','Test connection')}</button>${isM2 ? `<button type="submit" value="pair">${t('Appairer la M2', 'Pair M2')}</button>` : ''}<button class="primary" type="submit" value="save">${existing ? t('Enregistrer','Save') : t('Ajouter','Add')}</button></div>
   </form>`;
   if (!dialog.open) dialog.showModal();
 }
@@ -700,8 +708,8 @@ async function scanFromForm(form) {
     status.textContent = devices.some(device => !device.registered) ? t('Choisissez une machine à ajouter.', 'Choose a machine to add.')
       : devices.length ? '' : t('Aucune machine identifiée. L’ajout manuel reste disponible.', 'No printer identified. You can still add it manually.');
     results.innerHTML = devices.map((device, index) => `<div class="row between wrap"><span>${esc(device.name ?? machineConnectors[device.kind]?.model ?? device.kind)} · ${esc(device.host)}</span>
-      ${device.registered ? `<small>${t('Déjà ajoutée','Already added')}${device.detected === false ? ' · ' + t('Non détectée par ce scan', 'Not detected in this scan') : ''}</small>`
-        : btn('detected:' + index, t('Configurer','Configure'))}</div>`).join('');
+      ${device.registered ? `<small>${t('Déjà ajoutée','Already added')}${device.detected === false ? ' · ' + t('Aucune réponse reconnue', 'No recognized response') : device.candidate ? ' · ' + t('Identité à confirmer', 'Identity unconfirmed') : ''}</small>`
+        : btn('detected:' + index, device.candidate ? t('Vérifier et configurer','Verify and configure') : t('Configurer','Configure'))}</div>`).join('');
   } catch (error) {
     if (!signal.aborted) status.textContent = problem(error.code);
   } finally {
@@ -853,6 +861,10 @@ dialog.addEventListener('change', (event) => {
 
 document.addEventListener('input', (event) => {
   const form = event.target.form;
+  if (form?.id === 'add-machine' && ['host', 'origin'].includes(event.target.name)) {
+    const serialField = form.querySelector('[data-machine-serial]:not([name])');
+    if (serialField) serialField.value = '';
+  }
   if (form?.id !== 'notifications-settings') return;
   const { ntfyMode, smtpEnabled } = form.elements;
   form.querySelector('[data-ntfy-internal]').hidden = ntfyMode.value !== 'internal';
@@ -896,7 +908,11 @@ document.addEventListener('submit', async (event) => {
     return;
   }
   delete data.confirm;
-  const controls = [...form.elements].filter((element) => !element.disabled);
+  const pairing = form.id === 'add-machine' && event.submitter?.value === 'pair';
+  const pairingAbort = pairing ? new AbortController() : null;
+  const cancelPairing = () => pairingAbort.abort();
+  if (pairing) dialog.addEventListener('close', cancelPairing, { once: true });
+  const controls = [...form.elements].filter(element => !element.disabled && (!pairing || element.dataset.action !== 'close'));
   controls.forEach((element) => { element.disabled = true; });
   errorText.textContent = '';
   try {
@@ -910,12 +926,19 @@ document.addEventListener('submit', async (event) => {
         status.hidden = false;
         status.textContent = t('Test en cours…', 'Testing connection…');
         const result = await api('machines/test', data);
+        const serialField = form.querySelector('[data-machine-serial]');
+        if (serialField && result.serial) serialField.value = result.serial;
         status.hidden = !result.ok;
         status.textContent = result.ok ? liveIssue(result.issue) || t('Connexion réussie. Télémétrie reçue.', 'Connection successful. Telemetry received.') : '';
         if (!result.ok) errorText.textContent = liveIssue(result.issue) || problem(result.issue);
         return;
       }
-      const { id } = await api(data.id ? 'machines/edit' : 'machines', data);
+      if (pairing) {
+        const status = form.querySelector('[role="status"]');
+        status.hidden = false;
+        status.textContent = t('Confirmez l’appairage sur la M2 quand elle le demande. FabCore dispose de 45 secondes.', 'Confirm pairing on the M2 when prompted. FabCore waits up to 45 seconds.');
+      }
+      const { id } = await api(pairing ? 'machines/pair' : data.id ? 'machines/edit' : 'machines', data, pairingAbort?.signal);
       dialog.close();
       live.page = 'machines';
       renderLive();
@@ -943,6 +966,7 @@ document.addEventListener('submit', async (event) => {
       errorText.textContent = liveIssue(error.code) || problem(error.code);
     }
   } finally {
+    if (pairing) dialog.removeEventListener('close', cancelPairing);
     controls.forEach((element) => { element.disabled = false; });
   }
 });

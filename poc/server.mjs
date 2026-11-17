@@ -110,6 +110,8 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   });
   const pendingCommands = new Set();
   const pendingUploads = new Set();
+  const cc2Tests = new WeakMap();
+  const xtoolPairings = new Set();
   let probes = 0;
   let discoveryActive = false;
   const notificationTests = new Set();
@@ -309,7 +311,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       res.once('close', stop);
       discoveryActive = true;
       try {
-        const found = await scan(network, abort.signal);
+        const found = await scan(network, abort.signal, { machines: store.state.machines });
         if (abort.signal.aborted) return;
         const devices = reconcileDiscovery(network, found, store.state.machines);
         return answer(res, 200, { devices });
@@ -460,7 +462,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       }
       return error(res, 404, 'missing');
     }
-    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/edit', '/api/machines/delete', '/api/observers'].includes(path)) {
+    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/pair', '/api/machines/edit', '/api/machines/delete', '/api/observers'].includes(path)) {
       return error(res, 404, 'missing');
     }
     if (!requireJson(req, res)) return;
@@ -500,24 +502,56 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (!name || !connection) return error(res, 400, 'machine-invalid');
       const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
       const testing = path === '/api/machines/test';
-      if (testing || definition.verify) {
+      const pairing = path === '/api/machines/pair';
+      if (pairing) {
+        if (kind !== 'xtool-m2') return error(res, 400, 'machine-invalid');
+        if (xtoolPairings.has(machine.origin)) return error(res, 409, 'xtool-pairing-busy');
+        if (store.state.machines.some(entry => entry.origin === machine.origin && entry.id !== existing?.id)) {
+          return error(res, 409, 'machine-duplicate');
+        }
+        if (!existing && store.state.machines.length >= 8) return error(res, 409, 'machine-limit');
+      }
+      const cc2TestKey = kind === 'elegoo' && !existing
+        ? digest(JSON.stringify([machine.origin, machine.accessCode])).toString('hex')
+        : null;
+      const previousTest = cc2Tests.get(viewer);
+      const verifiedCC2 = !testing && cc2TestKey && previousTest?.key === cc2TestKey && previousTest.expires > Date.now();
+      if (verifiedCC2) {
+        machine.serial = previousTest.serial;
+      } else if (testing || definition.verify) {
         if (probes >= 2) return error(res, 429, 'probe-busy');
         probes++;
+        if (pairing) xtoolPairings.add(machine.origin);
         const abort = new AbortController();
         res.once('close', () => abort.abort());
         try {
           const connector = await connectors.get(kind);
           if (abort.signal.aborted) return;
           const sameConnection = existing && existing.origin === machine.origin && existing.accessCode === machine.accessCode;
-          const result = await connector.probe(machine, { signal: abort.signal, testing, sameConnection });
+          const result = await connector.probe(machine, { signal: abort.signal, testing, sameConnection, pairing });
           if (abort.signal.aborted) return;
-          if (testing) return answer(res, 200, { ok: result.ok, issue: result.issue ?? (result.ok ? null : 'elegoo-report') });
+          if (pairing && !session(req)) return error(res, 401, 'sign-in');
+          if (testing) {
+            if (cc2TestKey) {
+              cc2Tests.delete(viewer);
+              if (result.ok && result.serial) {
+                cc2Tests.set(viewer, { key: cc2TestKey, serial: result.serial, expires: Date.now() + 60_000 });
+              }
+            }
+            return answer(res, 200, {
+              ok: result.ok,
+              issue: result.issue ?? (result.ok ? null : 'elegoo-report'),
+              ...(result.ok && result.serial ? { serial: result.serial } : {})
+            });
+          }
           if (!result.ok) return error(res, 422, result.issue ?? 'elegoo-info');
           machine.serial = result.serial;
           if (result.fingerprint) machine.fingerprint = result.fingerprint;
+          if (pairing && result.pairingToken) machine.pairingToken = result.pairingToken;
           if (existing && !store.state.machines.includes(existing)) return error(res, 409, 'machine-changed');
         } finally {
           probes--;
+          if (pairing) xtoolPairings.delete(machine.origin);
         }
       }
       if (store.state.machines.some((entry) => entry.id !== existing?.id &&
@@ -528,6 +562,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const machines = existing ? store.state.machines.map((entry) => entry.id === machine.id ? machine : entry)
         : [...store.state.machines, machine];
       store.save({ ...store.state, machines });
+      if (verifiedCC2) cc2Tests.delete(viewer);
       if (existing) {
         snapshot.forget(machine.id);
         connectors.forget(kind, machine.id, existing.origin !== machine.origin || existing.accessCode !== machine.accessCode);

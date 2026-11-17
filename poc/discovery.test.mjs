@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { createCipheriv, createDecipheriv } from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import { discoverXTool } from './xtool-discovery.mjs';
 import { test } from 'node:test';
 import { detectOctoPrint, discoveryNetworks, reconcileDiscovery, scanNetwork } from './discovery.mjs';
 
@@ -21,12 +24,19 @@ test('le scan ignore le serveur, l’adresse réseau et le broadcast', async () 
   const devices = await scanNetwork(network, new AbortController().signal, {
     inspectHost: async (host) => {
       scanned.push(host);
-      return host.endsWith('.6') ? [{ host, kind: 'bambu' }] : [];
+      if (host.endsWith('.6')) return [{ host, kind: 'bambu' }];
+      return host.endsWith('.3') ? [{ host, kind: 'xtool-m2', candidate: true }] : [];
     },
-    broadcast: async () => [{ host: '192.168.1.4', kind: 'elegoo-cc1' }]
+    broadcast: async () => [{ host: '192.168.1.4', kind: 'elegoo-cc1' }],
+    xtoolDiscovery: async (hosts, localAddress) => {
+      assert.equal(localAddress, '192.168.1.1');
+      assert.deepEqual(hosts, [2, 3, 4, 5, 6].map(host => '192.168.1.' + host));
+      return [{ host: '192.168.1.3', kind: 'xtool-m2', serial: 'M2TEST01' }];
+    }
   });
   assert.deepEqual(scanned, [2, 3, 4, 5, 6].map((host) => '192.168.1.' + host));
-  assert.deepEqual(devices.map(({ kind }) => kind), ['elegoo-cc1', 'bambu']);
+  assert.deepEqual(devices.map(({ kind }) => kind), ['xtool-m2', 'elegoo-cc1', 'bambu']);
+  assert.deepEqual(devices[0], { host: '192.168.1.3', kind: 'xtool-m2', serial: 'M2TEST01' });
 });
 
 test('le scan reconnaît OctoPrint au login sans clé ni imprimante connectée', async () => {
@@ -58,4 +68,33 @@ test('le scan distingue les machines reconnues des machines déjà ajoutées non
     { kind: 'elegoo', host: '192.168.1.22', name: 'CC2', registered: true, detected: false },
     { ...found[0], registered: true, name: 'P2S' }
   ]);
+});
+
+test('la découverte xTool valide le modèle, le sous-réseau et la requête', async () => {
+  const socket = new EventEmitter();
+  const abort = new AbortController();
+  const host = '192.168.1.12';
+  let closes = 0;
+  socket.close = () => { closes++; };
+  socket.bind = (_port, _address, ready) => queueMicrotask(ready);
+  socket.send = (packet, port) => {
+    if (port !== 25353) return;
+    const iv = packet.subarray(0, 16);
+    const decoder = createDecipheriv('aes-256-cbc', 'makeblockmakeblockmakeblock-2025', iv);
+    const { data } = JSON.parse(Buffer.concat([decoder.update(packet.subarray(16)), decoder.final()]));
+    const reply = (address, fields) => {
+      const encoder = createCipheriv('aes-256-cbc', data.key, iv);
+      const body = JSON.stringify({ type: 'deviceFind', method: 'response', data: fields });
+      socket.emit('message', Buffer.concat([iv, encoder.update(body), encoder.final()]), { address });
+    };
+    const valid = { requestId: data.requestId, deviceCode: 'JS002', deviceSn: 'M2TEST01' };
+    reply(host, valid);
+    reply(host, { ...valid, requestId: valid.requestId + 1, deviceSn: 'WRONG01' });
+    reply(host, { ...valid, deviceCode: 'GS003', deviceSn: 'WRONG02' });
+    reply('192.168.1.13', valid);
+    queueMicrotask(() => abort.abort());
+  };
+  assert.deepEqual(await discoverXTool([host], '192.168.1.1', abort.signal, () => socket),
+    [{ host, kind: 'xtool-m2', serial: 'M2TEST01' }]);
+  assert.equal(closes, 1);
 });

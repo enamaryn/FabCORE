@@ -2,9 +2,11 @@
 
 ## Jalon en cours
 
-Finaliser la recette de découverte réseau sur le LXC. Vérifier qu’OctoPrint est trouvé même sans imprimante branchée et que la P2S et les deux Elegoo apparaissent comme déjà ajoutées. Les améliorations de scan sont incluses dans la [PR #29](https://github.com/enamaryn/FabCORE/pull/29), fusionnée. La recette sur le réseau réel reste à confirmer.
+Finaliser la recette de découverte réseau sur le LXC. Vérifier qu’OctoPrint est trouvé même sans imprimante branchée et que la P2S et les deux Elegoo apparaissent comme déjà ajoutées. Les améliorations de scan sont incluses dans la [PR #29](https://github.com/enamaryn/FabCORE/pull/29), fusionnée. OctoPrint est confirmé sur le réseau réel. La recette porte maintenant sur les CC2 avec ou sans code LAN enregistré, la xTool M2 et la stabilité de la réponse P2S. Le matériel xTool répond au WebSocket LAN mais refuse l’identification avec un code 406. La découverte UDP V2 permet de lire le modèle M2 et le numéro de série avant la connexion de suivi, qui nécessite un appairage sur le firmware testé. Depuis le formulaire xTool, « Appairer la M2 » lance l’attente de la confirmation physique, puis enregistre la machine et son jeton côté serveur. La recette complète sur la M2 reste à effectuer. Référence de protocole : [ha-xtool](https://github.com/thecodingdad/ha-xtool/blob/main/docs/PROTOCOL.md). Le formulaire affiche le numéro de série fourni par le scan ou le test de connexion pour les connecteurs qui le remontent. Les champs de saisie prévus par Bambu et la CC1 restent disponibles. L’essai du formulaire dans le navigateur reste à confirmer.
 
 ## Gestion du parc
+
+L’ajout d’une nouvelle CC2 réutilise le test réussi pendant une minute dans la même session si l’adresse et le code LAN correspondent. Le parcours HTTP couvre aussi l’ajout direct. Essai sur le LXC à confirmer.
 
 La suppression d’une machine et le correctif d’accès à `fabcore-update` dans les LXC sont fusionnés dans la [PR #35](https://github.com/enamaryn/FabCORE/pull/35). Le parcours HTTP couvre les droits Observateur, la suppression persistante et le réajout. Le bouton « Modifier la machine » est dans l’en-tête de la fiche, à côté de « Retour au parc ». La suppression se fait depuis cette fenêtre de modification. La suppression depuis le navigateur sur le LXC reste à confirmer.
 

@@ -35,7 +35,7 @@ function encode(value) {
 
 const result = (status, issue = null) => ({ status, issue, nozzle: null, bed: null, progress: 0, file: '' });
 
-export function readXTool(machine, { signal, Socket = WebSocket } = {}) {
+export function readXTool(machine, { signal, identityOnly = false, pairing = false, Socket = WebSocket } = {}) {
   const url = new URL(machine.origin);
   if (url.protocol !== 'wss:' || !privateIPv4(url.hostname) || url.port !== '28900' || signal?.aborted) {
     return Promise.resolve(result('offline', 'xtool-connection'));
@@ -51,24 +51,40 @@ export function readXTool(machine, { signal, Socket = WebSocket } = {}) {
     let serial;
     let fingerprint;
     let transaction = 0;
+    let step = 0;
+    let poll;
+    let awaitingConfirmation = false;
+    let sessionToken;
+    let pairingToken;
     const requests = [
-      ['GET', '/v1/user/parity', { userID: 'mk-guest', userKey: 'bWFrZWJsb2NrLXh0b29s', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }],
+      ['GET', '/v1/user/parity', { userID: 'mk-guest', userKey: 'bWFrZWJsb2NrLXh0b29s', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        ...(pairing || machine.pairingToken ? { token: pairing ? '' : machine.pairingToken } : {}) }],
       ['GET', '/v1/platform/device/machine-info', {}],
       ['POST', '/v1/platform/device/state/sync', {}]
     ];
     const disconnect = () => finish(result('offline', 'xtool-connection'));
-    const timer = setTimeout(() => finish(result('error', 'xtool-protocol')), 12000);
+    const timer = setTimeout(() => finish(result('error', awaitingConfirmation ? 'xtool-pairing-timeout' : 'xtool-protocol')),
+      pairing ? 45_000 : 12_000);
     function finish(state) {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
+      clearTimeout(poll);
       signal?.removeEventListener('abort', disconnect);
       ws.terminate();
       resolve(state);
     }
+    function send(method, path, data = {}) {
+      ws.send(encode({ type: 'request', method, url: path, params: {}, data, timestamp: Date.now(),
+        transactionId: ++transaction, ...(sessionToken ? { sessionToken } : {}) }));
+    }
     function sendNext() {
-      const [method, path, data] = requests[transaction++];
-      ws.send(encode({ type: 'request', method, url: path, params: {}, data, timestamp: Date.now(), transactionId: transaction }));
+      send(...requests[step++]);
+    }
+    function waitForConfirmation() {
+      awaitingConfirmation = true;
+      clearTimeout(poll);
+      poll = setTimeout(() => send('GET', '/v1/user/auth-status'), 1000);
     }
     ws.on('error', disconnect);
     ws.on('close', disconnect);
@@ -83,18 +99,32 @@ export function readXTool(machine, { signal, Socket = WebSocket } = {}) {
       let message;
       try { message = JSON.parse(payload); } catch { return finish(result('error', 'xtool-protocol')); }
       if (message?.type !== 'response' || (message.transactionId ?? message.data?.transactionId) !== transaction) return;
+      if (step === 1 && message.code === 406) {
+        if (pairing && (message.data?.authState === 'WAITING_BUTTON_CONFIRM' ||
+            (awaitingConfirmation && !message.data?.authState))) return waitForConfirmation();
+        return finish(identityOnly ? { candidate: true } : result('error', 'xtool-authorization'));
+      }
+      if (awaitingConfirmation && message.code === 410) return finish(result('error', 'xtool-pairing-timeout'));
+      if (pairing && step === 1 && [409, 503].includes(message.code)) return finish(result('error', 'xtool-pairing-busy'));
       if (message.code != null && message.code !== 0) return finish(result('error', 'xtool-protocol'));
-      if (transaction === 2) {
+      if (step === 1) {
+        if (typeof message.data?.sessionToken === 'string') sessionToken = message.data.sessionToken;
+        if (pairing && typeof message.data?.token === 'string' && message.data.token) pairingToken = message.data.token;
+        if (awaitingConfirmation && !pairingToken) return finish(result('error', 'xtool-authorization'));
+        awaitingConfirmation = false;
+      }
+      if (step === 2) {
         serial = message.data?.sn || message.data?.snCode;
         if (typeof serial !== 'string' || !/^[A-Za-z0-9_-]{6,64}$/.test(serial) || (machine.serial && machine.serial !== serial)) {
           return finish(result('error', 'xtool-identity'));
         }
+        if (identityOnly) return finish({ serial, fingerprint });
       }
-      if (transaction < 3) sendNext();
+      if (step < 3) sendNext();
       else {
         const state = states.get(message.data?.curMode?.mode);
         if (!state) return finish(result('error', 'xtool-protocol'));
-        finish({ ...result(state, state === 'error' ? 'xtool-device' : null), serial, fingerprint });
+        finish({ ...result(state, state === 'error' ? 'xtool-device' : null), serial, fingerprint, ...(pairingToken ? { pairingToken } : {}) });
       }
     }
     ws.on('message', (data, binary) => {
