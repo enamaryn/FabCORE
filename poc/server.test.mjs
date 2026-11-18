@@ -31,10 +31,10 @@ test('Moonraker utilise une requête GET fixe et normalise la télémétrie', as
   assert.deepEqual(result, { status: 'printing', issue: null, progress: 46, file: 'support.gcode', nozzle: 205.1, bed: 60.2 });
 });
 
-test('Moonraker envoie uniquement les commandes pause et reprise vers la cible configurée', async () => {
-  for (const action of ['pause', 'resume']) {
+test('Moonraker envoie uniquement les commandes pause, reprise et arrêt vers la cible configurée', async () => {
+  for (const action of ['pause', 'resume', 'stop']) {
     assert.equal(await commandMoonraker(printer, action, async (url, options) => {
-      assert.equal(url, printer.origin + '/printer/print/' + action);
+      assert.equal(url, printer.origin + '/printer/print/' + (action === 'stop' ? 'cancel' : action));
       assert.equal(options.method, 'POST');
       assert.equal(options.redirect, 'error');
       assert.equal(options.headers['X-Api-Key'], printer.apiKey);
@@ -82,7 +82,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
     sendCommand: async (machine, action) => {
       commands.push([machine.id, machine.origin, action]);
       if (ambiguousCommand) throw new Error('Connection lost after sending');
-      printState = action === 'pause' ? 'paused' : 'printing';
+      printState = action === 'stop' ? 'standby' : action === 'pause' ? 'paused' : 'printing';
       return true;
     },
     networks: () => [{ cidr: '192.168.1.0/24' }],
@@ -241,6 +241,14 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.deepEqual(await unconfirmed.json(), { error: 'command-unconfirmed' });
   assert.equal(commands.length, 3);
   ambiguousCommand = false;
+  printState = 'printing';
+  assert.equal((await call(commandPath, { body: { action: 'stop', confirm: true }, cookie: watchCookie })).status, 403);
+  assert.equal((await call(commandPath, { body: { action: 'stop' }, cookie })).status, 400);
+  assert.deepEqual(await (await call(commandPath, { body: { action: 'stop', confirm: true }, cookie })).json(), { status: 'ready' });
+  assert.equal(commands.at(-1)[2], 'stop');
+  const sent = commands.length;
+  assert.equal((await call(commandPath, { body: { action: 'stop', confirm: true }, cookie })).status, 409);
+  assert.equal(commands.length, sent);
   const cc2 = { kind: 'elegoo', host: '192.168.1.53', accessCode: 'ExampleCode', name: 'CC2 atelier' };
   assert.deepEqual(await (await call('/api/machines/test', { body: cc2, cookie })).json(), { ok: true, issue: null, serial: 'CC2TEST01' });
   const probesAfterTest = cc2Probes;

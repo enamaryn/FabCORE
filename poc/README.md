@@ -158,3 +158,13 @@ FabCore lit le numéro de série et l’état de la M2. À l’ajout, il mémori
 Une écoute hors boucle locale impose une origine HTTPS et un reverse proxy qui préserve l’en-tête `Host` et termine TLS. Pour la recette POC, le tunnel SSH garde l’écoute en local. La maquette de revue s’ouvre toujours directement avec `design/prototype.html`.
 
 Références Moonraker pour le [suivi d’impression](https://moonraker.readthedocs.io/en/latest/external_api/introduction/#basic-print-status), les [objets Klipper](https://moonraker.readthedocs.io/en/latest/printer_objects/) et [l’autorisation API](https://moonraker.readthedocs.io/en/latest/external_api/authorization/).
+
+## Fichiers et pilotage : extension expérimentale
+
+Les fiches disposent d’un visualiseur G-code local (sans envoi à la machine). Le panneau de fichiers et les commandes disponibles dépendent du connecteur : voir la [matrice de recette](../docs/POC.md#extension-fichiers-et-commandes--en-développement). Lancer depuis le panneau exige un fichier préparé pour le modèle concerné et une confirmation administrateur. Pause/Reprendre et Stop s’affichent selon l’état. Stop annule la fabrication, sans remplacer l’arrêt d’urgence matériel.
+
+Pour Bambu : accès FTPS implicite sur le port 990 avec le code LAN existant ; G-code et 3MF déjà tranché à un seul plateau. Un 3MF de modèle 3D non tranché n’est pas imprimable. Les projets multi-plateaux et BGCODE restent refusés. Le lancement est limité à une bobine externe explicitement confirmée ; la sélection des bobines AMS/CANVAS n’est pas encore implémentée. Selon le firmware et ses restrictions d’autorisation, les commandes LAN peuvent être refusées ; aucun contournement n’est tenté.
+
+Pour Elegoo : seules les copies des fichiers envoyés avec succès par FabCore sont listées et visualisables, pas l’intégralité du stockage. Ces copies persistent sous le dossier de données FabCore (`files/`) ; prévoir leur sauvegarde avec les autres données. La limite est de 300 fichiers ou 2 Go par identité machine. Un nom déjà présent est refusé pour éviter un remplacement involontaire. La reprise CC2 reste à effectuer sur l’écran de la machine.
+
+Pour xTool M2 : Lancer agit sur le projet déjà préparé dans la machine ; les confirmations physiques restent nécessaires. Le transfert des projets natifs M2 n’est pas implémenté. Le visualiseur local accepte du G-code laser avec M3/M4, M5 et les puissances S ; il ne lit pas les projets xTool Studio et ne tranche ni ne convertit un modèle.

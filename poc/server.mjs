@@ -15,6 +15,7 @@ import { createOidc } from './oidc.mjs';
 import { internalNtfy, notificationSettings, publicNotifications, sendNotification } from './notifications.mjs';
 import { openStore } from './store.mjs';
 import { filePath } from './connector-http.mjs';
+import { productionPath } from './production-files.mjs';
 
 const derive = promisify(scrypt);
 const digest = (secret) => createHash('sha256').update(secret).digest();
@@ -107,7 +108,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const attempts = new Map();
   const diagnostics = createDiagnostics();
   diagnostics.record('server', 'started');
-  const connectors = createConnectorRegistry({ readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera });
+  const connectors = createConnectorRegistry({ directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera });
   const snapshot = monitor(async (machine) => {
     const connector = await connectors.get(machine.kind ?? 'klipper');
     const { serial, fingerprint, ...telemetry } = await connector.read(machine);
@@ -372,22 +373,25 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       let data;
       try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
       const action = data.action;
-      if (action !== 'pause' && action !== 'resume') return error(res, 400, 'invalid');
+      if (!['start', 'pause', 'resume', 'stop'].includes(action)) return error(res, 400, 'invalid');
       const machine = store.state.machines.find(({ id }) => id === command[1]);
       if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.commands) return error(res, 404, 'missing');
-      if (pendingCommands.has(machine.id)) return error(res, 409, 'command-busy');
-      const before = action === 'pause' ? 'printing' : 'paused';
-      const after = action === 'pause' ? 'paused' : 'printing';
+      if (!connectorDefinition(machine.kind ?? 'klipper').commandActions.includes(action)) return error(res, 400, 'command-unsupported');
+      if (['stop', 'start'].includes(action) && data.confirm !== true) return error(res, 400, 'invalid');
+      if (pendingCommands.has(machine.id) || pendingUploads.has(machine.id)) return error(res, 409, 'command-busy');
+      const before = { pause: ['printing'], resume: ['paused'], stop: ['printing', 'paused'], start: ['ready', 'done'] }[action];
+      const after = { pause: ['paused'], resume: ['printing'], stop: ['ready', 'done'], start: ['printing'] }[action];
       pendingCommands.add(machine.id);
       try {
         const connector = await connectors.get(machine.kind ?? 'klipper');
-        if ((await connector.read(machine)).status !== before) return error(res, 409, 'command-state');
+        if (!before.includes((await connector.read(machine)).status)) return error(res, 409, 'command-state');
         if (res.destroyed) return;
         if (!session(req)) return error(res, 401, 'sign-in');
         try {
           if (!(await connector.command(machine, action))) return error(res, 502, 'command-rejected');
           for (let attempt = 0; attempt < 4; attempt++) {
-            if ((await connector.read(machine)).status === after) return answer(res, 200, { status: after });
+            const status = (await connector.read(machine)).status;
+            if (after.includes(status)) return answer(res, 200, { status });
             if (attempt < 3) await delay(350);
           }
         } catch { /* The request may have reached the printer. Never retry it automatically. */ }
@@ -444,6 +448,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const machine = store.state.machines.find(entry => entry.id === id);
       if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.files) return error(res, 404, 'missing');
       const files = (await connectors.get(machine.kind ?? 'klipper')).files;
+      const validPath = connectorDefinition(machine.kind ?? 'klipper').projects ? productionPath : filePath;
       const params = new URLSearchParams(query);
       if (req.method === 'GET' && route === 'files') {
         try {
@@ -452,12 +457,14 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         } catch { return error(res, 502, 'files-unavailable'); }
       }
       if (req.method === 'GET' && route === 'file') {
-        const target = filePath(params.get('path'));
+        const target = validPath(params.get('path'));
         if (!target) return error(res, 400, 'invalid');
         const controller = new AbortController();
         res.once('close', () => controller.abort());
         let response;
-        try { response = await files.download(machine, target, controller.signal); } catch { return error(res, 502, 'files-unavailable'); }
+        try { response = await files.download(machine, target, controller.signal); } catch (failure) {
+          return error(res, 502, ['project-multiple-plates', 'project-no-gcode', 'project-format'].includes(failure.message) ? failure.message : 'files-unavailable');
+        }
         if (!response.ok || !response.body) {
           await response.body?.cancel();
           return response.status === 404 ? error(res, 404, 'missing') : error(res, 502, 'files-unavailable');
@@ -483,18 +490,18 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (req.method === 'POST' && route === 'files') {
         const name = params.get('name');
         const size = Number(req.headers['content-length']);
-        if (req.headers['content-type'] !== 'application/octet-stream' || !filePath(name) || name.includes('/')) return error(res, 400, 'invalid');
+        if (req.headers['content-type'] !== 'application/octet-stream' || !validPath(name) || name.includes('/')) return error(res, 400, 'invalid');
         if (!Number.isSafeInteger(size) || size < 1) return error(res, 411, 'invalid');
         if (size > fileLimit) return error(res, 413, 'file-too-large');
-        if (pendingUploads.has(machine.id)) return error(res, 409, 'upload-busy');
+        if (pendingUploads.has(machine.id) || pendingCommands.has(machine.id)) return error(res, 409, 'upload-busy');
         pendingUploads.add(machine.id);
         try {
           const stored = await files.upload(machine, name, req, size);
           if (!stored) return error(res, 502, 'upload-rejected');
           diagnostics.record('files', 'uploaded', machine.id);
           return answer(res, 201, { path: stored });
-        } catch {
-          if (!res.headersSent) return error(res, 502, 'upload-failed');
+        } catch (failure) {
+          if (!res.headersSent) return error(res, 502, ['project-multiple-plates', 'project-no-gcode', 'project-format', 'file-exists', 'file-quota'].includes(failure.message) ? failure.message : 'upload-failed');
           return res.destroy();
         } finally {
           pendingUploads.delete(machine.id);
@@ -504,9 +511,10 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         if (!requireJson(req, res)) return;
         let data;
         try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
-        const target = filePath(data.path);
+        const target = validPath(data.path);
         if (!target || data.confirm !== true) return error(res, 400, 'invalid');
-        if (pendingCommands.has(machine.id)) return error(res, 409, 'command-busy');
+        if (connectorDefinition(machine.kind ?? 'klipper').externalFilament && data.filamentMode !== 'external') return error(res, 400, 'filament-confirm');
+        if (pendingCommands.has(machine.id) || pendingUploads.has(machine.id)) return error(res, 409, 'command-busy');
         pendingCommands.add(machine.id);
         try {
           const connector = await connectors.get(machine.kind ?? 'klipper');
@@ -520,7 +528,10 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
               if ((await connector.read(machine)).status === 'printing') return answer(res, 200, { status: 'printing' });
               if (attempt < 5) await delay(500);
             }
-          } catch { /* La demande a pu atteindre la machine : ne jamais la renvoyer automatiquement. */ }
+          } catch (failure) {
+            if (['project-format', 'project-no-gcode', 'project-multiple-plates'].includes(failure.message)) return error(res, 400, failure.message);
+            /* La demande a pu atteindre la machine : ne jamais la renvoyer automatiquement. */
+          }
           return error(res, 504, 'command-unconfirmed');
         } finally {
           snapshot.forget(machine.id);

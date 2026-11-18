@@ -9,7 +9,17 @@ Ajouter une définition dans [le registre](connectors.mjs). Le registre sert les
 - `probe` renvoie `{ ok, issue }`. Un connecteur qui doit vérifier l’identité avant enregistrement déclare `verify` et peut renvoyer un numéro de série ou une empreinte.
 - Déclarer les fonctions réellement disponibles dans les métadonnées. Un connecteur peut fournir `camera`, `command`, `gcode`, `forget` et `close` selon ses besoins. La métadonnée `terminal` active le terminal G-code : `gcode(machine, script)` renvoie `{ outcome: 'executed' | 'accepted', responses }` ou `{ outcome: 'rejected', message }`, et lève une erreur si le résultat est inconnu. La métadonnée `files` active le panneau de fichiers : le connecteur fournit alors `files` avec `list(machine)`, `download(machine, path, signal)`, `upload(machine, name, flux, taille)` et `start(machine, path)`. Pour le suivi en direct, `read` renvoie `filePath` et `filePosition` (en octets) pendant une impression. Les connecteurs avec `live` fournissent leur propre date de mise à jour.
 
-Utiliser des tests de réponses simulées et vérifier le parcours d’ajout dans FabCore. [PrusaLink](prusalink.mjs) illustre un adaptateur de télémétrie HTTP en lecture seule.
+Utiliser des tests de réponses simulées et vérifier le parcours d’ajout dans FabCore. [PrusaLink](prusalink.mjs) illustre un adaptateur HTTP avec des capacités explicites.
+
+### Fichiers et commandes de production
+
+`commandActions` énumère les commandes réellement implémentées (`pause`, `resume`, `stop` et, pour un projet déjà préparé sur la M2, `start`). La route serveur vérifie cette liste, les droits administrateur, l’état de la machine et la confirmation d’un arrêt ou lancement. `stop` annule la fabrication ; ce n’est pas un arrêt d’urgence matériel. Une réponse perdue reste non confirmée, sans rejeu automatique.
+
+Les commandes Bambu et CC2 utilisent la session MQTT existante, avec identifiants de transaction et sans mise en file hors connexion. La CC2 n’expose pas de reprise : elegoo-link laisse la correspondance 1023 commentée, sans implémentation utilisable. Ne pas la déclarer fonctionnelle sur cette seule base.
+
+Les fichiers Elegoo accessibles ici sont les copies des fichiers transférés avec succès par FabCore, conservées dans le dossier de données et isolées par identité machine. Le SDK ne fournit pas de liste locale complète utilisable : `retainedOnly` l’indique au navigateur. Les copies ne prouvent pas que le stockage de la machine n’a pas été modifié par un autre logiciel. Bambu utilise FTPS implicite et PrusaLink son API v1. Un `projects` Bambu accepte les `.3mf` tranchés à un seul plateau ; le visualiseur extrait le G-code sans extraire de chemins sur disque (CRC et tailles vérifiés, 128 Mo décompressés maximum). Les archives non tranchées, multi-plateaux ou BGCODE ne sont pas prises en charge. Les lancements Bambu/Elegoo nécessitent une confirmation explicite de bobine externe ; aucun mapping automatique AMS/CANVAS n’est inventé.
+
+La M2 dispose d’un visualiseur G-code local et de commandes sur le projet déjà préparé dans la machine. Le transfert natif M2 (projet `xf`, configuration et tâche) reste non implémenté : ne pas réutiliser le transfert G-code générique d’un autre modèle xTool. Pour JS002, les commandes de fabrication vont à `POST /v1/project/device/control` avec `params.action=START|PAUSE|RESUME|CANCEL`. `/v1/processing/state?action=stop` concerne le cadrage, pas l’annulation d’une fabrication.
 
 ## Règles de protocole
 

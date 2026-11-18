@@ -21,7 +21,10 @@ function words(code) {
   return values;
 }
 
-export function createGcodeParser() {
+export function createGcodeParser({ laser = false } = {}) {
+  let laserOn = false;
+  let laserPower = 0;
+  let rapid = false;
   let segments = new Float32Array(4096 * 4);
   let types = new Uint8Array(4096);
   let offsets = new Float64Array(4096);
@@ -101,7 +104,7 @@ export function createGcodeParser() {
 
   // Ajoute un tracé (ligne ou arc déjà découpé) en attribuant les extrusions à la couche de leur hauteur.
   const draw = (points, delta) => {
-    const type = delta > EPSILON ? EXTRUDE : TRAVEL;
+    const type = (laser ? laserOn && laserPower > 0 && !rapid : delta > EPSILON) ? EXTRUDE : TRAVEL;
     if (type === EXTRUDE) startLayer();
     let [x0, y0] = [position.X, position.Y];
     for (const [x1, y1] of points) {
@@ -177,11 +180,15 @@ export function createGcodeParser() {
     const number = Number(head[2]);
     const name = head[1] + number;
     const values = words(code.slice(head[0].length));
+    if ('S' in values) laserPower = values.S;
     if (head[1] === 'M') {
+      if (number === 3 || number === 4) laserOn = true;
+      if (number === 5) laserOn = false;
       if (number === 82) absoluteE = true;
       if (number === 83) absoluteE = false;
       return;
     }
+    rapid = number === 0;
     if (number === 0 || number === 1) return move(values);
     if (number === 2 || number === 3) return arc(values, number === 2, name);
     if (number === 90) { absolute = true; absoluteE = true; return; }

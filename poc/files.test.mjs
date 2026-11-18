@@ -12,7 +12,7 @@ const gcode = 'M83\nG1 Z0.2\nG1 X10 Y0 E1\n';
 
 test('les chemins de fichiers restent relatifs, imprimables et en .gcode', () => {
   for (const path of ['cube.gcode', 'dossier/Benchy 0.2mm.gco', 'a/b/c.G']) assert.equal(filePath(path), path);
-  for (const path of ['', '../secret.gcode', 'a/../b.gcode', '/abs.gcode', 'a//b.gcode', 'image.png', 'é.gcode', 'x'.repeat(250) + '.gcode', ' cube.gcode', 42]) {
+  for (const path of ['', '../secret.gcode', 'a/../b.gcode', '..\\evil.gcode', '/abs.gcode', 'a//b.gcode', 'image.png', 'é.gcode', 'x'.repeat(250) + '.gcode', ' cube.gcode', 42]) {
     assert.equal(filePath(path), null, String(path));
   }
 });
@@ -99,7 +99,7 @@ test('parcours HTTP des fichiers Moonraker : liste, lecture, envoi et lancement 
   const root = '/api/machines/' + id;
 
   assert.equal((await call(root + '/files')).status, 401);
-  assert.equal((await call('/api/machines/' + prusa + '/files', { cookie })).status, 404);
+  assert.equal((await call('/api/machines/' + prusa + '/files', { cookie })).status, 502);
   assert.deepEqual((await call(root + '/files', { cookie: watcher })).json, { files: [{ path: 'cube.gcode', size: gcode.length, modified: 1700000000000 }] });
   const read = await call(root + '/file?path=cube.gcode', { cookie: watcher });
   assert.deepEqual([read.status, read.text], [200, gcode]);

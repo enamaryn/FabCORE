@@ -55,7 +55,7 @@ export async function readMoonraker(machine, fetcher = fetch) {
   }
 }
 
-const printCommands = new Map([['pause', '/printer/print/pause'], ['resume', '/printer/print/resume']]);
+const printCommands = new Map([['pause', '/printer/print/pause'], ['resume', '/printer/print/resume'], ['stop', '/printer/print/cancel']]);
 
 export async function commandMoonraker(machine, action, fetcher = fetch) {
   const endpoint = printCommands.get(action);

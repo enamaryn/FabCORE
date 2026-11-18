@@ -136,6 +136,21 @@ Tickets [#31](https://github.com/enamaryn/FabCORE/issues/31) et [#32](https://gi
 
 ## POC-10 · Recette matérielle sur le LXC
 
+### Extension fichiers et commandes · en développement
+
+Demande du 18 novembre 2026 : étendre les fichiers, le visualiseur et les boutons Lancer, Pause/Reprendre et Stop au-delà de Moonraker/OctoPrint.
+
+| Connecteur | Fichiers et lancement | Pause / reprise / stop |
+| --- | --- | --- |
+| Moonraker et OctoPrint | Liste, transfert, visualiseur, lancement | Les trois commandes |
+| PrusaLink API v1 | Liste du stockage, transfert, lecture et lancement | Les trois commandes |
+| Bambu P2S | FTPS, G-code et 3MF tranché à un plateau ; bobine externe confirmée | Les trois commandes via la session MQTT |
+| Elegoo CC1 | Transfert HTTP, copies FabCore pour l’aperçu, lancement | Les trois commandes SDCP |
+| Elegoo CC2 | Transfert HTTP, copies FabCore pour l’aperçu, lancement | Pause et stop via la session MQTT ; reprise sur l’écran machine |
+| xTool M2 | Visualiseur G-code local ; lancement du projet déjà préparé sur la M2. Transfert natif `xf` non implémenté | Les trois commandes du protocole JS002 |
+
+Ces ajouts sont expérimentaux tant que leur parcours n’est pas testé sur matériel réel. La supervision, les caméras et leur recette déjà acquise ne valident pas ces nouvelles commandes. Aucun essai d’envoi, de lancement, de pause ou d’arrêt n’est effectué sur le matériel pendant le développement. Les commandes restent administrateur, avec confirmation et sans renvoi automatique. Les limites de format et d’AMS/CANVAS sont détaillées dans le [contrat des connecteurs](../poc/CONNECTORS.md#fichiers-et-commandes-de-production).
+
 En cours. Chaque sous-étape passe à `Testé matériel` une fois vérifiée sur la machine réelle, après déploiement de `main` sur le LXC.
 
 - [ ] POC-10.1 Terminal (POC-09.4) :

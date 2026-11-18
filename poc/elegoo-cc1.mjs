@@ -10,6 +10,39 @@ const states = new Map([
 const empty = (status, issue) => ({ status, issue, nozzle: null, bed: null, progress: 0, file: '' });
 const serialPattern = /^[a-zA-Z0-9_-]{6,64}$/;
 
+export function requestElegooCC1(machine, command, params = {}, { Socket = WebSocket } = {}) {
+  if (!serialPattern.test(machine.serial ?? '')) return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    const requestId = randomBytes(8).toString('hex');
+    const ws = new Socket(machine.origin + '/websocket');
+    let done = false;
+    const timer = setTimeout(() => finish(new Error('command-unconfirmed')), 6000);
+    function finish(error, accepted) {
+      if (done) return;
+      done = true; clearTimeout(timer); ws.close();
+      if (error) reject(error); else resolve(accepted);
+    }
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ Id: machine.serial, Topic: `sdcp/request/${machine.serial}`,
+      Data: { Cmd: command, Data: params, RequestID: requestId, MainboardID: machine.serial, TimeStamp: Date.now(), From: 1 } })));
+    ws.addEventListener('error', () => finish(new Error('command-unconfirmed')));
+    ws.addEventListener('close', () => finish(new Error('command-unconfirmed')));
+    ws.addEventListener('message', event => {
+      if (done || typeof event.data !== 'string' || event.data.length > 65536) return;
+      let message;
+      try { message = JSON.parse(event.data); } catch { return; }
+      const data = message.Data;
+      if (message.Topic !== `sdcp/response/${machine.serial}` || data?.RequestID !== requestId || data.Cmd !== command) return;
+      if (Number.isInteger(data.Data?.Ack)) finish(null, data.Data.Ack === 0);
+      else finish(new Error('command-unconfirmed'));
+    });
+  });
+}
+
+export function commandElegooCC1(machine, action, options) {
+  const command = { pause: 129, stop: 130, resume: 131 }[action];
+  return command ? requestElegooCC1(machine, command, {}, options) : false;
+}
+
 function discover(host, signal) {
   return new Promise((resolve) => {
     const socket = createSocket('udp4');

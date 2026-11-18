@@ -137,8 +137,10 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
     const request = root + '/' + clientId + '/api_request';
     diagnostics?.record('mqtt', 'connecting-mqtt', machine.id);
     const client = connectPrinter(machine.origin, { clientId, username: 'elegoo', password: machine.accessCode,
-      protocolVersion: 4, connectTimeout: 3000, reconnectPeriod: 0, keepalive: 30 });
+      protocolVersion: 4, connectTimeout: 3000, reconnectPeriod: 0, queueQoSZero: false, keepalive: 30 });
     let registered = false;
+    const pending = new Map();
+    let transaction = 100;
     let lastReport = 0;
     let lastRequest = 0;
     let lastPing = 0;
@@ -177,6 +179,9 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
       clearInterval(tick);
       clearTimeout(watchdog);
       entry.close = null;
+      entry.rpc = null;
+      for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error('command-unconfirmed')); }
+      pending.clear();
       client.end(true);
     };
     function fail(result, issue) {
@@ -209,12 +214,29 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
       if (topic === registration && !registered) {
         if (message?.error !== 'ok') return fail('error', 'elegoo-register');
         registered = true;
+        entry.rpc = (method, params) => new Promise((resolve, reject) => {
+          if (!entry.close || !client.connected) return reject(new Error('elegoo-connection'));
+          const id = ++transaction;
+          const timer = setTimeout(() => { pending.delete(id); reject(new Error('command-unconfirmed')); }, 6000);
+          pending.set(id, { method, resolve, reject, timer });
+          client.publish(request, JSON.stringify({ id, method, params }), { qos: 0, retain: false }, error => {
+            if (error && pending.has(id)) { clearTimeout(timer); pending.delete(id); reject(error); }
+          });
+        });
         diagnostics?.record('mqtt', 'registered', machine.id);
         lastPing = now();
         query();
         return;
       }
-      if (!registered || !message?.result || typeof message.result !== 'object') return;
+      if (!registered) return;
+      const item = topic === response && pending.get(message.id);
+      if (item && (message.method === undefined || message.method === item.method)) {
+        pending.delete(message.id); clearTimeout(item.timer);
+        if (Number.isInteger(message.result?.error_code)) item.resolve(message.result.error_code === 0);
+        else item.reject(new Error('command-unconfirmed'));
+        return;
+      }
+      if (!message?.result || typeof message.result !== 'object') return;
       if (topic === response && message.id === 2 && (message.method === undefined || message.method === 2005)) {
         const filaments = canvasFilaments(message.result);
         if (filaments !== null) {
@@ -240,6 +262,18 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
     });
   }
   return {
+    request(machine, method, params = {}) {
+      const entry = sessions.get(machine.id);
+      if (!entry?.rpc) throw new Error('elegoo-connection');
+      return entry.rpc(method, params);
+    },
+    command(machine, action) {
+      const method = { pause: 1021, stop: 1022 }[action];
+      if (!method) return false;
+      const entry = sessions.get(machine.id);
+      if (!entry?.rpc) throw new Error('elegoo-connection');
+      return entry.rpc(method, {});
+    },
     async read(machine) {
       let entry = sessions.get(machine.id);
       if (!entry) {

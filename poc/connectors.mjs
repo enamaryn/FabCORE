@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { retainedFiles } from './production-files.mjs';
 import { privateIPv4, moonrakerOrigin } from './connector-http.mjs';
 
 const value = (data, key, max) => typeof data[key] === 'string' && data[key].length <= max ? data[key].trim() : '';
@@ -46,41 +48,45 @@ const definitions = {
     const read = readPrinter ?? mod.readMoonraker;
     return { read: machine => read(machine), probe: probeStatus(machine => read(machine), ['print']), command: sendCommand ?? mod.commandMoonraker,
       files: mod.createMoonrakerFiles(fetchFiles), gcode: sendGcode ?? mod.sendMoonrakerGcode };
-  }, { commands: true, files: true, terminal: true }),
-  octoprint: httpConnector('OctoPrint', 5000, true, async ({ readOcto, sendGcode, fetchFiles }) => {
+  }, { commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true }),
+  octoprint: httpConnector('OctoPrint', 5000, true, async ({ readOcto, sendGcode, fetchFiles, sendCommand }) => {
     const mod = await import('./octoprint.mjs');
     const read = readOcto ?? mod.readOctoPrint;
     return { read, probe: probeStatus(read, ['octoprint-disconnected', 'octoprint-printer-error'], true), files: mod.createOctoPrintFiles(fetchFiles),
-      gcode: sendGcode ?? mod.sendOctoPrintGcode };
-  }, { interval: 5000, files: true, terminal: true }),
-  prusalink: httpConnector('PrusaLink', 80, true, async ({ readPrusa }) => {
-    const read = readPrusa ?? (await import('./prusalink.mjs')).readPrusaLink;
-    return { read, probe: probeStatus(read, ['prusalink-printer-error'], true) };
-  }, { interval: 5000 }),
+      gcode: sendGcode ?? mod.sendOctoPrintGcode, command: sendCommand ?? ((machine, action) => mod.commandOctoPrint(machine, action, fetchFiles)) };
+  }, { interval: 5000, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true }),
+  prusalink: httpConnector('PrusaLink', 80, true, async ({ readPrusa, fetchFiles }) => {
+    const mod = await import('./prusalink.mjs');
+    const read = readPrusa ?? mod.readPrusaLink;
+    return { read, probe: probeStatus(read, ['prusalink-printer-error'], true), ...mod.createPrusaOperations(fetchFiles) };
+  }, { interval: 5000, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true }),
   bambu: localConnector('Bambu Lab · P2S', 'bambu', (host, data, existing) => {
     const serial = value(data, 'serial', 32).toUpperCase();
     const accessCode = secret(data, existing, 'accessCode', 8);
     if (/^[A-Z0-9]{8,32}$/.test(serial) && /^[A-Za-z0-9]{8}$/.test(accessCode)) return { origin: `mqtts://${host}:8883`, serial, accessCode };
-  }, async ({ bambu, diagnostics }) => {
+  }, async ({ bambu, diagnostics, directory }) => {
     const monitor = bambu ?? (await import('./bambu.mjs')).createBambuMonitor(undefined, diagnostics);
+    const { createBambuFiles } = await import('./bambu-files.mjs');
     return {
-      ...monitor, probe: (machine, { signal }) => monitor.probe(machine, signal),
+      ...monitor, files: retainedFiles(join(directory, 'files'), createBambuFiles((...args) => monitor.send(...args)), { projects: true }), probe: (machine, { signal }) => monitor.probe(machine, signal),
       async camera(machine, output, signal, frame) {
         const { streamBambuCamera } = await import('./bambu-camera.mjs');
         if (!(await streamBambuCamera(machine, output, signal, frame))) return 'no-stream';
       }
     };
-  }, { camera: true, filaments: 'AMS', live: true }),
+  }, { camera: true, filaments: 'AMS', live: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, projects: true, externalFilament: true }),
   elegoo: localConnector('Elegoo · Centauri Carbon 2', 'elegoo', (host, data, existing) => {
     const accessCode = secret(data, existing, 'accessCode', 64);
     if (/^[!-~]{1,64}$/.test(accessCode)) return { origin: `mqtt://${host}:1883`, serial: existing?.serial, accessCode };
-  }, async ({ readCC2, identifyCC2, diagnostics, openCamera }) => {
+  }, async ({ readCC2, identifyCC2, diagnostics, openCamera, directory, fetchFiles }) => {
     const mod = await import('./elegoo.mjs');
     const identify = identifyCC2 ?? mod.identifyElegoo;
     const monitor = readCC2 ? null : mod.createElegooMonitor({ diagnostics });
     const read = readCC2 ?? monitor.read;
+    const { createElegooFiles } = await import('./elegoo-files.mjs');
     return {
-      read, close: monitor?.close,
+      read, close: monitor?.close, command: (...args) => monitor?.command(...args),
+      files: retainedFiles(join(directory, 'files'), createElegooFiles((...args) => monitor.request(...args), { fetcher: fetchFiles })),
       forget(id, changed) { if (changed) monitor?.forget(id); },
       async probe(machine, options) {
         let result;
@@ -92,18 +98,21 @@ const definitions = {
       },
       camera: (machine, output, signal, frame) => elegooCamera(machine, output, signal, frame, openCamera, identify)
     };
-  }, { camera: true, filaments: 'CANVAS', interval: 7000, verify: true }),
+  }, { camera: true, filaments: 'CANVAS', interval: 7000, verify: true, commands: true, commandActions: ['pause', 'stop'], files: true, retainedOnly: true, externalFilament: true }),
   'elegoo-cc1': localConnector('Elegoo · Centauri Carbon', 'elegoo-cc1', (host, data, existing) => {
     const serial = existing?.serial ?? value(data, 'serial', 64);
     if (!serial || /^[a-zA-Z0-9_-]{6,64}$/.test(serial)) return { origin: `ws://${host}:3030`, serial: serial || undefined };
-  }, async ({ readCC1, openCamera }) => {
-    const read = readCC1 ?? (await import('./elegoo-cc1.mjs')).readElegooCC1;
+  }, async ({ readCC1, openCamera, directory, fetchFiles }) => {
+    const mod = await import('./elegoo-cc1.mjs');
+    const read = readCC1 ?? mod.readElegooCC1;
+    const { createElegooFiles } = await import('./elegoo-files.mjs');
     return {
-      read,
+      read, command: mod.commandElegooCC1,
+      files: retainedFiles(join(directory, 'files'), createElegooFiles(mod.requestElegooCC1, { cc1: true, fetcher: fetchFiles })),
       probe: async (machine, options) => identified(await read(machine, options), ['elegoo-print']),
       camera: (machine, output, signal, frame) => elegooCamera(machine, output, signal, frame, openCamera, read)
     };
-  }, { camera: true, interval: 7000, verify: true }),
+  }, { camera: true, interval: 7000, verify: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, retainedOnly: true, externalFilament: true }),
   'xtool-m2': localConnector('xTool · M2', 'xtool-m2', (host, _data, existing) => ({
     origin: `wss://${host}:28900`, serial: existing?.serial, fingerprint: existing?.fingerprint,
     ...(existing?.origin === `wss://${host}:28900` && existing.pairingToken ? { pairingToken: existing.pairingToken } : {})
@@ -114,7 +123,7 @@ const definitions = {
       monitor.forget(machine.id);
       return identified(await readXTool(machine, options), ['xtool-device']);
     } };
-  }, { temperatures: false, printJob: false, camera: true, live: true, verify: true })
+  }, { temperatures: false, printJob: false, camera: true, live: true, verify: true, commands: true, commandActions: ['start', 'pause', 'resume', 'stop'] })
 };
 
 function identified(result, tolerated) {
@@ -125,8 +134,8 @@ function identified(result, tolerated) {
 }
 export const connectorDefinition = kind => typeof kind === 'string' && Object.hasOwn(definitions, kind) ? definitions[kind] : null;
 export const connectorCatalog = Object.fromEntries(Object.entries(definitions).map(([kind, {
-  model, form, port, required, camera = false, commands = false, files = false, terminal = false, filaments = null, temperatures = true, printJob = true
-}]) => [kind, { model, form, port, required, camera, commands, files, terminal, filaments, temperatures, printJob }]));
+  model, form, port, required, camera = false, commands = false, commandActions = [], files = false, projects = false, retainedOnly = false, externalFilament = false, terminal = false, filaments = null, temperatures = true, printJob = true
+}]) => [kind, { model, form, port, required, camera, commands, commandActions, files, projects, retainedOnly, externalFilament, terminal, filaments, temperatures, printJob }]));
 
 export function createConnectorRegistry(options, definition = connectorDefinition) {
   const pending = new Map();

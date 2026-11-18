@@ -37,7 +37,7 @@ test('PrusaLink lit le statut local et le fichier actif sans suivre de redirecti
   assert.deepEqual(result, { status: 'printing', issue: null, nozzle: 210.4, bed: 60.5, progress: 64, file: 'support.bgcode' });
   assert.deepEqual(visited, [origin + '/api/v1/status', origin + '/api/v1/job']);
   assert.equal(connectorCatalog.prusalink.temperatures, true);
-  assert.equal(connectorCatalog.prusalink.commands, false);
+  assert.equal(connectorCatalog.prusalink.commands, true);
   const denied = await readPrusaLink({ origin, apiKey: 'invalid' }, { fetcher: async () => new Response(null, { status: 401 }) });
   assert.equal(denied.issue, 'prusalink-access');
 });
