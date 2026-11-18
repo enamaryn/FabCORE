@@ -20,6 +20,7 @@ Le découpage suit la même convention que le [POC](POC.md#lire-ce-plan) : étap
 | MVP-08 | Notifications et alertes | À faire |
 | MVP-09 | Historique et fichiers | À faire |
 | MVP-10 | Agent local et FabCore Cloud | À faire |
+| MVP-10b | Comptes cloud constructeur et fonctionnement hybride | À faire |
 | MVP-11 | Offre professionnelle et tarification | À faire |
 | MVP-12 | Sécurité, accessibilité et qualité | À faire |
 | MVP-13 | Open source et documentation | À faire |
@@ -35,7 +36,7 @@ En cours. Décisions prises le 17 novembre 2026, à consigner dans `docs/DECISIO
 - [x] MVP-00.4 Interface et temps réel · **décidé** : React pour l’interface définitive ([MVP-02](#mvp-02--interface-complète-de-la-maquette-uxui)), SSE à la place de l’interrogation toutes les deux secondes.
 - [x] MVP-00.5 Modèle d’hébergement · **décidé** :
   - Auto-hébergement gratuit, sans compte cloud, limité à **10 machines**.
-  - Au-delà : **offre professionnelle** avec compte FabCore Cloud, agent local relié au compte et abonnement ([MVP-11](#mvp-11--offre-professionnelle-et-tarification)).
+  - Au-delà : **offre professionnelle** avec compte FabCore Cloud, connexion cloud constructeur ou agent local selon les capacités, et abonnement ([MVP-11](#mvp-11--offre-professionnelle-et-tarification)).
 - [ ] MVP-00.6 Priorité des connecteurs et liste du matériel de recette disponible.
 - [x] MVP-00.7 Licence et modèle économique · **décidé** : le code reste sous GPL-3.0. L’offre professionnelle vend le service FabCore Cloud et tout ce qui l’accompagne (hébergement, agent relié au compte, accès à distance, multi-ateliers, sauvegardes, support). La limite de 10 machines est le réglage de l’édition auto-hébergée, pas une protection technique.
 
@@ -169,7 +170,7 @@ En cours. Décisions prises le 17 novembre 2026, à consigner dans `docs/DECISIO
 
 ## MVP-10 · Agent local et FabCore Cloud
 
-À faire · [Ticket #30](https://github.com/enamaryn/FabCORE/issues/30). Un agent par atelier, sur Raspberry Pi ou LXC, découvre les machines et remonte leur télémétrie par une connexion sortante authentifiée.
+À faire · [Ticket #30](https://github.com/enamaryn/FabCORE/issues/30). Un agent par atelier, sur Raspberry Pi ou LXC, découvre les machines et remonte leur télémétrie par une connexion sortante authentifiée. Il est nécessaire pour les fonctions LAN non accessibles via un cloud constructeur ; il n’est pas imposé à un atelier dont toutes les fonctions utilisées sont validées en cloud direct (MVP-10b).
 
 - [ ] MVP-10.1 Architecture agent / serveur et protocole de liaison.
 - [ ] MVP-10.2 Appairage de l’agent avec un atelier.
@@ -179,13 +180,27 @@ En cours. Décisions prises le 17 novembre 2026, à consigner dans `docs/DECISIO
 - [ ] MVP-10.6 Isolation entre deux ateliers qui utilisent les mêmes adresses privées.
 - [ ] MVP-10.7 Pilote sur un atelier réel.
 
+## MVP-10b · Comptes cloud constructeur et fonctionnement hybride
+
+À faire · demande utilisateur du 18 novembre 2026. Distinguer les comptes constructeur du compte FabCore Cloud et de l’authentification Pocket ID.
+
+- [ ] MVP-10b.1 Écran « Comptes constructeur » administrateur : associer, reconnecter, révoquer et supprimer un compte ; prendre en charge plusieurs comptes et régions lorsque le fournisseur le prévoit.
+- [ ] MVP-10b.2 Étude puis intégration cloud Bambu et Elegoo en priorité ; autres marques seulement après vérification de leurs API, conditions d’accès et compatibilités réelles. Références : [OpenBambuAPI](https://github.com/Doridian/OpenBambuAPI) et [elegoo-link](https://github.com/elegooofficial/elegoo-link). Ne pas promettre d’OAuth public ou de toutes les fonctions du logiciel constructeur.
+- [ ] MVP-10b.3 Association par un parcours autorisé par le fournisseur, avec code de vérification/2FA si nécessaire ; jetons et secrets chiffrés côté serveur, jamais dans les logs, réponses publiques ou stockage navigateur. Préférer les jetons révocables, ne pas conserver le mot de passe après échange lorsqu’il n’est plus nécessaire. Gérer expiration, renouvellement, révocation et limites de débit.
+- [ ] MVP-10b.4 Importer les machines du compte et rapprocher les identités LAN/cloud par identifiant constructeur fiable ou numéro de série, à l’intérieur du même atelier. Ne pas fusionner sur le nom ou l’IP. Confirmer les associations ambiguës et isoler strictement les comptes entre clients.
+- [ ] MVP-10b.5 Matrice par modèle, firmware et transport : état, températures, AMS/CANVAS, fichiers, lancement, pause/reprise, arrêt et caméras. Valider chaque fonction séparément ; un accès à la télémétrie ne prouve pas un accès au flux vidéo ou au pilotage.
+- [ ] MVP-10b.6 Atelier entièrement en cloud direct, sans agent, lorsque toutes les fonctions demandées sont disponibles et testées via les clouds constructeur. Le serveur FabCore utilise les interfaces cloud authentifiées ; il ne tente pas de scanner un LAN distant.
+- [ ] MVP-10b.7 Atelier hybride : cloud pour les fonctions disponibles, agent pour les machines locales ou capacités manquantes (caméra, fichiers, pilotage). Afficher le transport utilisé, la dernière synchronisation et les fonctions indisponibles ; conserver les outils cloud constructeur quand le protocole le permet.
+- [ ] MVP-10b.8 Définir un transport propriétaire par commande, sans envoi simultané cloud/LAN ni rejeu automatique après timeout ou changement de transport. Séparer la sélection du transport de lecture et l’autorité d’écriture.
+- [ ] MVP-10b.9 Recette : parcours complet navigateur fermé et sans agent, expiration du jeton, panne cloud, perte agent, comptes multiples et atelier mixte. Indiquer explicitement la perte de fonctionnement hors ligne d’un parcours entièrement cloud.
+
 ## MVP-11 · Offre professionnelle et tarification
 
 À faire. Dépend de MVP-00.5, MVP-00.7 et MVP-10.
 
 - [ ] MVP-11.1 Limite de 10 machines en auto-hébergement : comptage côté serveur, message clair à l’ajout de la 11e machine, aucune machine existante désactivée.
 - [ ] MVP-11.2 Comptes FabCore Cloud : inscription, organisation, ateliers.
-- [ ] MVP-11.3 Passage de l’auto-hébergement à l’offre professionnelle : appairage de l’agent, reprise des machines et des réglages.
+- [ ] MVP-11.3 Passage de l’auto-hébergement à l’offre professionnelle : association des comptes constructeur et/ou appairage de l’agent selon le besoin, reprise des machines et des réglages.
 - [ ] MVP-11.0 Positionnement face à la concurrence :
   - [ ] Étude des offres existantes ([benchmark](../design/README.md#benchmark)) : SimplyPrint (cloud, relevé initial), print-farm-manager (auto-hébergé, relevé initial), OctoEverywhere, Obico et autres acteurs pertinents. Fonctions, matériel pris en charge, auto-hébergement, prix.
   - [ ] Différences de FabCore à mettre en avant (sécurité et rôles, open source, auto-hébergement gratuit, caméras, lasers et CNC) et fonctions attendues absentes du plan (par exemple tranchage dans le cloud).
