@@ -65,6 +65,9 @@ Mêmes règles de sécurité que les lasers.
 - [ ] FD-05.2 Files d’attente de fabrication.
 - [ ] FD-05.3 Gestion des commandes clients.
 - [ ] FD-05.4 Calcul des coûts.
+- [ ] FD-05.5 Planning de production en Gantt : une ligne par machine, vues jour/semaine, tâches affectées et déplacement manuel des créneaux. Afficher les fabrications en cours, planifiées et les indisponibilités de maintenance sur le même planning.
+- [ ] FD-05.6 Durées estimées issues du fichier ou saisies, échéances et priorités ; tenir compte des compatibilités machine, matières et interventions opérateur. Signaler les conflits et les créneaux inutilisés pour réduire les temps morts.
+- [ ] FD-05.7 Comparer prévu et réalisé, signaler les dépassements et proposer un recalage à confirmer. La planification ne déclenche pas automatiquement une fabrication ni ne contourne les confirmations locales.
 
 ## FD-06 · Consommables et inventaire
 
@@ -77,6 +80,13 @@ Mêmes règles de sécurité que les lasers.
 - [ ] FD-07.1 Maintenance préventive par compteurs d’heures ou de fabrications.
 - [ ] FD-07.2 Statistiques d’utilisation et de réussite.
 - [ ] FD-07.3 Diagnostics avancés par connecteur.
+- [ ] FD-07.4 Plans de maintenance configurables par modèle et par machine : échéances en heures, nombre de fabrications ou calendrier ; distinguer heures de fabrication, de fonctionnement et d’utilisation d’un composant. Les exemples 50 h / 100 h ne sont pas des intervalles constructeur universels.
+- [ ] FD-07.5 Référencer chaque préconisation constructeur par sa source, sa date/version et son périmètre modèle/composant. Permettre un plan personnalisé clairement identifié ; ne pas inventer de recommandation lorsque la source manque.
+- [ ] FD-07.6 Compteurs issus de la machine quand disponibles, sinon temps observé par FabCore explicitement indiqué comme estimation. Prévoir un compteur initial et des corrections tracées ; les périodes non observées restent inconnues et ne valent pas zéro.
+- [ ] FD-07.7 Alertes avant échéance et en retard ; fiche d’intervention avec opérations, durée, consommables, date, compteur et historique. Une intervention clôturée actualise uniquement l’échéance concernée sans effacer le cumul d’utilisation.
+- [ ] FD-07.8 Réserver les entretiens dans le Gantt (FD-05.5), rendre visibles les indisponibilités et les conflits avec les fabrications ; permettre de proposer une intervention dans un créneau libre.
+
+Demande utilisateur du 18 novembre 2026 : réunir planification de production et entretien préventif pour améliorer l’utilisation du parc. Ce périmètre reste planifié après le MVP ; aucun nouvel écran ni automatisme n’est livré par cette inscription.
 
 ## FD-08 · Intégrations et API publique
 
