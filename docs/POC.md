@@ -54,7 +54,7 @@ PR [#4](https://github.com/enamaryn/FabCORE/pull/4) · Fusionné.
 - [x] POC-02.1 MQTT local avec code LAN, état et progression.
 - [x] POC-02.2 Travail terminé ou effacé correctement affiché (PR [#18](https://github.com/enamaryn/FabCORE/pull/18)).
 - [x] POC-02.3 AMS : emplacements, matière, couleur, emplacement actif (PR [#20](https://github.com/enamaryn/FabCORE/pull/20), [#22](https://github.com/enamaryn/FabCORE/pull/22)).
-- [ ] POC-02.4 Stabilité de la réponse P2S sur la durée : à confirmer en POC-10.
+- [x] POC-02.4 Stabilité de la réponse P2S sur la durée · **Testé matériel** : suivi d’une impression complète de 9 heures et des températures confirmé par Valentin le 18 novembre 2026.
 
 ## POC-03 · Elegoo Centauri Carbon 1 et 2
 
@@ -146,22 +146,22 @@ En cours. Chaque sous-étape passe à `Testé matériel` une fois vérifiée sur
   - [ ] Même parcours sur OctoPrint. Vérifier que `/downloads/files/local/…` accepte la clé API.
   - [ ] Fichiers réels PrusaSlicer, Cura, Orca et Bambu Studio.
 - [ ] POC-10.3 Découverte : CC2 avec et sans code LAN enregistré, P2S et deux Elegoo signalées comme déjà ajoutées.
-- [ ] POC-10.4 xTool M2 : parcours complet après appairage, vues centrale et outil après déploiement.
-- [ ] POC-10.5 Parc : ajout d’une CC2 après test, suppression depuis le navigateur.
-- [ ] POC-10.6 P2S : stabilité de la réponse sur une impression complète (POC-02.4).
+- [x] POC-10.4 xTool M2 : appairage et trois caméras fonctionnels · **Testé matériel**, confirmé par Valentin le 18 novembre 2026.
+- [ ] POC-10.5 Parc : suppression et réajout d’une CC2 **testés sur matériel**, confirmés par Valentin le 18 novembre 2026. Reste à vérifier explicitement l’ajout immédiatement après un test de connexion réussi.
+- [x] POC-10.6 P2S : suivi stable des températures et d’une impression complète de 9 heures · **Testé matériel**, confirmé par Valentin le 18 novembre 2026 (POC-02.4).
 - [ ] POC-10.7 Formulaire d’ajout dans le navigateur : numéro de série affiché, champs Bambu et CC1 disponibles.
 
 ## POC-11 · Clôture du POC et passage au MVP
 
 À faire. Critères du [prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-concept) :
 
-- [ ] POC-11.1 Une Bambu P2S connectée.
+- [x] POC-11.1 Une Bambu P2S connectée · **Testé matériel** : impression de 9 heures suivie dans FabCore, confirmation utilisateur du 18 novembre 2026.
 - [ ] POC-11.2 Deux Elegoo CC2 distinctes, sans confusion entre machines.
 - [ ] POC-11.3 Une machine Klipper.
-- [ ] POC-11.4 Permissions vérifiées (administrateur, observateur, routes et flux).
+- [ ] POC-11.4 Permissions vérifiées (administrateur, observateur, routes et flux). Séparation de l’interface constatée fonctionnelle à priori par Valentin le 18 novembre 2026 ; contrôles directs des autorisations serveur et des flux encore à vérifier.
 - [ ] POC-11.5 Commandes fiables : pause, reprise, terminal, lancement, sans renvoi automatique.
-- [ ] POC-11.6 Erreurs détectables : hors ligne, accès refusé, firmware en erreur.
-- [ ] POC-11.7 Authentification locale et OIDC fonctionnelles.
+- [ ] POC-11.6 Erreurs détectables : état hors ligne **testé sur matériel** en éteignant les deux CC2 (confirmation utilisateur du 18 novembre 2026). Restent l’accès refusé et le firmware en erreur.
+- [x] POC-11.7 Authentification locale et Pocket ID/OIDC fonctionnelles · **Testé matériel** : les deux parcours ont été essayés et confirmés par Valentin le 18 novembre 2026.
 - [ ] POC-11.8 Limites documentées dans le [guide](../poc/README.md) et la [matrice de compatibilité](MVP.md#mvp-05--connecteurs-p0-validés-modèle-par-modèle).
 - [x] POC-11.9 Simulateurs et connecteurs des autres marques : **décidé**, reportés au [MVP-05](MVP.md#mvp-05--connecteurs-p0-validés-modèle-par-modèle) (17 novembre 2026).
 - [ ] POC-11.10 Bilan technique et décisions d’architecture pour [MVP-00](MVP.md#mvp-00--cadrage).
