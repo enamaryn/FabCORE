@@ -10,6 +10,8 @@ Relevé du 19 novembre 2026, base FabCore `7d1e6a4`. Ce dossier décrit le code 
 | Klipper, OctoPrint, PrusaLink | Familles d’API ; compatibilité dépend du firmware et du modèle | [API HTTP locales](HTTP-LAN.md) |
 | Résine, autres CNC/lasers et autres fabricants | Aucun connecteur générique validé dans le POC | Pas de capacité déduite de la seule présence sur le réseau |
 
+Recherche approfondie Bambu : [audit du code Rust/Python, contradictions et essais locaux](BAMBU-CLOUD-AUDIT.md).
+
 Contrat de développement : [CONNECTORS.md](../../poc/CONNECTORS.md). Phase : [POC](../POC.md), architecture future : [MVP](../MVP.md).
 
 ## Ordre de travail

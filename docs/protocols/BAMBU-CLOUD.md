@@ -2,6 +2,8 @@
 
 Relevé du **19 novembre 2026**. État : recherche documentaire, **non implémenté, non connecté, non testé avec un compte utilisateur**. Suivi [#79](https://github.com/enamaryn/FabCORE/issues/79), après l’urgence [#78](https://github.com/enamaryn/FabCORE/issues/78). Le LAN existant n’est pas migré.
 
+Audit complémentaire du code : [BAMBU-CLOUD-AUDIT.md](BAMBU-CLOUD-AUDIT.md). Ce complément corrige la conclusion initiale tirée du README de coelacant1 et intègre la position officielle du 12 novembre 2026.
+
 ## Conclusion technique
 
 Un VPS peut accéder à la télémétrie d’une machine reliée au cloud Bambu, sans joindre son IP privée. Cela peut éviter un agent pour cette fonction. Ce constat ne prouve ni accès aux fichiers USB/cache, ni vidéo distante prête au navigateur, ni autorisation de toutes les commandes.
@@ -29,13 +31,15 @@ Durée/renouvellement : sources contradictoires sur refresh et expiration. Ne pa
 
 ## Évaluation des sources fournies
 
-- [coelacant1/Bambu-Lab-Cloud-API](https://github.com/coelacant1/Bambu-Lab-Cloud-API) : source de rétro-ingénierie utile, modules auth/devices/files/MQTT/camera. Son README distingue des fonctions de lecture testées et indique **soumission de jobs, pause/reprise/stop non implémentés**. Ses affirmations générales ne prouvent donc pas le contrôle complet. Les credentials caméra TTCode ne prouvent pas un décodage vidéo cloud opérationnel.
+- [coelacant1/Bambu-Lab-Cloud-API](https://github.com/coelacant1/Bambu-Lab-Cloud-API) : source de rétro-ingénierie utile, modules auth/devices/files/MQTT/camera. Son README indique jobs/pause/reprise/stop non implémentés, **mais contredit le code** : `mqtt.py` contient `pause_print/resume_print/stop_print`, et `client.py` contient `start_print_job/start_cloud_print`. Ces fonctions existent ; leurs tests examinés ne prouvent pas leur acceptation sur le cloud actuel. La première version de cette fiche concluait trop vite depuis le README ; voir l’audit source. Les credentials caméra TTCode ne prouvent pas un décodage vidéo cloud opérationnel.
 - [Paquet PyPI](https://pypi.org/project/bambu-lab-cloud-api/) : distribution du même projet, pas une seconde validation indépendante. Ne pas ajouter une dépendance Python à FabCore Node simplement parce que ce paquet existe.
 - [torbenconto/bambulabs_api](https://pkg.go.dev/github.com/torbenconto/bambulabs_api) : LAN, pas le cloud. Le README renvoie à [bambulabs_cloud_api](https://github.com/torbenconto/bambulabs_cloud_api), dont le README annonce une réécriture et pas de documentation. Aucune garantie de maturité cloud déduite de la bibliothèque LAN.
 - [OpenBambuAPI cloud HTTP](https://github.com/Doridian/OpenBambuAPI/blob/main/cloud-http.md) et [MQTT](https://github.com/Doridian/OpenBambuAPI/blob/main/mqtt.md) : formats à recouper avec une implémentation actuelle.
 - [ha-bambulab](https://github.com/greghesp/ha-bambulab), commit consulté `d2793d837648967f631d34a5b2f468a94099bef0` : `custom_components/bambu_lab/pybambu/bambu_cloud.py`, `bambu_client.py`, `const.py` et parcours `config_flow.py`. Confirme la séparation auth email/TOTP, comptes et paramètres MQTT LAN/cloud. Certains mécanismes de client/challenge ne sont pas à reprendre tels quels.
 
 ## Autorisations constructeur et SaaS
+
+Position officielle récente : [Bambu, 12 novembre 2026](https://forum.bambulab.com/t/a-postmortem-on-this-weeks-cloud-traffic-anomaly/262567) distingue supervision tierce dans des limites raisonnables et opérations sensibles (lancement, vidéo notamment), en renvoyant vers Bambu Connect pour le contrôle. Ne pas promettre un pilotage SaaS direct complet depuis l’existence d’une méthode dans un ancien client.
 
 Sources officielles : [annonce d’autorisation](https://blog.bambulab.com/firmware-update-introducing-new-authorization-control-system-2/), [intégration tierce et fermes](https://blog.bambulab.com/updates-and-third-party-integration-with-bambu-connect/), [clarification cloud du 8 mai 2026](https://forum.bambulab.com/t/setting-the-record-straight-on-cloud-access-and-community/252164).
 
@@ -50,6 +54,10 @@ Contrat à intégrer progressivement, sans réécrire les connecteurs LAN :
 - Plusieurs comptes du même fabricant dans un espace, plusieurs gestionnaires et sites. Deux CC2 ou deux P2S peuvent relever de comptes/modes distincts. Une adresse email n’est pas une clé globale d’autorisation.
 - Vérifier les permissions d’espace, de compte et de machine sur chaque route ; isoler sessions, caches, flux, fichiers et diagnostics. Réutiliser le normaliseur Bambu, pas les contraintes d’origine IPv4 privée du connecteur LAN pour un broker cloud.
 - Secrets uniquement côté serveur, chiffrement au repos avec clé indépendante des sauvegardes, masquage intégral des jetons/codes/mots de passe/URL signées dans API et logs. Mot de passe et code MFA uniquement transitoires. Suppression du compte = fermeture des sessions et suppression de ses secrets ; aucune commande automatique.
+
+## Cas SimplyPrint
+
+Son [API publique](https://simplyprint.io/fr/features/api) est celle de sa plateforme. Le [guide P2S](https://simplyprint.io/setup-guide/bambu-lab/p2s) précise le pont local et LAN-only + Developer Mode pour piloter ; ce n’est pas une preuve de commande directe Bambu Cloud sans agent. [Analyse et différences entre pages](BAMBU-CLOUD-AUDIT.md#7-simplyprint--api-publique-de-plateforme-et-pont-vers-bambu).
 
 ## Livraison et recette
 

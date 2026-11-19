@@ -13,6 +13,8 @@ Valentin a depuis confirmé la chauffe buse/plateau CC2 et la coupure des deux. 
 
 [Dossier par fabricant/modèle](protocols/README.md) ajouté pour transmettre les protocoles LAN, leurs limites et les observations matérielles. [Recherche cloud Bambu](protocols/BAMBU-CLOUD.md) et [issue #79](https://github.com/enamaryn/FabCORE/issues/79) : multicomptes, LAN ou cloud par machine, pilote lecture seule avant commandes/fichiers/vidéo. Recherche uniquement : aucun cloud connecté ou déployé. **Ordre demandé : #78, puis pilote #79**, puis reprise de la recette POC-10. Le socle SaaS multisite complet reste au MVP.
 
+Complément de recherche cloud : [audit des sources et essais locaux](protocols/BAMBU-CLOUD-AUDIT.md). Correction : coelacant1 contient des commandes MQTT et des wrappers de lancement malgré son README ; leur acceptation cloud actuelle reste non démontrée. La position officielle du 12/11/2026 sépare supervision tierce et contrôle/vidéo. Aucun changement exécutable.
+
 ## Chauffe native CC2 · 19 novembre 2026
 
 **État : ouvert, branche `feat/cc2-heater-controls`, non déployé.** La buse et le plateau des CC2, avec ou sans CANVAS, deviennent réglables via la méthode MQTT native `1028`. Un seul champ est envoyé par action (`extruder` ou `heater_bed`), y compris zéro pour Couper ; aucune modification implicite de l’autre chauffage. Session existante, identifiant de transaction corrélé, QoS 0 sans rétention et sans rejeu. Plafonds logiciels inchangés (260/100 °C). Chauffe disponible uniquement à l’arrêt ou en fabrication/pause, confirmation supplémentaire pendant fabrication, droits administrateur et protections HTTP existantes.
