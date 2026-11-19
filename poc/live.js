@@ -623,7 +623,7 @@ async function refresh() {
         const filaments = app.querySelector('[data-live-filaments]');
         if (filaments) filaments.innerHTML = liveFilaments(current);
         if (Boolean(app.querySelector('[data-files] [data-action="viewer-live"]')) !== Boolean(liveFile(current)) ||
-          Boolean(app.querySelector('[data-files] [data-action^="files-print"]')) !== canStart(current)) renderFiles(current.id);
+          app.querySelector('[data-files]')?.dataset.fileStart !== String(canStart(current))) renderFiles(current.id);
       } else renderLive();
       if (action) [...app.querySelectorAll('[data-action]')].find(button => button.dataset.action === action && button.getClientRects().length)?.focus();
     }
@@ -1046,7 +1046,7 @@ const machineFiles = new Map();
 const fileName = (path) => path.split('/').at(-1);
 
 function filesState(id) {
-  if (!machineFiles.has(id)) machineFiles.set(id, { files: null, loading: false, error: '', upload: null });
+  if (!machineFiles.has(id)) machineFiles.set(id, { files: null, loading: false, error: '', upload: null, query: '', sort: 'newest', page: 0, pageSize: 5, truncated: false });
   return machineFiles.get(id);
 }
 
@@ -1058,27 +1058,62 @@ function canStart(m) {
   return state.role === 'admin' && (m.status === 'ready' || m.status === 'done');
 }
 
+function filePage(entry) {
+  const query = entry.query.trim().toLocaleLowerCase(state.lang);
+  const byName = (a, b) => a.file.path.localeCompare(b.file.path, state.lang, { numeric: true, sensitivity: 'base' }) || a.index - b.index;
+  const rows = (entry.files ?? []).map((file, index) => ({ file, index })).filter(({ file }) => file.path.toLocaleLowerCase(state.lang).includes(query));
+  rows.sort((a, b) => {
+    if (entry.sort === 'name') return byName(a, b);
+    const aDate = Number.isFinite(a.file.modified) ? a.file.modified : null;
+    const bDate = Number.isFinite(b.file.modified) ? b.file.modified : null;
+    if (aDate === null || bDate === null) return aDate === bDate ? byName(a, b) : aDate === null ? 1 : -1;
+    return (entry.sort === 'oldest' ? aDate - bDate : bDate - aDate) || byName(a, b);
+  });
+  const pageSize = entry.pageSize === 20 ? 20 : 5;
+  const pages = Math.max(1, Math.ceil(rows.length / pageSize));
+  entry.page = Math.max(0, Math.min(entry.page, pages - 1));
+  const start = entry.page * pageSize;
+  return { rows: rows.slice(start, start + pageSize), count: rows.length, pages, start };
+}
+
 function filesPanel(m) {
   if (!machineConnectors[m.kind]?.files) return `<section class="panel stack"><h2>${t('Visualiseur G-code','G-code viewer')}</h2><label>${t('Ouvrir un fichier local pour visualiser ses trajectoires','Open a local file to view its toolpaths')}<input type="file" accept=".gcode,.gco,.g" data-gcode-local></label><p class="muted">${t('Le transfert des projets natifs de cette machine n’est pas encore pris en charge. Cet aperçu local n’envoie aucune commande.', 'Native project transfer for this machine is not supported yet. This local preview sends no commands.')}</p></section>`;
   const entry = filesState(m.id);
   const current = liveFile(m);
+  const page = filePage(entry);
   const size = (bytes) => bytes === null ? '—' : bytes >= 1048576 ? (bytes / 1048576).toLocaleString(state.lang, { maximumFractionDigits: 1 }) + ' Mo' : Math.ceil(bytes / 1024).toLocaleString(state.lang) + ' ko';
   const date = (at) => at ? new Date(at).toLocaleString(state.lang, { dateStyle: 'short', timeStyle: 'short' }) : '—';
   const upload = entry.upload;
-  return `<section class="panel stack" data-files>
-      <div class="row between wrap"><h2>${t('Fichiers de la machine','Machine files')}</h2>${btn('files-refresh', t('Actualiser','Refresh'), '', 'ghost', entry.loading ? 'disabled' : '')}</div>
+  return `<section class="panel stack" data-files data-file-start="${canStart(m)}">
+      <div class="row between wrap"><h2>${machineConnectors[m.kind]?.retainedOnly ? t('Fichiers envoyés via FabCore','Files uploaded through FabCore') : t('Fichiers de la machine','Machine files')}</h2>${btn('files-refresh', t('Actualiser','Refresh'), '', 'ghost', entry.loading ? 'disabled' : '')}</div>
       ${machineConnectors[m.kind]?.retainedOnly ? `<p class="notice">${t('Fichiers envoyés via FabCore uniquement : le protocole ne fournit pas ici la liste complète du stockage de la machine.', 'Only files uploaded through FabCore: the protocol does not provide a complete storage listing here.')}</p>` : ''}
       <label>${t('Visualiser un G-code local sans l’envoyer','Preview a local G-code without uploading it')}<input type="file" accept=".gcode,.gco,.g" data-gcode-local></label>
       ${current ? `<div class="notice row between wrap"><span>${t('Impression en cours','Print in progress')} · <strong>${esc(fileName(current))}</strong></span>${btn('viewer-live', t('Suivre en direct','Follow live'), 'activity', 'primary')}</div>` : ''}
       ${state.role === 'admin' ? `<label class="stack"><span>${t('Envoyer un fichier G-code sur la machine','Upload a G-code file to the machine')}</span>
         <input type="file" accept=".gcode,.gco,.g${machineConnectors[m.kind]?.projects ? ",.3mf" : ""}" data-files-upload ${upload ? 'disabled' : ''}></label>
         ${upload ? `<p role="status">${t('Envoi de','Uploading')} ${esc(upload.name)}… <span data-upload-percent>${upload.percent}</span> %</p><progress value="${upload.percent}" max="100" data-upload-bar></progress>` : ''}` : ''}
+      <div class="row wrap" style="align-items:end">
+        <label class="stack" style="flex:2 1 220px;min-width:0">${t('Rechercher un fichier','Search files')}<input type="search" data-files-search value="${esc(entry.query)}" placeholder="${t('Nom du fichier…','File name…')}" maxlength="200"></label>
+        <label class="stack" style="flex:1 1 180px">${t('Trier par','Sort by')}<select data-files-sort>
+          <option value="newest" ${entry.sort === 'newest' ? 'selected' : ''}>${t('Plus récent → plus ancien','Newest → oldest')}</option>
+          <option value="oldest" ${entry.sort === 'oldest' ? 'selected' : ''}>${t('Plus ancien → plus récent','Oldest → newest')}</option>
+          <option value="name" ${entry.sort === 'name' ? 'selected' : ''}>${t('Nom : A → Z','Name: A → Z')}</option>
+        </select></label>
+        <label class="stack">${t('Par page','Per page')}<select data-files-size><option value="5" ${entry.pageSize === 5 ? 'selected' : ''}>5</option><option value="20" ${entry.pageSize === 20 ? 'selected' : ''}>20</option></select></label>
+      </div>
+      ${entry.truncated ? `<p class="notice">${t('Liste limitée aux 300 fichiers chargés. La recherche et le tri portent sur cette liste.', 'List limited to 300 loaded files. Search and sorting apply to this list.')}</p>` : ''}
       ${entry.error ? `<p class="error" role="alert">${esc(entry.error)}</p>` : ''}
-      ${entry.files === null ? `<p role="status">${t('Chargement de la liste…','Loading the list…')}</p>` : entry.files.length ? `<div class="table"><table>
+      ${entry.files === null ? `<p role="status">${t('Chargement de la liste…','Loading the list…')}</p>` : page.count ? `<div class="table"><table>
         <thead><tr><th>${t('Fichier','File')}</th><th>${t('Taille','Size')}</th><th>${t('Modifié','Modified')}</th><th><span class="hide-mobile">${t('Actions','Actions')}</span></th></tr></thead>
-        <tbody>${entry.files.map((file, index) => `<tr><td>${esc(file.path)}</td><td>${size(file.size)}</td><td>${date(file.modified)}</td>
+        <tbody>${page.rows.map(({ file, index }) => `<tr><td>${esc(file.path)}</td><td>${size(file.size)}</td><td>${date(file.modified)}</td>
           <td><div class="row wrap">${btn('viewer-open:' + index, t('Visualiser','View'))}${canStart(m) ? btn('files-print:' + index, t('Lancer','Start')) : ''}</div></td></tr>`).join('')}</tbody>
-      </table></div>` : `<p class="muted">${t('Aucun fichier G-code sur la machine.','No G-code file on the machine.')}</p>`}
+      </table></div>
+      <div class="row between wrap" aria-label="${t('Pagination des fichiers','File pagination')}">
+        <small role="status">${page.start + 1}–${page.start + page.rows.length} ${t('sur','of')} ${page.count}${entry.query.trim() ? ' · ' + t('résultats','results') : ' · ' + t('fichiers','files')}</small>
+        <div class="row wrap">${btn('files-page:previous', t('Précédent','Previous'), '', 'ghost', entry.page === 0 ? 'disabled' : '')}
+          <span>${t('Page','Page')} ${entry.page + 1} / ${page.pages}</span>
+          ${btn('files-page:next', t('Suivant','Next'), '', 'ghost', entry.page + 1 >= page.pages ? 'disabled' : '')}</div>
+      </div>` : `<p class="muted" role="status">${entry.query.trim() ? t('Aucun fichier ne correspond à cette recherche.','No files match this search.') : machineConnectors[m.kind]?.retainedOnly ? t('Aucun fichier envoyé via FabCore. Les fichiers préinstallés ou envoyés autrement ne sont pas listés ici.', 'No files uploaded through FabCore. Preinstalled files and files sent by other software are not listed here.') : t('Aucun fichier pris en charge trouvé dans le stockage interrogé.','No supported files found in the queried storage.')}</p>`}
     </section>`;
 }
 
@@ -1086,7 +1121,15 @@ function renderFiles(id) {
   const m = machine(id);
   const panel = app.querySelector('[data-files]');
   if (!m || !panel || state.machine !== id || live.page !== 'detail') return;
+  const focused = document.activeElement;
+  const searchFocused = panel.contains(focused) && focused.matches('[data-files-search]');
+  const selection = searchFocused ? [focused.selectionStart, focused.selectionEnd] : null;
   panel.outerHTML = filesPanel(m);
+  if (searchFocused) {
+    const search = app.querySelector('[data-files-search]');
+    search?.focus({ preventScroll: true });
+    if (selection) search?.setSelectionRange(...selection);
+  }
 }
 
 async function loadFiles(id) {
@@ -1096,7 +1139,9 @@ async function loadFiles(id) {
   entry.error = '';
   renderFiles(id);
   try {
-    entry.files = (await api('machines/' + id + '/files')).files;
+    const result = await api('machines/' + id + '/files');
+    entry.files = result.files;
+    entry.truncated = result.truncated === true;
   } catch (error) {
     entry.files ??= [];
     entry.error = problem(error.code);
@@ -1431,6 +1476,15 @@ function mountGcode() {
 }
 
 app.addEventListener('change', (event) => {
+  if (state.machine && (event.target.matches('[data-files-sort]') || event.target.matches('[data-files-size]'))) {
+    const entry = filesState(state.machine);
+    const selector = event.target.matches('[data-files-sort]') ? '[data-files-sort]' : '[data-files-size]';
+    if (selector === '[data-files-sort]') entry.sort = ['newest', 'oldest', 'name'].includes(event.target.value) ? event.target.value : 'newest';
+    else entry.pageSize = Number(event.target.value) === 20 ? 20 : 5;
+    entry.page = 0;
+    renderFiles(state.machine);
+    app.querySelector(selector)?.focus({ preventScroll: true });
+  }
   if (event.target.matches('[data-gcode-local]') && event.target.files[0] && state.machine) {
     const file = event.target.files[0];
     if (!/\.(gcode|gco|g)$/i.test(file.name) || file.size > gcodeLimit) return toast(problem('file-too-large'));
@@ -1449,6 +1503,12 @@ app.addEventListener('change', (event) => {
 });
 
 app.addEventListener('input', (event) => {
+  if (event.target.matches('[data-files-search]') && state.machine && !event.isComposing) {
+    const entry = filesState(state.machine);
+    entry.query = event.target.value;
+    entry.page = 0;
+    renderFiles(state.machine);
+  }
   if (event.target.matches('[data-gcode-layer]')) chooseGcodeLayer(Number(event.target.value) - 1);
 });
 
@@ -1461,6 +1521,12 @@ app.addEventListener('click', (event) => {
   if (action === 'gcode-fit') {
     gcode.view = null;
     drawGcode();
+  }
+  if (action === 'files-page' && m) {
+    const entry = filesState(m.id);
+    entry.page += value === 'next' ? 1 : -1;
+    renderFiles(m.id);
+    app.querySelector('[data-action="files-page:' + value + '"]')?.focus({ preventScroll: true });
   }
   if (action === 'files-refresh' && m) loadFiles(m.id);
   if (action === 'viewer-open' && listed) openViewer(m.id, listed.path, liveFile(m) === listed.path);

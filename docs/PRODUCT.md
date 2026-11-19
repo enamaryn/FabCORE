@@ -60,3 +60,11 @@ Décision du 19 novembre 2026 : privilégier les fonctions cloud validées, tout
 - Une panne ou révocation d’un compte ne déconnecte pas les autres comptes. Les identifiants et jetons restent inaccessibles aux autres gestionnaires ; les autorisations s’appliquent aux API, commandes, fichiers, caméras et événements.
 
 Exemple de recette : une CC2 en cloud via le compte A et une seconde CC2 en LAN, sur le même site ou sur deux sites différents. FabCore les distingue et affiche le mode propre à chacune. Le compte constructeur éventuellement utilisé par ailleurs pour la seconde n’est pas requis pour sa connexion LAN.
+
+## Fichiers natifs de toutes les familles
+
+Demande du 19 novembre 2026 : le panneau de fichiers doit viser l’inventaire réel de chaque machine FDM, résine, CNC et laser, indépendamment du logiciel ayant envoyé les fichiers. Inclure les stockages que le protocole permet d’interroger (interne, cache, SD, USB), les dossiers et les fichiers préinstallés ; ne pas supposer leur absence si une liste n’est pas disponible.
+
+Distinguer inventaire natif, copies d’envois FabCore et bibliothèque locale. Indiquer la source et le périmètre de la liste. Un connecteur limité aux copies ne doit pas nommer son panneau « Fichiers de la machine » ni déclarer la machine vide. Un protocole sans stockage distant doit être présenté comme tel. Ne pas annoncer une lecture ou un lancement de format résine/CNC/laser à partir du seul visualiseur G-code FDM.
+
+Appliquer recherche par nom/chemin, tris récent/ancien et A–Z, cinq éléments par défaut ou vingt par page, aux listes des connecteurs compatibles. Signaler les limites de chargement ; la pagination visuelle ne prouve pas que tous les stockages ont été interrogés. La sélection de Visualiser/Lancer reste attachée au fichier exact après filtrage ou tri.

@@ -170,6 +170,8 @@ En cours. Décisions prises le 17 novembre 2026, à consigner dans `docs/DECISIO
 - [ ] MVP-09.1 Historique persistant des fabrications et événements, filtrable.
 - [ ] MVP-09.2 Bibliothèque de fichiers FabCore et transfert vers plusieurs machines.
 - [ ] MVP-09.3 Visualiseur : fichiers de la carte SD et des autres connecteurs lorsque leur contenu est lisible.
+- [ ] MVP-09.4 Inventaire natif des fichiers pour chaque connecteur compatible : interne/cache/SD/USB, dossiers et fichiers préinstallés, indépendamment de l’émetteur. Séparer cet inventaire des copies FabCore et afficher une indisponibilité explicite si la lecture native manque. Première étude à poursuivre : CC2, dont GET_FILE_LIST/1044 reste commenté dans elegoo-link.
+- [ ] MVP-09.5 Appliquer le même contrat aux futures familles résine, CNC et laser, avec formats et commandes propres ; ne pas déduire la visualisation ou le lancement d’un fichier natif du seul support G-code. Recherche, tri et pagination communs ; source du stockage et limites de chargement visibles.
 
 ## MVP-10 · Agent local et FabCore Cloud
 
