@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { checkServerIdentity } from 'node:tls';
+import { randomInt } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connect } from 'mqtt';
 import { bambuFilaments } from './filaments.mjs';
@@ -20,6 +21,7 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
     const reportTopic = `device/${machine.serial}/report`;
     const requestTopic = `device/${machine.serial}/request`;
     const printer = { current: empty('connecting', null), lastReport: 0 };
+    const pending = new Map();
     let report = {};
     let ams = {};
     let filaments = null;
@@ -35,6 +37,7 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
       connectTimeout: 5000,
       reconnectPeriod: 10000,
       keepalive: 20,
+      queueQoSZero: false,
       resubscribe: false
     });
     printer.client = client;
@@ -67,6 +70,15 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
       if (topic !== reportTopic || payload.length > 512 * 1024) return;
       let delta;
       try { delta = JSON.parse(payload)?.print; } catch { return; }
+      const acknowledgement = pending.get(String(delta?.sequence_id));
+      if (acknowledgement && delta.command === acknowledgement.command) {
+        pending.delete(String(delta.sequence_id));
+        clearTimeout(acknowledgement.timer);
+        if (delta.result === 'success') acknowledgement.resolve(true);
+        else if (delta.result === 'fail' || delta.result === 'failed') acknowledgement.resolve(false);
+        else acknowledgement.reject(new Error('command-unconfirmed'));
+        return;
+      }
       if (delta?.command !== 'push_status') return;
       report = { ...report, ...delta };
       if (delta.ams && typeof delta.ams === 'object' && !Array.isArray(delta.ams)) {
@@ -106,12 +118,33 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
     });
     printer.close = () => {
       clearTimeout(timeout);
+      for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new Error('command-unconfirmed')); }
+      pending.clear();
       client.end(true);
     };
+    printer.send = (command, params) => new Promise((resolve, reject) => {
+      if (!client.connected || !printer.lastReport || Date.now() - printer.lastReport > 60000) return reject(new Error('bambu-connection'));
+      const id = String(randomInt(1, 0x7fffffff));
+      const timer = setTimeout(() => { pending.delete(id); reject(new Error('command-unconfirmed')); }, 6000);
+      pending.set(id, { command, resolve, reject, timer });
+      // QoS 0 avoids MQTT replay after reconnect; execution is verified by state.
+      client.publish(requestTopic, JSON.stringify({ print: { ...params, command, sequence_id: id } }), { qos: 0, retain: false }, error => {
+        if (error && pending.has(id)) { pending.delete(id); clearTimeout(timer); reject(error); }
+      });
+    });
     return printer;
   }
 
   return {
+    send(machine, command, params = {}) {
+      if (!printers.has(machine.id)) printers.set(machine.id, open(machine, true));
+      return printers.get(machine.id).send(command, params);
+    },
+    command(machine, action) {
+      if (!['pause', 'resume', 'stop'].includes(action)) return false;
+      if (!printers.has(machine.id)) printers.set(machine.id, open(machine, true));
+      return printers.get(machine.id).send(action, { param: '' });
+    },
     read(machine) {
       if (!printers.has(machine.id)) printers.set(machine.id, open(machine, true));
       const { current, lastReport } = printers.get(machine.id);

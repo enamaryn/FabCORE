@@ -25,15 +25,17 @@ Gardez un œil sur vos fabrications, ouvrez les caméras en direct et voyez quel
 
 ## Machines compatibles
 
-| Machine | État | Caméra | Filaments | Commandes |
-| --- | --- | --- | --- | --- |
-| Klipper avec Moonraker | Oui | — | — | Pause et reprise |
-| OctoPrint | Oui | — | — | — |
-| PrusaLink (API v1 avec clé) | Oui | — | — | — |
-| Bambu Lab P2S | Oui | Oui | AMS | — |
-| Elegoo Centauri Carbon (CC1) | Oui | Oui | — | — |
-| Elegoo Centauri Carbon 2 (CC2) | Oui | Oui | CANVAS | — |
-| xTool M2 | Supervision expérimentale | — | — | — |
+| Machine | État | Caméra | Filaments | Fichiers / lancement* | Commandes* |
+| --- | --- | --- | --- | --- | --- |
+| Klipper avec Moonraker | Oui | — | — | Oui | Pause, reprise, stop |
+| OctoPrint | Oui | — | — | Oui | Pause, reprise, stop |
+| PrusaLink (API v1 avec clé) | Oui | — | — | Oui | Pause, reprise, stop |
+| Bambu Lab P2S | Oui | Oui | AMS | G-code / 3MF tranché à un plateau | Pause, reprise, stop |
+| Elegoo Centauri Carbon (CC1) | Oui | Oui | — | Fichiers envoyés via FabCore | Pause, reprise, stop |
+| Elegoo Centauri Carbon 2 (CC2) | Oui | Oui | CANVAS | Fichiers envoyés via FabCore | Pause, stop ; reprise sur la machine |
+| xTool M2 | Oui | Trois vues | — | Aperçu G-code local ; projet préparé sur la M2 | Lancer le projet préparé, pause, reprise, stop |
+
+*L’extension des fichiers et commandes au-delà de Moonraker/OctoPrint est **expérimentale et reste à tester sur matériel réel**. Le visualiseur G-code local est disponible sur toutes les fiches. Les lancements Bambu/Elegoo sont limités à la bobine externe avec confirmation ; le transfert natif des projets xTool M2 reste à implémenter. [Formats, limites et recette](poc/README.md#fichiers-et-pilotage--extension-expérimentale).
 
 La connexion et les fonctions locales dépendent du modèle, du micrologiciel et des réglages réseau de la machine.
 
@@ -63,4 +65,4 @@ Lancez la **découverte réseau** depuis **Ajouter une machine**. FabCore prére
 
 ![Ajout d’une Bambu Lab P2S après découverte réseau avec des données d’exemple](docs/screenshots/ajout-machine.webp)
 
-La bibliothèque de fichiers, le transfert vers les imprimantes compatibles et les alertes automatiques de fabrication sont prévus. [Consulter la licence](LICENSE).
+La bibliothèque centralisée et les alertes automatiques de fabrication sont prévues. Le transfert depuis les fiches compatibles est décrit dans le guide. [Consulter la licence](LICENSE).

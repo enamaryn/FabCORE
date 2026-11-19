@@ -146,7 +146,7 @@ export function readXTool(machine, { signal, identityOnly = false, pairing = fal
         pending.delete(message.transactionId);
         clearTimeout(request.timer);
         if (message.code === 0) request.resolve(message.data);
-        else request.reject(new Error('xtool-camera'));
+        else request.reject(Object.assign(new Error('xtool-request'), { deviceCode: message.code }));
         return;
       }
       if (message?.type === 'response' && message.transactionId === 65510) {
@@ -243,6 +243,19 @@ export function createXToolMonitor({ Socket = WebSocket } = {}) {
   }
   return {
     read,
+    async command(machine, action) {
+      const verb = { start: 'START', pause: 'PAUSE', resume: 'RESUME', stop: 'CANCEL' }[action];
+      const session = sessions.get(machine.id)?.session;
+      if (!verb || !session) return false;
+      // M2/JS002: processing/state only stops framing, not a real job.
+      try {
+        await session.request('POST', '/v1/project/device/control', {}, { action: verb });
+        return true;
+      } catch (error) {
+        if (Number.isFinite(error.deviceCode)) return false;
+        throw error;
+      }
+    },
     async preview(machine, signal, view) {
       read(machine);
       const { snapshotXToolCamera } = await import('./xtool-camera.mjs');

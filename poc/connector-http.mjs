@@ -39,7 +39,7 @@ export async function readResponse(response) {
 // Fichiers d’impression : chemins relatifs simples, sans remontée de dossier.
 export const gcodeExtension = /\.(gcode|gco|g)$/i;
 export function filePath(path) {
-  if (typeof path !== 'string' || path.length < 1 || path.length > 255 || !/^[\x20-\x7E]+$/.test(path)) return null;
+  if (typeof path !== 'string' || path.length < 1 || path.length > 255 || path.includes('\\') || !/^[\x20-\x7E]+$/.test(path)) return null;
   const parts = path.split('/');
   if (parts.some(part => !part || part === '.' || part === '..' || part.trim() !== part)) return null;
   return gcodeExtension.test(path) ? path : null;

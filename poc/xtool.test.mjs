@@ -130,6 +130,11 @@ test('la supervision M2 garde une seule connexion entre plusieurs lectures', asy
     }
     send(frame) {
       const req = JSON.parse(frame.subarray(10));
+      if (req.url === '/v1/project/device/control') {
+        assert.equal(req.method, 'POST');
+        assert.ok(['START', 'PAUSE', 'RESUME', 'CANCEL'].includes(req.params.action));
+        assert.deepEqual(req.data, {});
+      }
       const data = req.url.endsWith('machine-info') ? { sn: 'M2TEST01' }
         : req.url.endsWith('sync') ? { curMode: { mode: 'Idle' } } : {};
       queueMicrotask(() => this.emit('message', Buffer.from(JSON.stringify({
@@ -151,6 +156,8 @@ test('la supervision M2 garde une seule connexion entre plusieurs lectures', asy
     data: { '/v1/platform/device/state': { mode: 'WorkPlay' } }
   })), false);
   assert.equal(monitor.read(machine).status, 'printing');
+  for (const action of ['start', 'pause', 'resume', 'stop']) assert.equal(await monitor.command(machine, action), true);
+  assert.equal(opened, 1);
   monitor.close();
   assert.equal(closed, 1);
 });

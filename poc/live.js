@@ -27,6 +27,13 @@ const problem = (code) => ({
   'upload-rejected': t('La machine a refusé le fichier.', 'The machine rejected the file.'),
   'upload-failed': t('Envoi interrompu. Vérifiez la liste avant de recommencer.', 'Upload interrupted. Check the list before trying again.'),
   'upload-busy': t('Un envoi est déjà en cours vers cette machine.', 'An upload to this machine is already in progress.'),
+  'project-multiple-plates': t('Projet multi-plateaux : exportez un seul plateau avant de l’envoyer ou de le lancer.', 'Multi-plate project: export a single plate before uploading or starting it.'),
+  'project-no-gcode': t('Ce 3MF ne contient pas de G-code tranché.', 'This 3MF does not contain sliced G-code.'),
+  'project-format': t('Archive 3MF non prise en charge ou endommagée.', 'Unsupported or damaged 3MF archive.'),
+  'file-exists': t('Un fichier porte déjà ce nom. Renommez-le avant de l’envoyer.', 'A file already uses this name. Rename it before uploading.'),
+  'file-quota': t('Limite de stockage FabCore atteinte pour cette machine (2 Go ou 300 fichiers).', 'FabCore storage limit reached for this machine (2 GB or 300 files).'),
+  'command-unsupported': t('Cette commande n’est pas prise en charge par ce connecteur.', 'This connector does not support this command.'),
+  'filament-confirm': t('Confirmez l’utilisation de la bobine externe.', 'Confirm the use of the external spool.'),
   'file-too-large': t('Fichier vide ou trop volumineux (512 Mo au maximum).', 'File empty or too large (512 MB maximum).'),
   missing: t('Élément introuvable.', 'Item not found.'),
   'terminal-offline': t('La machine est hors ligne. Commande non envoyée.', 'The machine is offline. Command not sent.'),
@@ -216,12 +223,14 @@ function liveFleet() {
 function liveFabrication(m) {
   const translatableTime = m.checkedAt ? new Date(m.checkedAt).toLocaleTimeString(state.lang) : '—';
   const canManage = state.role === 'admin';
-  const action = machineConnectors[m.kind]?.commands && (m.status === 'printing' ? 'pause' : m.status === 'paused' ? 'resume' : null);
-  const controls = canManage && action ? btn('print-command:' + action,
-    action === 'pause' ? t('Mettre en pause','Pause print') : t('Reprendre','Resume print'),
-    '', 'primary', pendingPrintCommands.has(m.id) ? 'disabled' : '') : '';
+  const available = machineConnectors[m.kind]?.commandActions ?? [];
+  const actions = m.status === 'printing' ? ['pause', 'stop'] : m.status === 'paused' ? ['resume', 'stop'] : ['ready', 'done'].includes(m.status) ? ['start'] : [];
+  const labels = { pause: t('Pause','Pause'), resume: t('Reprendre','Resume'), stop: t('Stop','Stop'), start: t('Lancer le projet préparé','Start prepared project') };
+  const controls = canManage ? actions.filter(action => available.includes(action)).map(action => btn('print-command:' + action, labels[action], '', action === 'stop' ? 'danger' : 'primary', pendingPrintCommands.has(m.id) ? 'disabled' : '')).join('') + (machineConnectors[m.kind]?.files && canStart(m) ? btn('files-focus', t('Lancer…','Start…'), '', 'primary') : '') : '';
   return `<section class="panel stack">
       <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2><div class="row wrap">${badge(m.status)}${controls}</div></div>
+      ${m.kind === 'xtool-m2' ? `<p class="muted">${t('Lancer concerne le projet déjà préparé dans la M2. Les confirmations physiques restent nécessaires.', 'Start uses the project already prepared on the M2. Physical confirmations remain required.')}</p>` : ''}
+      ${m.kind === 'elegoo' && m.status === 'paused' ? `<p class="notice">${t('Reprise CC2 : utilisez l’écran de la machine ; le SDK ne documente pas encore une reprise exploitable.', 'CC2 resume: use the machine screen; the SDK does not yet document a usable resume command.')}</p>` : ''}
       ${m.issue?`<p class="notice">${liveIssue(m.issue)}</p>`:''}
       ${machineConnectors[m.kind]?.printJob === false ? '' : `<div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
       <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>`}
@@ -818,15 +827,21 @@ document.addEventListener('click', async (event) => {
     </form>`;
     dialog.showModal();
   }
+  if (action === 'files-focus') {
+    const panel = app.querySelector('[data-files]');
+    panel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    panel?.querySelector('input,button')?.focus({ preventScroll: true });
+  }
   if (action === 'print-command' && state.role === 'admin') {
     const current = machine(state.machine);
     if (!current || pendingPrintCommands.has(current.id)) return;
-    if (value === 'resume' && !window.confirm(t('Reprendre l’impression sur ', 'Resume the print on ') + current.name + ' ?')) return;
+    const confirmation = value === 'stop' ? t('Arrêter et annuler la fabrication sur ', 'Stop and cancel the job on ') : value === 'start' ? t('Lancer le projet déjà préparé sur ', 'Start the already prepared project on ') : t('Reprendre la fabrication sur ', 'Resume the job on ');
+    if (value !== 'pause' && !window.confirm(confirmation + current.name + ' ?')) return;
     pendingPrintCommands.add(current.id);
     target.disabled = true;
     try {
-      const result = await api('machines/' + current.id + '/command', { action: value });
-      toast(result.status === 'paused' ? t('Impression en pause.','Print paused.') : t('Impression reprise.','Print resumed.'));
+      const result = await api('machines/' + current.id + '/command', { action: value, confirm: true });
+      toast(value === 'stop' ? t('Fabrication arrêtée.','Job stopped.') : result.status === 'paused' ? t('Fabrication en pause.','Job paused.') : t('Fabrication en cours.','Job running.'));
     } catch (error) {
       toast(problem(error.code ?? 'command-unconfirmed'));
     } finally {
@@ -1044,7 +1059,7 @@ function canStart(m) {
 }
 
 function filesPanel(m) {
-  if (!machineConnectors[m.kind]?.files) return '';
+  if (!machineConnectors[m.kind]?.files) return `<section class="panel stack"><h2>${t('Visualiseur G-code','G-code viewer')}</h2><label>${t('Ouvrir un fichier local pour visualiser ses trajectoires','Open a local file to view its toolpaths')}<input type="file" accept=".gcode,.gco,.g" data-gcode-local></label><p class="muted">${t('Le transfert des projets natifs de cette machine n’est pas encore pris en charge. Cet aperçu local n’envoie aucune commande.', 'Native project transfer for this machine is not supported yet. This local preview sends no commands.')}</p></section>`;
   const entry = filesState(m.id);
   const current = liveFile(m);
   const size = (bytes) => bytes === null ? '—' : bytes >= 1048576 ? (bytes / 1048576).toLocaleString(state.lang, { maximumFractionDigits: 1 }) + ' Mo' : Math.ceil(bytes / 1024).toLocaleString(state.lang) + ' ko';
@@ -1052,15 +1067,17 @@ function filesPanel(m) {
   const upload = entry.upload;
   return `<section class="panel stack" data-files>
       <div class="row between wrap"><h2>${t('Fichiers de la machine','Machine files')}</h2>${btn('files-refresh', t('Actualiser','Refresh'), '', 'ghost', entry.loading ? 'disabled' : '')}</div>
+      ${machineConnectors[m.kind]?.retainedOnly ? `<p class="notice">${t('Fichiers envoyés via FabCore uniquement : le protocole ne fournit pas ici la liste complète du stockage de la machine.', 'Only files uploaded through FabCore: the protocol does not provide a complete storage listing here.')}</p>` : ''}
+      <label>${t('Visualiser un G-code local sans l’envoyer','Preview a local G-code without uploading it')}<input type="file" accept=".gcode,.gco,.g" data-gcode-local></label>
       ${current ? `<div class="notice row between wrap"><span>${t('Impression en cours','Print in progress')} · <strong>${esc(fileName(current))}</strong></span>${btn('viewer-live', t('Suivre en direct','Follow live'), 'activity', 'primary')}</div>` : ''}
       ${state.role === 'admin' ? `<label class="stack"><span>${t('Envoyer un fichier G-code sur la machine','Upload a G-code file to the machine')}</span>
-        <input type="file" accept=".gcode,.gco,.g" data-files-upload ${upload ? 'disabled' : ''}></label>
+        <input type="file" accept=".gcode,.gco,.g${machineConnectors[m.kind]?.projects ? ",.3mf" : ""}" data-files-upload ${upload ? 'disabled' : ''}></label>
         ${upload ? `<p role="status">${t('Envoi de','Uploading')} ${esc(upload.name)}… <span data-upload-percent>${upload.percent}</span> %</p><progress value="${upload.percent}" max="100" data-upload-bar></progress>` : ''}` : ''}
       ${entry.error ? `<p class="error" role="alert">${esc(entry.error)}</p>` : ''}
       ${entry.files === null ? `<p role="status">${t('Chargement de la liste…','Loading the list…')}</p>` : entry.files.length ? `<div class="table"><table>
         <thead><tr><th>${t('Fichier','File')}</th><th>${t('Taille','Size')}</th><th>${t('Modifié','Modified')}</th><th><span class="hide-mobile">${t('Actions','Actions')}</span></th></tr></thead>
         <tbody>${entry.files.map((file, index) => `<tr><td>${esc(file.path)}</td><td>${size(file.size)}</td><td>${date(file.modified)}</td>
-          <td><div class="row wrap">${btn('viewer-open:' + index, t('Visualiser','View'))}${canStart(m) ? btn('files-print:' + index, t('Imprimer','Print')) : ''}</div></td></tr>`).join('')}</tbody>
+          <td><div class="row wrap">${btn('viewer-open:' + index, t('Visualiser','View'))}${canStart(m) ? btn('files-print:' + index, t('Lancer','Start')) : ''}</div></td></tr>`).join('')}</tbody>
       </table></div>` : `<p class="muted">${t('Aucun fichier G-code sur la machine.','No G-code file on the machine.')}</p>`}
     </section>`;
 }
@@ -1092,8 +1109,8 @@ async function loadFiles(id) {
 function uploadFile(id, file) {
   const entry = filesState(id);
   entry.error = '';
-  if (!/^[\x20-\x7E]{1,200}$/.test(file.name) || file.name.includes('/') || !/\.(gcode|gco|g)$/i.test(file.name)) {
-    entry.error = t('Nom invalide : caractères ASCII et extension .gcode, .gco ou .g.', 'Invalid name: ASCII characters and a .gcode, .gco or .g extension.');
+  if (!/^[\x20-\x7E]{1,200}$/.test(file.name) || file.name.includes('/') || !(machineConnectors[machine(id)?.kind]?.projects ? /\.(gcode|gco|g|3mf)$/i : /\.(gcode|gco|g)$/i).test(file.name)) {
+    entry.error = t('Nom invalide : caractères ASCII et extension prise en charge par la machine.', 'Invalid name: ASCII characters and an extension supported by the machine.');
     return renderFiles(id);
   }
   if (file.size > gcodeLimit || file.size < 1) {
@@ -1130,9 +1147,10 @@ function uploadFile(id, file) {
 
 async function startPrint(id, path) {
   const m = machine(id);
-  if (!m || !path || !window.confirm(t('Lancer l’impression sur','Start printing on') + ' ' + m.name + ' ?\n\n' + path)) return;
+  const filament = machineConnectors[m?.kind]?.externalFilament ? '\n\n' + t('Bobine externe uniquement : aucun choix automatique AMS/CANVAS. Le fichier doit être préparé pour cette machine et ce filament.', 'External spool only: no automatic AMS/CANVAS mapping. The file must be prepared for this machine and filament.') : '';
+  if (!m || !path || !window.confirm(t('Lancer l’impression sur','Start printing on') + ' ' + m.name + ' ?\n\n' + path + filament)) return;
   try {
-    await api('machines/' + id + '/print', { path, confirm: true });
+    await api('machines/' + id + '/print', { path, confirm: true, ...(filament ? { filamentMode: 'external' } : {}) });
     toast(t('Impression lancée.', 'Print started.'));
   } catch (error) {
     toast(problem(error.code));
@@ -1141,7 +1159,9 @@ async function startPrint(id, path) {
 }
 
 function openViewer(id, path, follow) {
-  if (gcode.machine !== id || gcode.path !== path) {
+  const wasLocal = gcode.local;
+  gcode.local = false;
+  if (wasLocal || gcode.machine !== id || gcode.path !== path) {
     Object.assign(gcode, { machine: id, path, size: 0, result: null, layer: 0, read: 0, error: '', view: null });
     loadGcode(id, path);
   }
@@ -1153,7 +1173,7 @@ function openViewer(id, path, follow) {
 
 function viewerLive() {
   const m = machine(gcode.machine);
-  if (!m || !gcode.result || liveFile(m) !== gcode.path) return null;
+  if (gcode.local || !m || !gcode.result || liveFile(m) !== gcode.path) return null;
   return { printed: printedSegments(gcode.result, m.filePosition), status: m.status, progress: m.progress };
 }
 
@@ -1171,7 +1191,7 @@ function viewerPage() {
   const percent = gcode.loading && gcode.size ? Math.floor(gcode.read / gcode.size * 100) : 0;
   const unsupported = result?.unsupported.length ? `<p class="notice" role="status">${t('Trajectoires non prises en charge, ignorées dans l’aperçu :','Unsupported moves, skipped in the preview:')}
     ${result.unsupported.map(({ command, count, line }) => `<code>${esc(command)}</code> × ${count} (${t('première ligne','first line')} ${line})`).join(', ')}</p>` : '';
-  const actions = `<div class="row wrap">${btn('machine:' + m.id, t('Retour à la machine','Back to machine'), 'machine', 'ghost')}${canStart(m) && result ? btn('viewer-print', t('Lancer l’impression','Start print'), '', 'primary') : ''}</div>`;
+  const actions = `<div class="row wrap">${btn('machine:' + m.id, t('Retour à la machine','Back to machine'), 'machine', 'ghost')}${!gcode.local && canStart(m) && result ? btn('viewer-print', t('Lancer l’impression','Start print'), '', 'primary') : ''}</div>`;
   return title(esc(fileName(gcode.path)), esc(m.name + ' · ' + gcode.path), actions) +
     `<style>
       .gcode-canvas{position:relative;height:min(68vh,640px);min-height:320px;border:1px solid var(--line);border-radius:10px;background:var(--raised);overflow:hidden;touch-action:none;cursor:grab}
@@ -1207,9 +1227,9 @@ function viewerPage() {
           </div>
         </div>
         <div class="gcode-canvas" data-gcode-canvas><canvas role="img" aria-label="${t('Trajectoires de la couche','Layer toolpaths')}"></canvas></div>
-        <div class="row wrap"><small class="gcode-legend good">${t('Imprimé','Printed')}</small><small class="gcode-legend neutral">${t('À imprimer','To print')}</small><small class="gcode-legend info">${t('Déplacement à vide','Travel move')}</small><small class="gcode-legend warn">${t('Buse','Nozzle')}</small>
+        <div class="row wrap"><small class="gcode-legend good">${m.kind === 'xtool-m2' ? t('Réalisé','Completed') : t('Imprimé','Printed')}</small><small class="gcode-legend neutral">${m.kind === 'xtool-m2' ? t('Trajectoire de travail','Work path') : t('À imprimer','To print')}</small><small class="gcode-legend info">${t('Déplacement à vide','Travel move')}</small><small class="gcode-legend warn">${m.kind === 'xtool-m2' ? t('Outil','Tool') : t('Buse','Nozzle')}</small>
           <small>${t('Molette ou boutons pour zoomer, glisser pour déplacer.','Wheel or buttons to zoom, drag to pan.')}</small></div>
-      </section>` : `<p class="notice">${t('Aucune extrusion trouvée dans ce fichier.','No extrusion found in this file.')}</p>`) : ''}
+      </section>` : `<p class="notice">${m.kind === 'xtool-m2' ? t('Aucune trajectoire laser active trouvée dans ce fichier.', 'No active laser toolpath found in this file.') : t('Aucune extrusion trouvée dans ce fichier.','No extrusion found in this file.')}</p>`) : ''}
     </div>`;
 }
 
@@ -1221,20 +1241,20 @@ function gcodeLayerLabel() {
 
 let printedSegments;
 let layerOfSegment;
-async function loadGcode(id, path) {
+async function loadGcode(id, path, localFile) {
   const token = {};
   gcode.loading = token;
   try {
     const parserModule = await import('/gcode.mjs');
     ({ printedSegments, layerOfSegment } = parserModule);
-    const response = await fetch('/api/machines/' + id + '/file?path=' + encodeURIComponent(path));
+    const response = localFile ? new Response(localFile) : await fetch('/api/machines/' + id + '/file?path=' + encodeURIComponent(path));
     if (!response.ok) {
       let code = '';
       try { code = (await response.json()).error; } catch { /* corps vide */ }
       throw Object.assign(new Error(code), { code });
     }
     gcode.size = Number(response.headers.get('content-length')) || 0;
-    const parser = parserModule.createGcodeParser();
+    const parser = parserModule.createGcodeParser({ laser: machine(id)?.kind === 'xtool-m2' });
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
     let shown = 0;
     for (;;) {
@@ -1411,6 +1431,14 @@ function mountGcode() {
 }
 
 app.addEventListener('change', (event) => {
+  if (event.target.matches('[data-gcode-local]') && event.target.files[0] && state.machine) {
+    const file = event.target.files[0];
+    if (!/\.(gcode|gco|g)$/i.test(file.name) || file.size > gcodeLimit) return toast(problem('file-too-large'));
+    Object.assign(gcode, { machine: state.machine, path: file.name, local: true, follow: false, size: file.size, result: null, layer: 0, read: 0, error: '', view: null });
+    live.page = 'viewer';
+    loadGcode(state.machine, file.name, file);
+    renderLive();
+  }
   if (event.target.matches('[data-files-upload]') && event.target.files[0] && state.machine) uploadFile(state.machine, event.target.files[0]);
   if (event.target.matches('[data-gcode-option]')) {
     const option = event.target.dataset.gcodeOption;

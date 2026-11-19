@@ -104,6 +104,18 @@ export function createOctoPrintFiles(fetcher = fetch) {
 }
 
 // Terminal : l’API REST d’OctoPrint confirme la mise en file de la commande, pas son exécution ni la réponse de l’imprimante.
+export async function commandOctoPrint(machine, action, fetcher = fetch) {
+  if (!['pause', 'resume', 'stop'].includes(action) || moonrakerOrigin(machine.origin) !== machine.origin) return false;
+  const response = await fetcher(machine.origin + '/api/job', {
+    method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000),
+    headers: { 'X-Api-Key': machine.apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(action === 'stop' ? { command: 'cancel' } : { command: 'pause', action })
+  });
+  await response.body?.cancel();
+  if (response.status >= 500) throw new Error('command-unconfirmed');
+  return response.ok;
+}
+
 export async function sendOctoPrintGcode(machine, script, fetcher = fetch) {
   if (moonrakerOrigin(machine.origin) !== machine.origin || !/^[!-~]{1,256}$/.test(machine.apiKey ?? '')) {
     return { outcome: 'rejected', message: '' };
