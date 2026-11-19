@@ -43,7 +43,7 @@ test('journal connecteur : une seule exécution, résultat natif et erreur sans 
 });
 test('cloud verbose : conserve les champs inconnus et identités, expurge les secrets imbriqués', () => {
   const safe = safeCloudPayload({ new_field: { device: 'P2S', dev_id: 'SERIAL', print_status: 'FAIL', firmware_flag: 19,
-    dev_access_code: 'PRIVATE_LAN', accessToken: 'PRIVATE_TOKEN', code: '123456', error: { code: 803 }, echo: 'PRIVATE_PASSWORD' },
+    ttcode: 'PRIVATE_CAMERA', dev_access_code: 'PRIVATE_LAN', accessToken: 'PRIVATE_TOKEN', code: '123456', error: { code: 803 }, echo: 'PRIVATE_PASSWORD' },
     url: 'https://example.test/?token=PRIVATE_TOKEN' }, ['PRIVATE_PASSWORD']);
   assert.equal(safe.new_field.firmware_flag, 19); assert.equal(safe.new_field.error.code, 803);
   assert.equal(safe.new_field.dev_id, 'SERIAL'); assert.equal(safe.new_field.print_status, 'FAIL');
