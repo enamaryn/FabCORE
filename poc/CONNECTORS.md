@@ -46,3 +46,7 @@ Références :
 ## Contrôles manuels
 
 La métadonnée `controls` active le panneau. Le registre charge `control.read(machine)` et `control.execute(machine, command, snapshot)` depuis `manual-controls.mjs`. Les listes `lights`, `heaters`, `fans` et `motion` décrivent les équipements disponibles ; `writable` distingue les retours seuls. `validateControl` autorise uniquement les actions et valeurs présentes/bornées dans le dernier état relu côté serveur. `execute` renvoie `executed`, `accepted` ou `rejected` ; une perte de réponse reste inconnue. Les commandes ne doivent pas créer une nouvelle session MQTT, être mises en file hors ligne ou être rejouées. Bambu utilise `system` pour `ledctrl`, `print` pour le G-code, avec corrélation par canal et séquence.
+
+### Humidité des modules filament
+
+Chaque module normalisé peut fournir `humidity` : pourcentage réel numérique entre 0 et 100, ou `null`/absent. Le rendu de la fiche est commun aux marques. Bambu lit exclusivement `ams.ams[].humidity_raw` ; le champ `humidity` du protocole est un indice 1–5, pas un pourcentage. Référence : [ha-bambulab, modèles AMS](https://github.com/greghesp/ha-bambulab/blob/main/custom_components/bambu_lab/pybambu/models.py). Pas de conversion d’indice ou de moyenne artificielle entre modules/zones.

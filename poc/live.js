@@ -368,10 +368,12 @@ function liveFilaments(machine) {
   const system = machineConnectors[machine.kind]?.filaments;
   if (!system || machine.filaments?.length === 0) return '';
   const missing = t('Données des emplacements indisponibles.', 'Slot information is unavailable.');
-  const units = machine.filaments?.map(({ id, variant, slots }) => {
+  const units = machine.filaments?.map(({ id, variant, slots, humidity }) => {
     const unit = variant === 'ht' ? 'AMS HT ' + (id - 3) : system + ' ' + (id + 1);
+    const moisture = Number.isFinite(humidity) && humidity >= 0 && humidity <= 100
+      ? `<span class="filament-humidity" role="img" aria-label="${t('Humidité','Humidity')} ${humidity} %" title="${t('Humidité','Humidity')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3C9 7 5 11 5 15a7 7 0 0 0 14 0c0-4-4-8-7-12Z"/></svg><span aria-hidden="true">${humidity} %</span></span>` : '';
     return `<div class="filament-module">
-      <h3>${unit}</h3>
+      <div class="filament-module-heading"><h3>${unit}</h3>${moisture}</div>
       <ul class="filament-rack" style="--slots:${slots.length}">
         ${slots.map((slot) => {
           const position = system === 'AMS' && !variant ? String.fromCharCode(65 + id) + (slot.id + 1) : String(slot.id + 1);
@@ -392,6 +394,7 @@ function liveFilaments(machine) {
   return `<section class="panel stack machine-filaments" data-modules="${machine.filaments?.length ?? 0}">
     <style>
       .filament-module{display:grid;gap:.65rem}
+      .filament-module-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.filament-module-heading h3{margin:0}.filament-humidity{display:inline-flex;align-items:center;gap:3px;font-size:12px;color:var(--dim);white-space:nowrap}.filament-humidity svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7}
       .filament-rack{display:grid;grid-template-columns:repeat(var(--slots),minmax(0,1fr));gap:.35rem;
         width:calc(var(--slots) * 3.2rem + .8rem);max-width:100%;margin:0;padding:.65rem;list-style:none;
         border:1px solid var(--line);border-radius:1rem;background:var(--bg)}
