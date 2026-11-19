@@ -32,9 +32,9 @@ Référence d’implémentation étudiée : [ha-bambulab, bambu_cloud.py](https:
 
 Répertoire : `$FABCORE_DATA/cloud-logs/`. Une paire de fichiers par identifiant interne : `<id>.log` et `<id>.log.1`. Chaque ligne est un objet JSON daté. Rotation après environ 256 Kio ; deux fichiers au maximum par compte (environ 512 Kio plus une ligne). L’interface lit les 300 dernières lignes ; le téléchargement rassemble les deux fichiers conservés. Permissions créées : répertoire 0700, fichiers 0600.
 
-Champs autorisés : étape, méthode, hôte et chemin fixes, statut HTTP, durée, famille de contenu, code constructeur numérique, type de challenge reconnu, présence d’un jeton (booléen), nombre de machines et résultat normalisé. Les erreurs réseau connues sont réduites à un code technique autorisé ; aucune exception brute n’est enregistrée.
+Le journal conserve méthode, hôte et chemin, statut HTTP, durée, taille, type de contenu, requête et réponse JSON expurgées. Les champs JSON inconnus restent visibles pour qualifier les évolutions du protocole ; profondeur, chaînes et collections sont bornées. Les noms, modèles, séries et états des machines sont présents dans la réponse d’inventaire et dans une entrée `devices-read`. Une entrée dépassant 64 Kio est remplacée par une indication de troncature. Les erreurs réseau restent des codes techniques, sans exception brute.
 
-**Les mots de passe, codes MFA/email, jetons, cookies, clés CSRF/TFA, codes LAN et corps HTTP bruts ne sont jamais journalisés.** « Toutes les informations de debug » signifie les éléments utiles et non secrets, pas un dump du trafic. Les corps du constructeur peuvent contenir des secrets, même dans un message d’erreur. Aucun mode verbose ne désactive ce filtrage.
+**Les mots de passe, codes MFA/email, jetons, cookies, clés CSRF/TFA, codes LAN ne sont jamais journalisés ; seuls les corps JSON expurgés sont conservés.** « Toutes les informations de debug » signifie les éléments utiles et non secrets, pas un dump du trafic. Les corps du constructeur peuvent contenir des secrets, même dans un message d’erreur. Aucun mode verbose ne désactive ce filtrage.
 
 Accès à l’écran, API et téléchargement réservé aux administrateurs. Les observateurs ne reçoivent ni comptes ni logs. La suppression du compte efface son jeton chiffré, son inventaire enregistré et ses deux fichiers log ; la déconnexion seule garde le journal.
 
@@ -65,3 +65,7 @@ Recette utilisateur : créer un compte Bambu, terminer la vérification, contrô
 ## Correctif vérification email · 19 novembre 2026
 
 Le journal matériel relève `login` HTTP 200 avec `loginType=verifyCode`, puis `sendemail/code` HTTP 200 non JSON, suivi de `cloud-response`. Valentin confirme deux emails avec le même code. Le second appel d’envoi automatique est supprimé ; le champ à six chiffres est ouvert directement après la réponse du login. La validation du code et la lecture des machines restent strictement JSON. Aucun nouvel email n’a été demandé pour diagnostiquer le problème ; lecture seule des logs du LXC 119. Libellé du formulaire : « Adresse email cloud ».
+
+## Diagnostic exploitable · 19 novembre 2026
+
+La connexion et la lecture de l’inventaire sont confirmées par Valentin. `FAIL` est une valeur d’état d’impression renvoyée dans l’inventaire, pas un échec d’authentification. L’interface distingue cet état et l’absence d’import cloud dans le parc. Après mise à jour, utiliser **Relire les machines**, puis **Journal du compte** : cette lecture réutilise le jeton et ne déclenche aucun email. Les anciens journaux ne peuvent pas retrouver des réponses qui n’avaient pas été enregistrées. Voir aussi [les logs par machine](MACHINE-LOGS.md).

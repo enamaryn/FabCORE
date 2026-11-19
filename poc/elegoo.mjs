@@ -221,6 +221,7 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
           const id = ++transaction;
           const timer = setTimeout(() => { pending.delete(id); reject(new Error('command-unconfirmed')); }, 6000);
           pending.set(id, { method, resolve, reject, timer });
+          diagnostics?.trace?.(machine.id, 'mqtt-send', { topic: request, method, sequence_id: id, params });
           client.publish(request, JSON.stringify({ id, method, params }), { qos: 0, retain: false }, error => {
             if (error && pending.has(id)) { clearTimeout(timer); pending.delete(id); reject(error); }
           });
@@ -233,6 +234,7 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
       if (!registered) return;
       const item = topic === response && pending.get(message.id);
       if (item && (message.method === undefined || message.method === item.method)) {
+        diagnostics?.trace?.(machine.id, 'mqtt-command-response', { topic, method: item.method, sequence_id: message.id, correlated: true, payload: message.result });
         pending.delete(message.id); clearTimeout(item.timer);
         if (Number.isInteger(message.result?.error_code)) item.resolve(message.result.error_code === 0);
         else item.reject(new Error('command-unconfirmed'));

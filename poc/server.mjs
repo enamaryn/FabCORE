@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { discoveryNetworks, reconcileDiscovery, scanNetwork } from './discovery.mjs';
 import { connectorCatalog, connectorDefinition, createConnectorRegistry } from './connectors.mjs';
+import { createMachineLogs } from './machine-logs.mjs';
 import { createDiagnostics } from './diagnostics.mjs';
 import { cameraRelay } from './camera-viewers.mjs';
 import { cameraPreview } from './camera-preview.mjs';
@@ -111,7 +112,8 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
   const sessions = new Map();
   const attempts = new Map();
-  const diagnostics = createDiagnostics();
+  const machineLogs = createMachineLogs({ directory, machines: () => store.state.machines });
+  const diagnostics = createDiagnostics({ journal: machineLogs });
   diagnostics.record('server', 'started');
   const connectors = createConnectorRegistry({ directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera });
   const snapshot = monitor(async (machine) => {
@@ -267,6 +269,19 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         ...diagnostics.view(),
         fleet: store.state.machines.map(({ id, name }) => ({ id, name }))
       });
+    }
+    const machineLogRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/(logs|logs-download)$/);
+    if (req.method === 'GET' && machineLogRoute) {
+      if (!viewer) return error(res, 401, 'sign-in');
+      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+      const machine = store.state.machines.find(item => item.id === machineLogRoute[1]);
+      if (!machine) return error(res, 404, 'missing');
+      try {
+        const content = machineLogs.read(machine.id);
+        if (machineLogRoute[2] === 'logs') return answer(res, 200, { machine: { id: machine.id, name: machine.name, kind: machine.kind, mode: 'lan' }, lines: content.trim().split('\n').filter(Boolean).slice(-500).map(line => JSON.parse(line)) });
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': `attachment; filename="fabcore-machine-${machine.id}.log"` });
+        return res.end(content);
+      } catch { return error(res, 503, 'logs-unavailable'); }
     }
     const preview = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera\/preview(?:\/(side|far|near))?$/);
     const camera = preview ?? path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera(?:\/(side|far|near))?$/);
@@ -682,6 +697,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         const machines = store.state.machines.filter((machine) => machine !== existing);
         store.save({ ...store.state, machines });
         snapshot.forget(existing.id);
+        machineLogs.forget(existing.id);
         connectors.forget(existing.kind ?? 'klipper', existing.id, true);
         for (const stream of cameraStreams.values()) {
           if (stream.machineId === existing.id) stream.controller.abort();

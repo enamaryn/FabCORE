@@ -31,7 +31,10 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
   function open(machine, tracked = false) {
     const reportTopic = `device/${machine.serial}/report`;
     const requestTopic = `device/${machine.serial}/request`;
-    const printer = { current: empty('connecting', null), lastReport: 0 };
+    const printer = { current: empty('connecting', null), lastReport: 0, nextLog: 0 };
+    const trace = (event, details = {}) => { if (tracked) diagnostics?.trace?.(machine.id, event, details); };
+    const endpoint = new URL(machine.origin);
+    trace('mqtt-connect-start', { transport: 'mqtts', mode: 'lan', host: endpoint.hostname, port: endpoint.port });
     const pending = new Map();
     let report = {};
     let ams = {};
@@ -55,9 +58,10 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
 
     function requestReport() {
       clearTimeout(timeout);
+      trace('mqtt-send', { topic: requestTopic, payload: JSON.parse(request) });
       client.publish(requestTopic, request);
       timeout = setTimeout(() => {
-        if (!printer.lastReport) printer.current = empty('error', 'bambu-report');
+        if (!printer.lastReport) { printer.current = empty('error', 'bambu-report'); trace('mqtt-report-timeout', { elapsedMs: 8000 }); }
       }, 8000);
       timeout.unref();
     }
@@ -70,6 +74,7 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
       printer.lastReport = 0;
       printer.current = empty('connecting', null);
       client.subscribe(reportTopic, (error, grants) => {
+        trace('mqtt-subscribe', { topic: reportTopic, qos: grants?.[0]?.qos, outcome: error || !grants?.length || grants[0].qos >= 128 ? 'rejected' : 'accepted' });
         if (error || !grants?.length || grants[0].qos >= 128) {
           printer.current = empty('error', 'bambu-access');
           return;
@@ -81,9 +86,14 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
       if (topic !== reportTopic || payload.length > 512 * 1024) return;
       let delta;
       let channel;
-      try { const envelope = JSON.parse(payload); channel = envelope.print ? 'print' : 'system'; delta = envelope[channel]; } catch { return; }
+      try { const envelope = JSON.parse(payload); channel = envelope.print ? 'print' : envelope.system ? 'system' : 'info'; delta = envelope[channel]; } catch { trace('mqtt-invalid-json', { bytes: payload.length }); return; }
+      if (delta?.command !== 'push_status' || Date.now() >= printer.nextLog || delta.gcode_state && delta.gcode_state !== report.gcode_state) {
+        trace('mqtt-receive', { topic, channel, bytes: payload.length, payload: delta });
+        if (delta?.command === 'push_status') printer.nextLog = Date.now() + 10000;
+      }
       const acknowledgement = pending.get(String(delta?.sequence_id));
       if (acknowledgement && delta.command === acknowledgement.command && channel === acknowledgement.channel) {
+        trace('mqtt-command-response', { channel, correlated: true, payload: delta });
         pending.delete(String(delta.sequence_id));
         clearTimeout(acknowledgement.timer);
         if (delta.result === 'success') acknowledgement.resolve(true);
@@ -122,12 +132,14 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
     });
     client.on('error', (error) => {
       const code = String(error.code ?? '');
+      trace('mqtt-error', { code: /^[A-Z0-9_]{1,60}$/.test(code) ? code : 'network-error' });
       if (code === '4' || code === '5') printer.current = empty('error', 'bambu-access');
       else if (/CERT|ISSUER|SELF_SIGNED|SIGNATURE|VERIFY|TLS/.test(code)) printer.current = empty('error', 'bambu-tls');
       else printer.current = empty('offline', 'bambu-connection');
       if (tracked) diagnostics?.record('mqtt', printer.current.issue, machine.id);
     });
     client.on('close', () => {
+      trace('mqtt-closed', { count: pending.size });
       if (tracked) diagnostics?.record('mqtt', 'retry', machine.id);
       clearTimeout(timeout);
       printer.lastReport = 0;
@@ -142,11 +154,12 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
     printer.send = (command, params, channel = 'print') => new Promise((resolve, reject) => {
       if (!client.connected || !printer.lastReport || Date.now() - printer.lastReport > 60000) return reject(new Error('bambu-connection'));
       const id = String(randomInt(1, 0x7fffffff));
-      const timer = setTimeout(() => { pending.delete(id); reject(new Error('command-unconfirmed')); }, 6000);
+      const timer = setTimeout(() => { pending.delete(id); trace('mqtt-command-timeout', { command, channel, sequence_id: id, elapsedMs: 6000 }); reject(new Error('command-unconfirmed')); }, 6000);
       pending.set(id, { command, channel, resolve, reject, timer });
       // QoS 0 avoids MQTT replay after reconnect; execution is verified by state.
+      trace('mqtt-send', { topic: requestTopic, channel, qos: 0, retain: false, payload: { ...params, command, sequence_id: id } });
       client.publish(requestTopic, JSON.stringify({ [channel]: { ...params, command, sequence_id: id } }), { qos: 0, retain: false }, error => {
-        if (error && pending.has(id)) { pending.delete(id); clearTimeout(timer); reject(error); }
+        if (error && pending.has(id)) { trace('mqtt-publish-failed', { command, channel, sequence_id: id }); pending.delete(id); clearTimeout(timer); reject(error); }
       });
     });
     return printer;

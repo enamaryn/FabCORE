@@ -1,3 +1,4 @@
+import { instrumentConnector } from './machine-logs.mjs';
 import { join } from 'node:path';
 import { retainedFiles } from './production-files.mjs';
 import { privateIPv4, moonrakerOrigin } from './connector-http.mjs';
@@ -149,9 +150,10 @@ export function createConnectorRegistry(options, definition = connectorDefinitio
         pending.set(kind, Promise.resolve().then(() => entry.load(options)).then(async connector => {
           if (entry.controls) {
             const { createManualControls } = await import('./manual-controls.mjs');
-            connector.control = createManualControls(kind, { fetcher: options.fetchFiles, send: (...args) => connector.send(...args), request: (...args) => connector.request(...args), read: connector.controlState });
+            connector.control = createManualControls(kind, { fetcher: options.fetchFiles, send: (...args) => connector.send(...args), request: (...args) => connector.request(...args), read: connector.controlState, trace: (...args) => options.diagnostics?.trace?.(...args) });
           }
           if (closed) { connector.close?.(); return null; }
+          instrumentConnector(connector, options.diagnostics);
           loaded.set(kind, connector);
           return connector;
         }, error => {
