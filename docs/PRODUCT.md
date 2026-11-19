@@ -68,3 +68,9 @@ Demande du 19 novembre 2026 : le panneau de fichiers doit viser l’inventaire r
 Distinguer inventaire natif, copies d’envois FabCore et bibliothèque locale. Indiquer la source et le périmètre de la liste. Un connecteur limité aux copies ne doit pas nommer son panneau « Fichiers de la machine » ni déclarer la machine vide. Un protocole sans stockage distant doit être présenté comme tel. Ne pas annoncer une lecture ou un lancement de format résine/CNC/laser à partir du seul visualiseur G-code FDM.
 
 Appliquer recherche par nom/chemin, tris récent/ancien et A–Z, cinq éléments par défaut ou vingt par page, aux listes des connecteurs compatibles. Signaler les limites de chargement ; la pagination visuelle ne prouve pas que tous les stockages ont été interrogés. La sélection de Visualiser/Lancer reste attachée au fichier exact après filtrage ou tri.
+
+## Visualiseur G-code
+
+- Faire tenir l’aperçu et ses commandes dans la hauteur disponible, y compris lors du redimensionnement. Sur petit écran, limiter le défilement aux commandes si nécessaire.
+- Proposer une lecture locale avec marqueur de buse, pause, reprise et vitesse indicative, ainsi qu’une vue 2D et une vue 3D des trajectoires avec rotation, déplacement et zoom.
+- Distinguer explicitement simulation et suivi réel : la lecture n’envoie aucune commande machine et sa vitesse n’est pas une estimation du temps de fabrication. Les limites du parseur restent applicables.

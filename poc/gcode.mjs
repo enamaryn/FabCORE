@@ -27,6 +27,7 @@ export function createGcodeParser({ laser = false } = {}) {
   let rapid = false;
   let segments = new Float32Array(4096 * 4);
   let types = new Uint8Array(4096);
+  let heights = new Float32Array(4096 * 2);
   let offsets = new Float64Array(4096);
   let count = 0;
   let lineOffset = 0;
@@ -58,7 +59,7 @@ export function createGcodeParser({ laser = false } = {}) {
     if (y > area.maxY) area.maxY = y;
   };
 
-  const push = (x0, y0, x1, y1, type) => {
+  const push = (x0, y0, x1, y1, type, z0, z1) => {
     if (count === types.length) {
       const nextSegments = new Float32Array(segments.length * 2);
       nextSegments.set(segments);
@@ -66,6 +67,9 @@ export function createGcodeParser({ laser = false } = {}) {
       const nextTypes = new Uint8Array(types.length * 2);
       nextTypes.set(types);
       types = nextTypes;
+      const nextHeights = new Float32Array(heights.length * 2);
+      nextHeights.set(heights);
+      heights = nextHeights;
       const nextOffsets = new Float64Array(offsets.length * 2);
       nextOffsets.set(offsets);
       offsets = nextOffsets;
@@ -77,6 +81,8 @@ export function createGcodeParser({ laser = false } = {}) {
     segments[at + 2] = x1;
     segments[at + 3] = y1;
     types[count] = type;
+    heights[count * 2] = z0;
+    heights[count * 2 + 1] = z1;
     count++;
     const area = type === EXTRUDE ? bounds : travelBounds;
     grow(area, x0, y0);
@@ -103,12 +109,15 @@ export function createGcodeParser({ laser = false } = {}) {
   };
 
   // Ajoute un tracé (ligne ou arc déjà découpé) en attribuant les extrusions à la couche de leur hauteur.
-  const draw = (points, delta) => {
+  const draw = (points, delta, startZ) => {
     const type = (laser ? laserOn && laserPower > 0 && !rapid : delta > EPSILON) ? EXTRUDE : TRAVEL;
     if (type === EXTRUDE) startLayer();
     let [x0, y0] = [position.X, position.Y];
+    let step = 0;
     for (const [x1, y1] of points) {
-      if (Math.abs(x1 - x0) > EPSILON || Math.abs(y1 - y0) > EPSILON) push(x0, y0, x1, y1, type);
+      const z0 = startZ + (position.Z - startZ) * step / points.length;
+      const z1 = startZ + (position.Z - startZ) * ++step / points.length;
+      if (Math.abs(x1 - x0) > EPSILON || Math.abs(y1 - y0) > EPSILON) push(x0, y0, x1, y1, type, z0, z1);
       [x0, y0] = [x1, y1];
     }
     if (type === EXTRUDE) layer.extrusions += points.length;
@@ -118,12 +127,13 @@ export function createGcodeParser({ laser = false } = {}) {
     const x = target(values, 'X');
     const y = target(values, 'Y');
     const z = target(values, 'Z');
+    const startZ = position.Z;
     const delta = extrusion(values);
     if (Math.abs(z - position.Z) > EPSILON) {
       position.Z = z;
       zChangedAt = count;
     }
-    draw([[x, y]], delta);
+    draw([[x, y]], delta, startZ);
     position.X = x;
     position.Y = y;
     position.E += delta;
@@ -134,6 +144,7 @@ export function createGcodeParser({ laser = false } = {}) {
     const x = target(values, 'X');
     const y = target(values, 'Y');
     const z = target(values, 'Z');
+    const startZ = position.Z;
     const cx = position.X + (values.I ?? 0) * scale;
     const cy = position.Y + (values.J ?? 0) * scale;
     const radius = Math.hypot(position.X - cx, position.Y - cy);
@@ -154,7 +165,7 @@ export function createGcodeParser({ laser = false } = {}) {
       position.Z = z;
       zChangedAt = count;
     }
-    draw(points, delta);
+    draw(points, delta, startZ);
     position.X = x;
     position.Y = y;
     position.E += delta;
@@ -234,6 +245,7 @@ export function createGcodeParser({ laser = false } = {}) {
     return {
       segments: segments.subarray(0, count * 4),
       types: types.subarray(0, count),
+      heights: heights.subarray(0, count * 2),
       offsets: offsets.subarray(0, count),
       layers: layers.map(({ z, start, end, extrusions }) => ({ z, start, end, extrusions })),
       bounds: area.minX <= area.maxX ? { ...area } : null,
