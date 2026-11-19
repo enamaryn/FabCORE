@@ -41,11 +41,17 @@ test('P2S lit le rapport MQTT, fusionne les mises à jour et se reconnecte sans 
   send({ mc_percent: 99 }, 'device/other/report');
   assert.equal(monitor.read(machine).progress, 65);
   assert.equal(monitor.read(machine).nozzle, 254);
-  send({ ams: { ams: [{ id: '0', tray: [{ id: '0', tray_type: 'PETG', tray_color: '44AA11FF' }] }],
+  send({ ams: { ams: [{ id: '0', humidity_raw: '34', tray: [{ id: '0', tray_type: 'PETG', tray_color: '44AA11FF' }] }],
     tray_exist_bits: '1', tray_now: '0' } });
   let slots = monitor.read(machine).filaments[0].slots;
   assert.deepEqual(slots[0], { id: 0, occupied: true, active: true, material: 'PETG', name: '', color: '#44AA11' });
   assert.equal(slots[3].occupied, false);
+  assert.equal(monitor.read(machine).filaments[0].humidity, 34);
+  send({ ams: { ams: [{ id: '0', humidity_raw: '29' }] } });
+  assert.equal(monitor.read(machine).filaments[0].humidity, 29);
+  assert.equal(monitor.read(machine).filaments[0].slots[0].color, '#44AA11', 'une mesure ne supprime pas les bobines');
+  send({ ams: { ams: [{ id: '0', tray: [{ id: '0', tray_type: 'PLA' }] }] } });
+  assert.equal(monitor.read(machine).filaments[0].humidity, 29, 'une mise à jour de bobine conserve la mesure');
   send({ ams: { tray_exist_bits: '0' } });
   slots = monitor.read(machine).filaments[0].slots;
   assert.equal(slots[0].occupied, false);
