@@ -91,7 +91,7 @@ function liveIssue(issue) {
 }
 
 async function api(path, data, cancel) {
-  const timeout = AbortSignal.timeout(path.endsWith('/gcode') ? 65_000 : path === 'machines/pair' ? 50_000
+  const timeout = AbortSignal.timeout(path.endsWith('/transfer') ? 900_000 : path.endsWith('/gcode') ? 65_000 : path === 'machines/pair' ? 50_000
     : path === 'discovery' || path.startsWith('machines') || path.startsWith('notifications') ? 18000 : 5000);
   const signal = cancel ? AbortSignal.any([timeout, cancel]) : timeout;
   const response = await fetch('/api/' + path, data === undefined ? { signal } : {
@@ -118,6 +118,7 @@ function diagnosticMessage(code) {
     interrupted: t('Le flux a été interrompu.', 'The stream was interrupted.'),
     closed: t('Flux fermé.', 'Stream closed.'),
     uploaded: t('Fichier envoyé sur la machine.', 'File uploaded to the machine.'),
+    transferred: t('Fichier transféré depuis une autre machine.', 'File transferred from another machine.'),
     'print-started': t('Impression lancée depuis FabCore.', 'Print started from FabCore.'),
     executed: t('Commande G-code exécutée.', 'G-code command executed.'),
     accepted: t('Commande G-code acceptée.', 'G-code command accepted.'),
@@ -1085,7 +1086,7 @@ function filesPanel(m) {
   const size = (bytes) => bytes === null ? '—' : bytes >= 1048576 ? (bytes / 1048576).toLocaleString(state.lang, { maximumFractionDigits: 1 }) + ' Mo' : Math.ceil(bytes / 1024).toLocaleString(state.lang) + ' ko';
   const date = (at) => at ? new Date(at).toLocaleString(state.lang, { dateStyle: 'short', timeStyle: 'short' }) : '—';
   const upload = entry.upload;
-  return `<section class="panel stack" data-files data-file-start="${canStart(m)}">
+  return `<section class="panel stack" data-files data-file-start="${canStart(m)}"><style>.file-download{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:9px 13px;border:1px solid var(--line);border-radius:8px;text-decoration:none;color:var(--text);font-weight:600}.file-download:hover{background:var(--raised)}</style>
       <div class="row between wrap"><h2>${machineConnectors[m.kind]?.retainedOnly ? t('Fichiers envoyés via FabCore','Files uploaded through FabCore') : t('Fichiers de la machine','Machine files')}</h2>${btn('files-refresh', t('Actualiser','Refresh'), '', 'ghost', entry.loading ? 'disabled' : '')}</div>
       ${machineConnectors[m.kind]?.retainedOnly ? `<p class="notice">${t('Fichiers envoyés via FabCore uniquement : le protocole ne fournit pas ici la liste complète du stockage de la machine.', 'Only files uploaded through FabCore: the protocol does not provide a complete storage listing here.')}</p>` : ''}
       <label>${t('Visualiser un G-code local sans l’envoyer','Preview a local G-code without uploading it')}<input type="file" accept=".gcode,.gco,.g" data-gcode-local></label>
@@ -1107,7 +1108,7 @@ function filesPanel(m) {
       ${entry.files === null ? `<p role="status">${t('Chargement de la liste…','Loading the list…')}</p>` : page.count ? `<div class="table"><table>
         <thead><tr><th>${t('Fichier','File')}</th><th>${t('Taille','Size')}</th><th>${t('Modifié','Modified')}</th><th><span class="hide-mobile">${t('Actions','Actions')}</span></th></tr></thead>
         <tbody>${page.rows.map(({ file, index }) => `<tr><td>${esc(file.path)}</td><td>${size(file.size)}</td><td>${date(file.modified)}</td>
-          <td><div class="row wrap">${btn('viewer-open:' + index, t('Visualiser','View'))}${canStart(m) ? btn('files-print:' + index, t('Lancer','Start')) : ''}</div></td></tr>`).join('')}</tbody>
+          <td><div class="row wrap">${btn('viewer-open:' + index, t('Visualiser','View'))}<a class="file-download" href="/api/machines/${esc(m.id)}/file?download=1&amp;path=${esc(encodeURIComponent(file.path))}" download>${t('Télécharger','Download')}</a>${state.role === 'admin' ? btn('files-transfer:' + index, t('Transférer','Transfer')) : ''}${canStart(m) ? btn('files-print:' + index, t('Lancer','Start')) : ''}</div></td></tr>`).join('')}</tbody>
       </table></div>
       <div class="row between wrap" aria-label="${t('Pagination des fichiers','File pagination')}">
         <small role="status">${page.start + 1}–${page.start + page.rows.length} ${t('sur','of')} ${page.count}${entry.query.trim() ? ' · ' + t('résultats','results') : ' · ' + t('fichiers','files')}</small>
@@ -1189,6 +1190,137 @@ function uploadFile(id, file) {
     }
   };
   request.send(file);
+}
+
+function fileTransferCandidates(id, path) {
+  return state.machines.filter(m => m.id !== id && machineConnectors[m.kind]?.files &&
+    (!/\.3mf$/i.test(path) || machineConnectors[m.kind]?.projects));
+}
+
+// Sequential copies avoid multiplying sessions to the same source machine.
+// Each operation is attempted once; an unknown outcome is never retried here.
+async function runFileBatch(items, operation, changed, started) {
+  const results = [];
+  for (const item of items) {
+    started?.(item);
+    let result;
+    try { result = { item, ok: true, value: await operation(item) }; }
+    catch (error) { result = { item, ok: false, error }; }
+    results.push(result);
+    changed?.(result, results.length, items.length);
+  }
+  return results;
+}
+
+function fileBatchStyles() {
+  return `<style>#transfer-file fieldset,#transfer-print fieldset{max-height:28vh;overflow:auto;margin:0;border:1px solid var(--line);border-radius:8px}#transfer-file input[type=checkbox],#transfer-print input[type=checkbox]{min-height:0;flex:none}.transfer-line>span:first-child{overflow-wrap:anywhere}.transfer-list[hidden]{display:none}.transfer-list{list-style:none;padding:0;margin:0;display:grid;gap:8px;max-height:35vh;overflow:auto}.transfer-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px;border:1px solid var(--line);border-radius:8px}.transfer-line>span:last-child{text-align:right}.transfer-spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:transfer-spin .8s linear infinite;vertical-align:middle;margin-right:6px}@keyframes transfer-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.transfer-spinner{animation:none}}</style>`;
+}
+
+function fileBatchRows(items) {
+  return items.map(item => `<li class="transfer-line" data-batch-machine="${esc(item.id)}"><span>${esc(item.name)}</span><span class="muted" data-batch-status>${t('En attente','Queued')}</span></li>`).join('');
+}
+
+function updateFileBatch(list, item, phase, message) {
+  const row = [...list.querySelectorAll('[data-batch-machine]')].find(row => row.dataset.batchMachine === item.id);
+  if (!row) return;
+  const status = row.querySelector('[data-batch-status]');
+  status.className = phase === 'success' ? 'good' : phase === 'error' ? 'bad' : 'muted';
+  status.innerHTML = phase === 'running' ? '<span class="transfer-spinner" aria-hidden="true"></span>' : `<span aria-hidden="true">${phase === 'success' ? '✓' : '✕'}</span> `;
+  status.append(document.createTextNode(message));
+}
+
+function openFileTransfer(id, path) {
+  if (state.role !== 'admin') return;
+  const destinations = fileTransferCandidates(id, path);
+  dialog.innerHTML = `<form id="transfer-file" class="stack">
+    ${fileBatchStyles()}<h2>${t('Transférer un fichier','Transfer a file')}</h2>
+    <p>${esc(machine(id).name)} · <strong>${esc(path)}</strong></p>
+    ${destinations.length ? `<fieldset class="stack"><legend>${t('Une ou plusieurs machines de destination','One or more destination machines')}</legend>
+      ${destinations.map(m => `<label class="row"><input type="checkbox" name="destination" value="${esc(m.id)}">${esc(m.name)}</label>`).join('')}</fieldset>
+      <label class="stack">${t('Nom du fichier à destination','Destination file name')}<input name="name" required maxlength="200" value="${esc(fileName(path))}"></label>
+      <p class="notice">${t('Le fichier est copié sans être retranché. Vérifiez sa compatibilité avec chaque destination. Vous pourrez choisir les impressions à lancer après les copies.', 'The file is copied without re-slicing. Check compatibility with each destination. You can choose which prints to start after the copies.')}</p>` : `<p class="notice">${t('Aucune autre machine ne prend en charge le transfert de ce format.','No other machine supports transferring this format.')}</p>`}
+    <p class="error" role="alert"></p><p role="status" hidden></p><ul class="transfer-list" data-transfer-results aria-live="polite" hidden></ul>
+    <div class="row wrap">${btn('close', t('Annuler','Cancel'))}${destinations.length ? `<button type="submit" class="primary">${t('Transférer vers la sélection','Transfer to selected machines')}</button>` : ''}</div>
+  </form>`;
+  dialog.querySelector('form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (form.dataset.busy) return;
+    const data = new FormData(form);
+    const selected = destinations.filter(m => data.getAll('destination').includes(m.id));
+    if (!selected.length) { form.querySelector('[role="alert"]').textContent = t('Choisissez au moins une machine.','Select at least one machine.'); return; }
+    form.dataset.busy = 'true';
+    form.querySelectorAll('button,input,select').forEach(control => { control.disabled = true; });
+    const status = form.querySelector('[role="status"]');
+    status.hidden = false;
+    status.textContent = t('Transfert en cours…','Transferring…');
+    form.querySelector('[role="alert"]').textContent = '';
+    const list = form.querySelector('[data-transfer-results]');
+    list.hidden = false;
+    list.innerHTML = fileBatchRows(selected);
+    const results = await runFileBatch(selected, m => api('machines/' + id + '/transfer', {
+      path, destination: m.id, name: data.get('name'), confirm: true
+    }), (result, count, total) => {
+      status.textContent = `${count} / ${total}`;
+      updateFileBatch(list, result.item, result.ok ? 'success' : 'error', result.ok ? t('Transféré','Transferred') : problem(result.error.code || 'upload-failed'));
+      if (result.ok) filesState(result.item.id).files = null;
+    }, item => updateFileBatch(list, item, 'running', t('Transfert…','Transferring…')));
+    if (form.isConnected && dialog.open) openTransferredPrint(results);
+  });
+  dialog.showModal();
+}
+
+function openTransferredPrint(results) {
+  const successful = results.filter(result => result.ok).map(result => ({ id: result.item.id, name: result.item.name, path: result.value.path }));
+  const eligible = successful.filter(item => machine(item.id) && canStart(machine(item.id)));
+  const external = eligible.some(item => machineConnectors[machine(item.id).kind]?.externalFilament);
+  dialog.innerHTML = `<form id="transfer-print" class="stack">
+    ${fileBatchStyles()}<h2>${t('Transferts terminés','Transfers finished')}</h2>
+    <ul class="transfer-list">${results.map(result => `<li class="transfer-line"><span>${esc(result.item.name)}</span><span class="${result.ok ? 'good' : 'bad'}"><span aria-hidden="true">${result.ok ? '✓' : '✕'}</span> ${result.ok ? t('Transféré','Transferred') : esc(problem(result.error.code || 'upload-failed'))}</span></li>`).join('')}</ul>
+    ${eligible.length ? `<p>${t('Lancer maintenant sur toutes les machines disponibles ou seulement votre sélection ?','Start now on all available machines or only your selection?')}</p>
+      <label class="row"><input type="checkbox" data-transfer-all checked> ${t('Toutes les machines disponibles','All available machines')}</label>
+      <fieldset class="stack"><legend>${t('Machines à démarrer','Machines to start')}</legend>${eligible.map(item => `<label class="row"><input type="checkbox" name="print" value="${esc(item.id)}" checked>${esc(item.name)} · ${esc(item.path)}</label>`).join('')}</fieldset>
+      <label class="row"><input type="checkbox" name="confirm" required>${t('Les plateaux sont libres et les fichiers préparés pour ces machines et matériaux.','Beds are clear and the files are prepared for these machines and materials.')}${external ? ' ' + t('Bobine externe uniquement sur Bambu/Elegoo, sans sélection AMS/CANVAS.', 'External spool only on Bambu/Elegoo, without AMS/CANVAS selection.') : ''}</label>` : `<p>${t('Aucune destination disponible pour lancer une impression maintenant. Les copies réussies sont conservées.','No destination is available to start a print now. Successful copies are kept.')}</p>`}
+    ${successful.length > eligible.length ? `<small>${t('Les machines occupées ou indisponibles ne sont pas proposées au lancement.','Busy or unavailable machines are not offered for starting.')}</small>` : ''}
+    <p class="error" role="alert"></p><p role="status" hidden></p><ul class="transfer-list" data-print-results aria-live="polite" hidden></ul>
+    <div class="row wrap">${btn('close', t('Ne pas lancer','Do not start'))}${eligible.length ? `<button type="submit" value="selected">${t('Lancer la sélection','Start selection')}</button><button type="submit" value="all" class="primary">${t('Tout lancer','Start all')}</button>` : ''}</div>
+  </form>`;
+  const form = dialog.querySelector('form');
+  form.addEventListener('change', event => {
+    const boxes = [...form.querySelectorAll('[name="print"]')];
+    const all = form.querySelector('[data-transfer-all]');
+    if (event.target === all) boxes.forEach(box => { box.checked = all.checked; });
+    else { all.checked = boxes.every(box => box.checked); all.indeterminate = boxes.some(box => box.checked) && !all.checked; }
+  });
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (form.dataset.busy || form.dataset.done) return;
+    const data = new FormData(form);
+    const selected = event.submitter?.value === 'all' ? eligible : eligible.filter(item => data.getAll('print').includes(item.id));
+    if (!selected.length) { form.querySelector('[role="alert"]').textContent = t('Choisissez au moins une machine.','Select at least one machine.'); return; }
+    if (data.get('confirm') !== 'on') return;
+    form.dataset.busy = 'true';
+    form.querySelectorAll('button,input').forEach(control => { control.disabled = true; });
+    const status = form.querySelector('[role="status"]');
+    status.hidden = false;
+    status.textContent = t('Lancement en cours…','Starting…');
+    const list = form.querySelector('[data-print-results]');
+    list.hidden = false;
+    list.innerHTML = fileBatchRows(selected);
+    await runFileBatch(selected, item => api('machines/' + item.id + '/print', {
+      path: item.path, confirm: true, ...(machineConnectors[machine(item.id)?.kind]?.externalFilament ? { filamentMode: 'external' } : {})
+    }), (result, count, total) => {
+      status.textContent = `${count} / ${total}`;
+      updateFileBatch(list, result.item, result.ok ? 'success' : 'error', result.ok ? t('Impression lancée','Print started') : problem(result.error.code || 'command-unconfirmed'));
+    }, item => updateFileBatch(list, item, 'running', t('Lancement…','Starting…')));
+    form.dataset.done = 'true';
+    delete form.dataset.busy;
+    status.textContent = t('Demandes terminées. Aucun renvoi automatique en cas d’échec ou de résultat inconnu.','Requests finished. No automatic retry after failure or unknown outcome.');
+    const close = form.querySelector('[data-action="close"]');
+    close.disabled = false;
+    close.textContent = t('Fermer','Close');
+    refresh();
+  });
 }
 
 async function startPrint(id, path) {
@@ -1631,6 +1763,7 @@ app.addEventListener('click', (event) => {
     renderFiles(m.id);
     app.querySelector('[data-action="files-page:' + value + '"]')?.focus({ preventScroll: true });
   }
+  if (action === 'files-transfer' && listed) openFileTransfer(m.id, listed.path);
   if (action === 'files-refresh' && m) loadFiles(m.id);
   if (action === 'viewer-open' && listed) openViewer(m.id, listed.path, liveFile(m) === listed.path);
   if (action === 'viewer-live' && m && liveFile(m)) openViewer(m.id, liveFile(m), true);
@@ -1745,6 +1878,10 @@ app.addEventListener('submit', async (event) => {
     const current = machine(m.id);
     if (live.page === 'detail' && state.machine === m.id && current) renderTerminal(current);
   }
+});
+
+dialog.addEventListener('cancel', event => {
+  if (dialog.querySelector('#transfer-file[data-busy], #transfer-print[data-busy]')) event.preventDefault();
 });
 
 dialog.addEventListener('close', () => {

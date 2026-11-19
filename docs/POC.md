@@ -5,6 +5,14 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** dérouler la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Téléchargement et transfert entre machines · 19 novembre 2026
+
+**État : ouvert, branche `feat/file-download`, non déployé.** Le panneau de fichiers propose « Télécharger » (octets originaux, y compris projet `.3mf`) et « Transférer » pour une ou plusieurs destinations compatibles avec le format. Les copies sont exécutées une à une, avec une ligne par machine : en attente, animation, ✓ vert ou ✕ rouge avec raison. La copie ne lance rien. Une fois le lot terminé, le même dialogue propose de ne rien lancer, de tout lancer sur les destinations disponibles, ou de sélectionner les impressions. Seules les copies réussies sont proposées ; le chemin réellement retourné par le stockage est conservé. Le lancement reprend les confirmations et contrôles serveur existants, dont la bobine externe Bambu/Elegoo.
+
+Limites inchangées : fichiers listés/lisibles uniquement, copies FabCore pour Elegoo, pas de transfert natif xTool M2/résine/CNC sans connecteur compatible. Le transfert ne retranche pas le fichier pour les autres modèles. Un nom présent est refusé avant copie ; le fichier peut être renommé dans le dialogue. Les envois sont temporisés et jamais renvoyés automatiquement après un résultat inconnu. Les lots de l’interface ne sont pas des tâches persistantes : garder la page ouverte jusqu’au bilan.
+
+Vérifications : 64 tests réussis, dont téléchargement authentifié, droits observateur/admin, origine, validation des chemins/formats, copie vers le bon hôte sans lancement, conflit de nom, taille inconnue/troncature/limites/interruption/nettoyage, original 3MF distinct du G-code de prévisualisation, échec partiel, progression séquentielle et lancement de la sélection ou de toutes les destinations éligibles une seule fois. Aucun déploiement ni transfert/impression sur matériel. Prochaine action : après fusion, vérifier le dialogue dans le navigateur et les copies mono/multi puis le lancement explicite sur le LXC (POC-10.2).
+
 ## Visualiseur : lecture et vue 3D · 19 novembre 2026
 
 **État : ouvert, branche `feat/viewer-playback-3d`, non déployé.** Lecture/pause/recommencer avec marqueur de buse interpolé, vitesse indicative, rotation 3D des trajectoires à leur hauteur Z, zoom et déplacement. La simulation reste locale et désactive le suivi de couche réel. Le visualiseur ajuste son cadre à la hauteur disponible, avec commandes compactes et défilement interne des commandes sur petit écran.

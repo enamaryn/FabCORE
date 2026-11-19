@@ -81,6 +81,16 @@ export function retainedFiles(directory, native, { projects = false } = {}) {
       return await projectGcode(filename);
     } finally { await rm(temp, { recursive: true, force: true }); }
   }
+  async function downloadOriginal(machine, path, signal) {
+    if (!native.download && valid(path)) {
+      try {
+        const target = local(machine, path);
+        const info = await stat(target);
+        return new Response(Readable.toWeb(createReadStream(target, { signal })), { headers: { 'Content-Length': String(info.size) } });
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
+    return native.download ? native.download(machine, path, signal) : new Response(null, { status: 404 });
+  }
   return {
     async list(machine) {
       let names = [];
@@ -95,15 +105,9 @@ export function retainedFiles(directory, native, { projects = false } = {}) {
     },
     async download(machine, path, signal) {
       if (projects && /\.3mf$/i.test(path)) return new Response((await project(machine, path, signal)).bytes);
-      if (!native.download && valid(path)) {
-        try {
-          const target = local(machine, path);
-          const info = await stat(target);
-          return new Response(Readable.toWeb(createReadStream(target, { signal })), { headers: { 'Content-Length': String(info.size) } });
-        } catch (error) { if (error.code !== 'ENOENT') throw error; }
-      }
-      return native.download ? native.download(machine, path, signal) : new Response(null, { status: 404 });
+      return downloadOriginal(machine, path, signal);
     },
+    downloadOriginal,
     async upload(machine, name, source, size) {
       const target = local(machine, name);
       await mkdir(folder(machine), { recursive: true, mode: 0o700 });

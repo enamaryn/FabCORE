@@ -11,6 +11,8 @@ Ajouter une définition dans [le registre](connectors.mjs). Le registre sert les
 
 Utiliser des tests de réponses simulées et vérifier le parcours d’ajout dans FabCore. [PrusaLink](prusalink.mjs) illustre un adaptateur HTTP avec des capacités explicites.
 
+`files.download` fournit le contenu pour la prévisualisation. Lorsqu’un connecteur transforme un conteneur (extraction du G-code d’un 3MF), il doit aussi fournir `downloadOriginal(machine, path, signal)` pour restituer ses octets originaux au téléchargement et au transfert. Sans cette méthode, le contenu de `download` est utilisé tel quel. Un transfert appelle uniquement `upload` ; le lancement reste une action séparée et confirmée via `start`. Le chemin retourné par `upload` est la cible réelle du lancement, pas nécessairement le nom envoyé.
+
 ### Fichiers et commandes de production
 
 `commandActions` énumère les commandes réellement implémentées (`pause`, `resume`, `stop` et, pour un projet déjà préparé sur la M2, `start`). La route serveur vérifie cette liste, les droits administrateur, l’état de la machine et la confirmation d’un arrêt ou lancement. `stop` annule la fabrication ; ce n’est pas un arrêt d’urgence matériel. Une réponse perdue reste non confirmée, sans rejeu automatique.

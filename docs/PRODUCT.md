@@ -74,3 +74,10 @@ Appliquer recherche par nom/chemin, tris récent/ancien et A–Z, cinq élément
 - Faire tenir l’aperçu et ses commandes dans la hauteur disponible, y compris lors du redimensionnement. Sur petit écran, limiter le défilement aux commandes si nécessaire.
 - Proposer une lecture locale avec marqueur de buse, pause, reprise et vitesse indicative, ainsi qu’une vue 2D et une vue 3D des trajectoires avec rotation, déplacement et zoom.
 - Distinguer explicitement simulation et suivi réel : la lecture n’envoie aucune commande machine et sa vitesse n’est pas une estimation du temps de fabrication. Les limites du parseur restent applicables.
+
+## Télécharger et transférer des fichiers
+
+- Le téléchargement restitue le fichier original, pas une version extraite pour le visualiseur. Les droits de lecture restent applicables.
+- Un administrateur peut copier vers une ou plusieurs machines proposant le stockage du format concerné. Afficher le périmètre réel des fichiers disponibles ; ne pas confondre compatibilité de format et fichier tranché pour la destination.
+- Afficher une ligne par destination, avec attente, animation pendant l’opération, réussite verte ou échec rouge et explication. Un échec ne masque pas les autres résultats.
+- Après les copies, proposer « Ne pas lancer », « Tout lancer » ou le lancement de la sélection ; exclure les copies échouées et les machines indisponibles. Vérifier à nouveau les droits et l’état côté serveur. Aucun lancement automatique ou renvoi automatique d’une commande au résultat inconnu.
