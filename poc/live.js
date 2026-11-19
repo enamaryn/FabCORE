@@ -541,6 +541,7 @@ async function openNotifications() {
 }
 
 function renderLive() {
+  pauseGcode();
   app.querySelector('[data-live-camera] img')?.removeAttribute('src');
   document.documentElement.lang = state.lang;
   document.documentElement.dataset.theme = state.theme === 'system' ? (media.matches ? 'light' : 'dark') : state.theme;
@@ -1041,7 +1042,7 @@ document.addEventListener('submit', async (event) => {
 // Fichiers de la machine et visualiseur G-code en direct.
 // Le fichier est lu depuis la machine via FabCore ; la position d’impression vient de la télémétrie.
 const gcodeLimit = 512 * 1024 * 1024;
-const gcode = { machine: null, path: '', size: 0, result: null, layer: 0, read: 0, loading: null, error: '', travel: true, previous: true, follow: true, view: null };
+const gcode = { machine: null, path: '', size: 0, result: null, layer: 0, read: 0, loading: null, error: '', travel: true, previous: true, follow: true, view: null, mode: '2d', yaw: -0.6, pitch: 0.65, playing: false, cursor: null, speed: 10, frame: null };
 const machineFiles = new Map();
 const fileName = (path) => path.split('/').at(-1);
 
@@ -1223,6 +1224,7 @@ function viewerLive() {
 }
 
 function viewerStatus() {
+  if (gcode.cursor != null) return t('Simulation locale du fichier · aucun mouvement machine.', 'Local file simulation · no machine movement.');
   const now = viewerLive();
   if (!now) return t('Aperçu du fichier · pas d’impression en cours de ce fichier.', 'File preview · this file is not being printed.');
   const layer = layerOfSegment(gcode.result, Math.max(0, now.printed - 1));
@@ -1237,9 +1239,9 @@ function viewerPage() {
   const unsupported = result?.unsupported.length ? `<p class="notice" role="status">${t('Trajectoires non prises en charge, ignorées dans l’aperçu :','Unsupported moves, skipped in the preview:')}
     ${result.unsupported.map(({ command, count, line }) => `<code>${esc(command)}</code> × ${count} (${t('première ligne','first line')} ${line})`).join(', ')}</p>` : '';
   const actions = `<div class="row wrap">${btn('machine:' + m.id, t('Retour à la machine','Back to machine'), 'machine', 'ghost')}${!gcode.local && canStart(m) && result ? btn('viewer-print', t('Lancer l’impression','Start print'), '', 'primary') : ''}</div>`;
-  return title(esc(fileName(gcode.path)), esc(m.name + ' · ' + gcode.path), actions) +
+  return `<div class="gcode-workspace" data-gcode-workspace>` + title(esc(fileName(gcode.path)), esc(m.name + ' · ' + gcode.path), actions) +
     `<style>
-      .gcode-canvas{position:relative;height:min(68vh,640px);min-height:320px;border:1px solid var(--line);border-radius:10px;background:var(--raised);overflow:hidden;touch-action:none;cursor:grab}
+      .area:has(.gcode-workspace){padding-bottom:12px}.gcode-workspace{display:flex;flex-direction:column;gap:8px;min-height:0}.gcode-workspace .hero{margin-bottom:0;flex:none}.gcode-workspace .hero h1{font-size:24px;overflow-wrap:anywhere}.gcode-workspace .hero p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw;margin-top:4px}.gcode-workspace>.stack{display:flex;flex-direction:column;flex:1;min-height:0;gap:8px}.gcode-workspace .panel{display:flex;flex-direction:column;flex:1;min-height:0;gap:8px;padding:12px}.gcode-workspace button,.gcode-workspace select{min-height:32px;padding:5px 10px}.gcode-workspace input[type=checkbox]{min-height:0}.gcode-workspace .notice{max-height:50px;overflow:auto}.gcode-workspace .gcode-tools{flex:none;max-height:40%;overflow:auto}.gcode-canvas{position:relative;flex:1;min-height:0;border:1px solid var(--line);border-radius:10px;background:var(--raised);overflow:hidden;touch-action:none;cursor:grab}
       .gcode-canvas canvas{display:block;width:100%;height:100%}
       .gcode-canvas.dragging{cursor:grabbing}
       .gcode-layer{flex:1 1 220px;min-width:0}
@@ -1252,7 +1254,7 @@ function viewerPage() {
       ${gcode.error ? `<p class="error" role="alert">${esc(gcode.error)}</p>` : ''}
       ${result && !gcode.loading ? `<p class="muted">${result.lines.toLocaleString(state.lang)} ${t('lignes','lines')} · ${result.layers.length} ${t('couches','layers')} · ${result.types.length.toLocaleString(state.lang)} ${t('segments','segments')}</p>${unsupported}` : ''}
       ${result && !gcode.loading ? (result.layers.length ? `<section class="panel stack">
-        <div class="row wrap between"><strong data-viewer-status>${viewerStatus()}</strong>
+        <div class="gcode-tools stack"><div class="row wrap between"><strong data-viewer-status>${viewerStatus()}</strong>
           <label class="row"><input type="checkbox" data-gcode-option="follow" ${gcode.follow ? 'checked' : ''}> ${t('Suivre la couche en cours','Follow the current layer')}</label></div>
         <div class="row wrap">
           ${btn('gcode-layer:-1', t('Couche précédente','Previous layer'))}
@@ -1263,7 +1265,7 @@ function viewerPage() {
         <div class="row wrap between">
           <div class="row wrap">
             <label class="row"><input type="checkbox" data-gcode-option="travel" ${gcode.travel ? 'checked' : ''}> ${t('Déplacements à vide','Travel moves')}</label>
-            <label class="row"><input type="checkbox" data-gcode-option="previous" ${gcode.previous ? 'checked' : ''}> ${t('Couche précédente en fond','Previous layer underneath')}</label>
+            <label class="row"><input type="checkbox" data-gcode-option="previous" ${gcode.previous ? 'checked' : ''}> ${t('Couches précédentes en fond','Previous layers underneath')}</label>
           </div>
           <div class="row wrap">
             ${btn('gcode-zoom:out', '−', '', '', `aria-label="${t('Dézoomer','Zoom out')}"`)}
@@ -1271,11 +1273,17 @@ function viewerPage() {
             ${btn('gcode-fit', t('Ajuster','Fit'))}
           </div>
         </div>
+        <div class="row wrap">
+          ${btn('gcode-mode:2d', '2D', '', gcode.mode === '2d' ? 'primary' : '')}${btn('gcode-mode:3d', '3D', '', gcode.mode === '3d' ? 'primary' : '')}
+          ${btn('gcode-play', t('Lecture','Play'), '', '', 'data-gcode-play')}${btn('gcode-reset', t('Recommencer','Restart'))}
+          <label>${t('Vitesse','Speed')} <select data-gcode-speed aria-label="${t('Vitesse de simulation','Simulation speed')}">${[1,5,10,50,100].map(n => `<option value="${n}" ${gcode.speed === n ? 'selected' : ''}>×${n}</option>`).join('')}</select></label>
+          <small data-gcode-play-status>${t('Simulation locale · vitesse indicative, aucun ordre machine.','Local simulation · illustrative speed, no machine commands.')}</small>
+        </div></div>
         <div class="gcode-canvas" data-gcode-canvas><canvas role="img" aria-label="${t('Trajectoires de la couche','Layer toolpaths')}"></canvas></div>
         <div class="row wrap"><small class="gcode-legend good">${m.kind === 'xtool-m2' ? t('Réalisé','Completed') : t('Imprimé','Printed')}</small><small class="gcode-legend neutral">${m.kind === 'xtool-m2' ? t('Trajectoire de travail','Work path') : t('À imprimer','To print')}</small><small class="gcode-legend info">${t('Déplacement à vide','Travel move')}</small><small class="gcode-legend warn">${m.kind === 'xtool-m2' ? t('Outil','Tool') : t('Buse','Nozzle')}</small>
-          <small>${t('Molette ou boutons pour zoomer, glisser pour déplacer.','Wheel or buttons to zoom, drag to pan.')}</small></div>
+          <small>${t('Molette : zoom · glisser : déplacer (2D) / pivoter (3D) · Maj + glisser : déplacer.','Wheel: zoom · drag: pan (2D) / orbit (3D) · Shift + drag: pan.')}</small></div>
       </section>` : `<p class="notice">${m.kind === 'xtool-m2' ? t('Aucune trajectoire laser active trouvée dans ce fichier.', 'No active laser toolpath found in this file.') : t('Aucune extrusion trouvée dans ce fichier.','No extrusion found in this file.')}</p>`) : ''}
-    </div>`;
+    </div></div>`;
 }
 
 function gcodeLayerLabel() {
@@ -1320,6 +1328,8 @@ async function loadGcode(id, path, localFile) {
       }
     }
     gcode.result = parser.finish();
+    gcode.cursor = null;
+    if (gcode.mode === '3d' && !gcode.follow) gcode.layer = Math.max(0, gcode.result.layers.length - 1);
     const now = viewerLive();
     if (now && gcode.follow) gcode.layer = layerOfSegment(gcode.result, Math.max(0, now.printed - 1));
   } catch (error) {
@@ -1344,17 +1354,72 @@ function updateViewer() {
 }
 
 function gcodeFit(canvas) {
-  const bounds = gcode.result?.bounds;
+  let bounds = gcode.result?.bounds;
+  if (bounds && gcode.mode === '3d') {
+    const projected = [];
+    let minZ = 0, maxZ = 0;
+    for (const z of gcode.result.heights) { minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); }
+    for (const x of [bounds.minX, bounds.maxX]) for (const y of [bounds.minY, bounds.maxY]) for (const z of [minZ, maxZ]) projected.push(projectGcode(x, y, z));
+    bounds = { minX: Math.min(...projected.map(p => p[0])), maxX: Math.max(...projected.map(p => p[0])), minY: Math.min(...projected.map(p => p[1])), maxY: Math.max(...projected.map(p => p[1])) };
+  }
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
   if (!bounds) return { scale: 1, x: width / 2, y: height / 2 };
   const margin = 24;
-  const scale = Math.min((width - margin * 2) / Math.max(bounds.maxX - bounds.minX, 1), (height - margin * 2) / Math.max(bounds.maxY - bounds.minY, 1));
+  const scale = Math.max(0.01, Math.min((width - margin * 2) / Math.max(bounds.maxX - bounds.minX, 1), (height - margin * 2) / Math.max(bounds.maxY - bounds.minY, 1)));
   return {
     scale,
     x: width / 2 - (bounds.minX + bounds.maxX) / 2 * scale,
     y: height / 2 + (bounds.minY + bounds.maxY) / 2 * scale
   };
+}
+
+function projectGcode(x, y, z) {
+  if (gcode.mode !== '3d') return [x, y];
+  const side = x * Math.cos(gcode.yaw) - y * Math.sin(gcode.yaw);
+  const depth = x * Math.sin(gcode.yaw) + y * Math.cos(gcode.yaw);
+  return [side, depth * Math.sin(gcode.pitch) + z * Math.cos(gcode.pitch)];
+}
+
+function pauseGcode() {
+  if (gcode.frame != null) cancelAnimationFrame(gcode.frame);
+  gcode.frame = null;
+  gcode.playing = false;
+  const button = app.querySelector('[data-gcode-play]');
+  if (button) button.textContent = t('Lecture','Play');
+}
+
+function playGcode() {
+  if (gcode.playing) return pauseGcode();
+  if (!gcode.result?.types.length) return;
+  gcode.follow = false;
+  const follow = app.querySelector('[data-gcode-option="follow"]');
+  if (follow) follow.checked = false;
+  if (gcode.cursor == null || gcode.cursor >= gcode.result.types.length) gcode.cursor = 0;
+  gcode.playing = true;
+  const status = app.querySelector('[data-viewer-status]');
+  if (status) status.textContent = viewerStatus();
+  app.querySelector('[data-gcode-play]').textContent = t('Pause','Pause');
+  let last;
+  const tick = (time) => {
+    if (!gcode.playing || live.page !== 'viewer') return pauseGcode();
+    let distance = Math.min((time - (last ?? time)) / 1000, 0.1) * 60 * gcode.speed;
+    last = time;
+    const { segments, heights, types } = gcode.result;
+    while (distance > 0 && gcode.cursor < types.length) {
+      const i = Math.floor(gcode.cursor), at = i * 4;
+      const length = Math.max(0.001, Math.hypot(segments[at + 2] - segments[at], segments[at + 3] - segments[at + 1], heights[i * 2 + 1] - heights[i * 2]));
+      const remaining = (1 - (gcode.cursor - i)) * length;
+      if (distance >= remaining) { gcode.cursor = i + 1; distance -= remaining; }
+      else { gcode.cursor += distance / length; distance = 0; }
+    }
+    setGcodeLayer(layerOfSegment(gcode.result, Math.min(types.length - 1, Math.floor(gcode.cursor))));
+    const label = app.querySelector('[data-gcode-play-status]');
+    if (label) label.textContent = t('Simulation locale','Local simulation') + ' · ' + Math.round(gcode.cursor / types.length * 100) + ' %';
+    if (gcode.cursor >= types.length) return pauseGcode();
+    gcode.frame = requestAnimationFrame(tick);
+  };
+  gcode.frame = requestAnimationFrame(tick);
 }
 
 function drawGcode() {
@@ -1375,15 +1440,19 @@ function drawGcode() {
   context.lineJoin = 'round';
   const colors = getComputedStyle(document.documentElement);
   const color = (name) => colors.getPropertyValue(name).trim();
-  const { segments, types } = result;
+  const { segments, types, heights } = result;
+  const point = (index, end = false, fraction = end ? 1 : 0) => {
+    const at = index * 4;
+    const [x, y] = projectGcode(segments[at] + (segments[at + 2] - segments[at]) * fraction, segments[at + 1] + (segments[at + 3] - segments[at + 1]) * fraction, heights[index * 2] + (heights[index * 2 + 1] - heights[index * 2]) * fraction);
+    return [offsetX + x * scale, offsetY - y * scale];
+  };
   const stroke = (from, to, type, style, lineWidth, alpha) => {
     if (from >= to) return;
     context.beginPath();
     for (let index = from; index < to; index++) {
       if (types[index] !== type) continue;
-      const at = index * 4;
-      context.moveTo(offsetX + segments[at] * scale, offsetY - segments[at + 1] * scale);
-      context.lineTo(offsetX + segments[at + 2] * scale, offsetY - segments[at + 3] * scale);
+      context.moveTo(...point(index));
+      context.lineTo(...point(index, true));
     }
     context.globalAlpha = alpha;
     context.strokeStyle = style;
@@ -1393,18 +1462,24 @@ function drawGcode() {
   const current = result.layers[gcode.layer];
   const below = result.layers[gcode.layer - 1];
   const now = viewerLive();
-  const printed = now ? Math.min(Math.max(now.printed, current.start), current.end) : current.end;
-  if (gcode.previous && below) stroke(below.start, below.end, 1, color('--dim'), 1.5, 0.3);
+  const position = gcode.cursor ?? now?.printed;
+  const printed = position != null ? Math.min(Math.max(Math.floor(position), current.start), current.end) : current.end;
+  if (gcode.previous && below) stroke(gcode.mode === '3d' ? 0 : below.start, below.end, 1, color('--dim'), 1.5, 0.3);
   stroke(printed, current.end, 1, color('--dim'), 1.6, 0.55);
   stroke(current.start, printed, 1, color('--accent'), 1.8, 1);
   if (gcode.travel) stroke(current.start, printed, 0, color('--blue'), 1, 0.7);
-  if (now && now.printed > current.start && now.printed <= current.end) {
-    const at = (now.printed - 1) * 4;
+  if (position != null && types.length) {
+    const index = Math.min(types.length - 1, Math.max(0, Math.floor(position)));
+    const fraction = position >= types.length ? 1 : position - index;
+    const marker = point(index, true, fraction);
+    if (gcode.cursor != null && index >= current.start && index < current.end) {
+      context.beginPath(); context.moveTo(...point(index)); context.lineTo(...marker);
+      context.strokeStyle = color(types[index] ? '--accent' : '--blue'); context.globalAlpha = 1; context.stroke();
+    }
     context.globalAlpha = 1;
     context.fillStyle = color('--amber');
-    context.beginPath();
-    context.arc(offsetX + segments[at + 2] * scale, offsetY - segments[at + 3] * scale, 5, 0, Math.PI * 2);
-    context.fill();
+    context.beginPath(); context.arc(...marker, 6, 0, Math.PI * 2); context.fill();
+    context.strokeStyle = color('--text'); context.lineWidth = 1; context.stroke();
   }
   context.globalAlpha = 1;
 }
@@ -1435,6 +1510,8 @@ function setGcodeLayer(index) {
 
 // Un choix manuel de couche suspend le suivi automatique.
 function chooseGcodeLayer(index) {
+  pauseGcode();
+  gcode.cursor = null;
   if (gcode.follow) {
     gcode.follow = false;
     const follow = app.querySelector('[data-gcode-option="follow"]');
@@ -1443,7 +1520,18 @@ function chooseGcodeLayer(index) {
   setGcodeLayer(index);
 }
 
+function sizeGcode() {
+  const workspace = app.querySelector('[data-gcode-workspace]');
+  if (!workspace) return;
+  const mobile = app.querySelector('nav.mobile');
+  const bottom = mobile && getComputedStyle(mobile).display !== 'none' ? mobile.getBoundingClientRect().height : 0;
+  workspace.style.height = Math.max(180, window.innerHeight - workspace.getBoundingClientRect().top - bottom - 12) + 'px';
+  drawGcode();
+}
+
 function mountGcode() {
+  window.scrollTo(0, 0);
+  sizeGcode();
   const area = app.querySelector('[data-gcode-canvas]');
   if (!area) return;
   const canvas = area.querySelector('canvas');
@@ -1454,14 +1542,25 @@ function mountGcode() {
     zoomGcode(event.deltaY < 0 ? 1.2 : 1 / 1.2, event.clientX - box.left, event.clientY - box.top);
   }, { passive: false });
   canvas.addEventListener('pointerdown', (event) => {
-    drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, orbit: gcode.mode === '3d' && !event.shiftKey && event.button === 0 };
     canvas.setPointerCapture(event.pointerId);
     area.classList.add('dragging');
   });
   canvas.addEventListener('pointermove', (event) => {
     if (drag?.id !== event.pointerId || !gcode.view) return;
-    gcode.view.x += event.clientX - drag.x;
-    gcode.view.y += event.clientY - drag.y;
+    if (drag.orbit) {
+      const fitted = gcodeFit(canvas);
+      const zoom = gcode.view.scale / fitted.scale;
+      const panX = gcode.view.x - (canvas.clientWidth / 2 + (fitted.x - canvas.clientWidth / 2) * zoom);
+      const panY = gcode.view.y - (canvas.clientHeight / 2 + (fitted.y - canvas.clientHeight / 2) * zoom);
+      gcode.yaw += (event.clientX - drag.x) * 0.01;
+      gcode.pitch = Math.max(-1.5, Math.min(1.5, gcode.pitch + (event.clientY - drag.y) * 0.01));
+      const next = gcodeFit(canvas);
+      gcode.view = { scale: next.scale * zoom, x: canvas.clientWidth / 2 + (next.x - canvas.clientWidth / 2) * zoom + panX, y: canvas.clientHeight / 2 + (next.y - canvas.clientHeight / 2) * zoom + panY };
+    } else {
+      gcode.view.x += event.clientX - drag.x;
+      gcode.view.y += event.clientY - drag.y;
+    }
     drag.x = event.clientX;
     drag.y = event.clientY;
     drawGcode();
@@ -1494,10 +1593,11 @@ app.addEventListener('change', (event) => {
     renderLive();
   }
   if (event.target.matches('[data-files-upload]') && event.target.files[0] && state.machine) uploadFile(state.machine, event.target.files[0]);
+  if (event.target.matches('[data-gcode-speed]')) gcode.speed = Number(event.target.value);
   if (event.target.matches('[data-gcode-option]')) {
     const option = event.target.dataset.gcodeOption;
     gcode[option] = event.target.checked;
-    if (option === 'follow') return updateViewer();
+    if (option === 'follow') { pauseGcode(); gcode.cursor = null; return updateViewer(); }
     drawGcode();
   }
 });
@@ -1516,6 +1616,9 @@ app.addEventListener('click', (event) => {
   const [action, value] = (event.target.closest('[data-action]')?.dataset.action ?? '').split(':');
   const m = machine(state.machine);
   const listed = m && machineFiles.get(m.id)?.files?.[Number(value)];
+  if (action === 'gcode-play') playGcode();
+  if (action === 'gcode-reset') { pauseGcode(); gcode.cursor = 0; gcode.follow = false; setGcodeLayer(0); renderLive(); }
+  if (action === 'gcode-mode' && ['2d', '3d'].includes(value)) { gcode.mode = value; gcode.view = null; if (value === '3d' && gcode.cursor == null) gcode.layer = gcode.result.layers.length - 1; renderLive(); }
   if (action === 'gcode-layer') chooseGcodeLayer(gcode.layer + Number(value));
   if (action === 'gcode-zoom') zoomGcode(value === 'in' ? 1.5 : 1 / 1.5);
   if (action === 'gcode-fit') {
@@ -1536,7 +1639,7 @@ app.addEventListener('click', (event) => {
 });
 
 window.addEventListener('resize', () => {
-  if (live.page === 'viewer') drawGcode();
+  if (live.page === 'viewer') { gcode.view = null; sizeGcode(); }
 });
 
 // Terminal G-code : envoi manuel, une commande à la fois, jamais renvoyée automatiquement.

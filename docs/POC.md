@@ -5,6 +5,12 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** dérouler la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Visualiseur : lecture et vue 3D · 19 novembre 2026
+
+**État : ouvert, branche `feat/viewer-playback-3d`, non déployé.** Lecture/pause/recommencer avec marqueur de buse interpolé, vitesse indicative, rotation 3D des trajectoires à leur hauteur Z, zoom et déplacement. La simulation reste locale et désactive le suivi de couche réel. Le visualiseur ajuste son cadre à la hauteur disponible, avec commandes compactes et défilement interne des commandes sur petit écran.
+
+Vérifications : 58 tests réussis, dont hauteurs des rampes/arcs, agrandissement des buffers, interpolation, pause/reprise, arrêt en quittant la page, projection et calcul de hauteur. Le navigateur de test est bloqué par l’environnement : rendu réel et interactions à vérifier après fusion/mise à jour du LXC, notamment à 1366 × 768, sur mobile et avec un gros fichier. La vitesse de lecture ne représente pas la durée machine (chauffe, attentes et accélérations non simulées) ; les mouvements purement verticaux sans déplacement XY restent hors du tracé du parseur. Prochaine action : recette du visualiseur puis poursuite de POC-10.2.
+
 ## Correctif de dépendance FTP · 19 novembre 2026
 
 Mise à jour proposée de `basic-ftp` 5.3.1 vers `^6.2.6`, verrouillée en 6.2.6, à la suite du signalement utilisateur. Avis concernés : [GHSA-c475-qrg2-pj4r](https://github.com/advisories/GHSA-c475-qrg2-pj4r), [GHSA-5pm8-86m8-9m6r](https://github.com/advisories/GHSA-5pm8-86m8-9m6r) et [GHSA-r4jh-29pc-gfqr](https://github.com/advisories/GHSA-r4jh-29pc-gfqr).

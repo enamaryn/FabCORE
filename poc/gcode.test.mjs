@@ -74,3 +74,15 @@ test('la position dans le fichier (octets) donne les segments imprimés et la co
   assert.equal(printedSegments(result, Buffer.byteLength(text)), 3);
   assert.deepEqual([0, 1, 2].map(index => layerOfSegment(result, index)), [0, 0, 1]);
 });
+
+test('les hauteurs 3D suivent les rampes et arcs hélicoïdaux, même après agrandissement des buffers', () => {
+  const parser = createGcodeParser();
+  parser.write('G90\nM83\nG1 X10 Z1 E1\nG3 X-10 Y0 I-10 J0 Z3 E2\n');
+  for (let i = 0; i < 5000; i++) parser.write(`G1 X${i % 2 ? 10 : 20} Z${3 + i / 100} E1\n`);
+  const result = parser.finish();
+  assert.equal(result.heights.length, result.types.length * 2);
+  assert.deepEqual([...result.heights.slice(0, 2)], [0, 1]);
+  assert.equal(result.heights[2], 1);
+  assert.equal(result.heights[65], 3);
+  assert.ok(Math.abs(result.heights.at(-1) - 52.99) < 0.001);
+});
