@@ -15,6 +15,7 @@ Les données métier et les étapes de l’assistant vivent en mémoire de la pa
 
 | Référence | Observation | Décision FabCore |
 | --- | --- | --- |
+| [O.D.I.N. / RunsOdin](https://runsodin.com/) ([tarifs](https://runsodin.com/pricing)) | Gestion de ferme 3D auto-hébergée Docker, télémétrie, files, caméras et inventaire. Protocoles Bambu MQTT, Moonraker, PrusaLink, Elegoo SDCP, Anycubic LAN ; OctoPrint et Ultimaker signalés expérimentaux, capacités variables. Source disponible sous BSL 1.1 annoncée. Relevé du 19 novembre 2026, sans essai | Concurrent direct à inclure aux côtés de Printago et SimplyPrint. Comparer maintenance, permissions, cloud/LAN, files et coût. Ne pas présenter l’auto-hébergement, OIDC ou les caméras comme exclusifs à FabCore ; étudier les différences multi-équipements et multisites. Voir le relevé détaillé en fin de document |
 | [Mainsail](https://docs.mainsail.xyz/) et [Fluidd](https://docs.fluidd.xyz/) | Interfaces Klipper centrées sur la machine et sa télémétrie | Regrouper caméra, fabrication, commandes et températures dans la fiche machine, avec une vue parc distincte |
 | [OctoPrint](https://octoprint.org/) et [contrôle des accès](https://docs.octoprint.org/en/main/features/accesscontrol.html) | Caméra, commandes, suivi et création du premier admin | Traiter l’accès à la caméra et le pilotage comme des capacités distinctes. Intégrer les scénarios de droits dans la fiche |
 | [Bambu Studio](https://cdn1.bambulab.com/documentation/X1E-9096a552381b8/Y.BC.SM.A00208-02_X1E%20EN.pdf) et [Handy](https://bambulab.com/en/download/handy) | Le suivi machine associe caméra, progression et commandes. Handy apporte l’accès mobile | Conserver les actions principales sous le flux et les rendre accessibles au pouce |
@@ -74,3 +75,15 @@ Inter est la typographie proposée, avec une pile système en mode hors ligne. I
 - Confirmer les raccourcis mobiles, le nommage des deux CC2 et le niveau de détail nécessaire dans la fiche machine.
 - Examiner la progression de l’assistant, les étapes facultatives et la confirmation de la commande d’annulation.
 - Vérifier la disponibilité des domaines choisis et la recherche de marques avant de retenir l’identité publique. Le nom FabCore a des homonymes dans la fabrication, dont [une découpeuse laser commercialisée par FabCreator](https://www.fabcreator.com/store).
+
+## O.D.I.N. / RunsOdin · relevé du 19 novembre 2026
+
+Sources officielles consultées : [présentation](https://runsodin.com/), [tarifs](https://runsodin.com/pricing) et liens de documentation de l’éditeur. Aucun compte, installation ou essai matériel effectué.
+
+- **Positionnement annoncé** : auto-hébergement et connexions LAN, gestion multimarque de fermes 3D. La page distingue supervision et commandes, et marque certains envois expérimentaux ou non disponibles. Le support SDCP Elegoo ne démontre pas celui du MQTT CC2.
+- **Offres annoncées** : Community gratuite jusqu’à cinq imprimantes ; Pro à 15 USD/mois ou 150 USD/an, imprimantes et utilisateurs illimités ; Education et Enterprise sur devis. La page d’accueil nuance la disponibilité du paiement mensuel. La page tarifs juxtapose « compte unique » et des droits/utilisateurs étendus dans Community : répartition exacte à confirmer, ne pas la présenter comme établie.
+- **Fonctions à comparer** : maintenance, bibliothèque/archives, files de production, OIDC/RBAC, caméras WebRTC, alertes et détection locale ONNX. Vérifier la maturité et l’édition requise plutôt que reprendre les promesses de la page.
+- **Licence déclarée** : BSL 1.1, conversion Apache 2.0 annoncée pour le 7 février 2029. Vérifier le texte et les conditions applicables avant toute réutilisation ; ne pas assimiler « source disponible » à la licence GPL de FabCore.
+- **Questions ouvertes** : comptes cloud constructeur multiples, sites/fermes/gestionnaires, inventaire natif USB/SD/cache, Gantt et compatibilité exacte P2S/CC2. Aucune absence n’est déduite du seul silence des pages consultées.
+
+Conséquence pour MVP-11 : comparaison avec Printago, SimplyPrint et print-farm-manager sur les mêmes axes (hébergement, licence, périmètre réel, prix, transports, sécurité et opérations). Les fonctions 3D/laser/CNC et le cloud constructeur multi-comptes sont des orientations FabCore à réaliser, pas des différences déjà démontrées en production.

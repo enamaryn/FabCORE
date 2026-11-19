@@ -222,6 +222,7 @@ Préparer le modèle de données dès MVP-01 et les droits en MVP-04 ; l’accè
 - [ ] MVP-11.5 Abonnement et paiement via un prestataire, factures.
 - [ ] MVP-11.6 Isolation des données entre clients, sauvegardes du cloud.
 - [ ] MVP-11.7 Conditions d’utilisation, politique de confidentialité et conformité RGPD.
+- [ ] MVP-11.8 Inclure [O.D.I.N. / RunsOdin](../design/README.md#odin--runsodin--relevé-du-19-novembre-2026) dans l’analyse de MVP-11.0 avec Printago, SimplyPrint et print-farm-manager : offres et licence, maintenance, OIDC/RBAC, maturité des protocoles, inventaire natif et organisation multisite. Confirmer les informations contradictoires entre pages tarifaires avant de les exploiter.
 
 ## MVP-12 · Sécurité, accessibilité et qualité
 
