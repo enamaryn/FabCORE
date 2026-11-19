@@ -438,8 +438,9 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         diagnostics.record('controls', result.outcome, machine.id);
         return answer(res, result.outcome === 'rejected' ? 502 : 200, result.outcome === 'rejected' ? { error: 'command-rejected' } : result);
       } catch (failure) {
-        diagnostics.record('controls', !attempted ? 'request-failed' : failure.message === 'command-rejected' ? 'rejected' : 'unconfirmed', machine.id);
-        return error(res, !attempted || failure.message === 'command-rejected' ? 502 : 504, !attempted ? 'controls-unavailable' : failure.message === 'command-rejected' ? 'command-rejected' : 'command-unconfirmed');
+        const heaterUnconfirmed = attempted && failure.message === 'heater-unconfirmed';
+        diagnostics.record('controls', !attempted ? 'request-failed' : heaterUnconfirmed ? 'heater-unconfirmed' : failure.message === 'command-rejected' ? 'rejected' : 'unconfirmed', machine.id);
+        return error(res, !attempted || failure.message === 'command-rejected' ? 502 : 504, !attempted ? 'controls-unavailable' : heaterUnconfirmed ? 'heater-unconfirmed' : failure.message === 'command-rejected' ? 'command-rejected' : 'command-unconfirmed');
       } finally { if (req.method === 'POST') pendingCommands.delete(machine.id); }
     }
     const terminal = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/gcode$/);
