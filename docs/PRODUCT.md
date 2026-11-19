@@ -14,6 +14,7 @@ Règles durables tirées des essais du POC. Elles s’appliquent à toute nouvel
 - La vue d’ensemble montre l’état du parc : état, fabrication, progression, températures, activité récente et accès à chaque machine.
 - Sur la fiche machine, la caméra et la télémétrie sont côte à côte. La fabrication et le système multimatériau sont en dessous lorsqu’il existe. La disposition s’adapte aux petits écrans et aux capacités réelles.
 - Un graphique commun affiche les températures de buse et de plateau.
+- Sur les cartes du parc et de la vue d’ensemble, afficher un groupe compact de pastilles AMS/CANVAS colorées et numérotées au-dessus du statut, avec indication de l’emplacement actif. Une bobine simple a une seule pastille sans numéro ; couleur ou équipement inconnus restent explicitement inconnus. Ne pas afficher de filament sur les machines sans cette fonction.
 - AMS et CANVAS sont représentés de façon compacte : bobines étroites et rapprochées, emplacements vides, matière, couleur et emplacement actif lorsque ces informations sont reçues.
 - « Ajouter une machine » ouvre d’abord la découverte, avec le choix entre scan du réseau et saisie manuelle. Le scan part du serveur, ou plus tard de l’agent local.
 - Ajout, modification et suppression des machines gèrent aussi leurs connexions et ressources (sessions, flux caméra).
