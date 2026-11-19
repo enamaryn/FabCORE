@@ -31,14 +31,26 @@ test('cartes : bobine simple inconnue sans numéro, équipement inconnu distinct
   assert.equal((single.match(/class="fleet-filament-dot"/g) || []).length, 1);
   assert.match(single, /Couleur inconnue/);
   assert.doesNotMatch(single, />[1-4]<\/span>/);
-  assert.match(dots({ kind: 'bambu' }), /AMS \?/);
+  assert.match(dots({ kind: 'bambu' }), /Équipement non communiqué/);
   assert.equal(dots({ kind: 'xtool-m2' }), '');
 });
 
 test('cartes : plusieurs modules, dernier état hors ligne et couleurs non valides neutralisées', () => {
   const html = dots({ kind: 'elegoo', status: 'offline', filaments: [0, 1].map(id => ({ id, slots: [{ id: 0, occupied: true, color: 'red;position:fixed' }] })) });
-  assert.match(html, /CANVAS 1/); assert.match(html, /CANVAS 2/);
+  assert.match(html, />2 CANVAS<\/small>/); assert.match(html, /CANVAS 1/);
   assert.match(html, /Dernières données, hors ligne/);
   assert.doesNotMatch(html, /position:fixed/);
-  assert.equal((html.match(/class="fleet-filament-dot"/g) || []).length, 2, 'aucun emplacement inventé');
+  assert.equal((html.match(/class="fleet-filament-dot"/g) || []).length, 1, 'un seul module affiché');
+});
+
+test('plusieurs modules : pastilles du module actif seulement et compteur visible', () => {
+  const html = dots({ kind: 'bambu', filaments: [
+    { id: 0, slots: [{ id: 0, occupied: true, color: '#FF0000' }] },
+    { id: 1, slots: [{ id: 0, occupied: true, color: '#0000FF', active: true }] }
+  ] });
+  assert.match(html, />2 AMS<\/small>/);
+  assert.match(html, /--spool:#0000FF/);
+  assert.doesNotMatch(html, /--spool:#FF0000/);
+  const single = dots({ kind: 'bambu', filaments: [{ id: 0, slots: [] }] });
+  assert.doesNotMatch(single, /<small>/, 'pas de libellé pour un seul module');
 });

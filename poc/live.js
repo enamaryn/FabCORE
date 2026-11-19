@@ -340,20 +340,24 @@ function fleetFilamentDots(machine) {
       slot.active && slot.occupied !== false ? t('Actif','Active') : '', stale].filter(Boolean).join(' · ');
     return `<span class="fleet-filament-dot" role="img" aria-label="${esc(label)}" title="${esc(label)}" data-empty="${slot.occupied === false}" data-active="${slot.active === true && slot.occupied !== false}" data-unknown="${!shade && slot.occupied !== false}" style="--spool:${shade || 'var(--raised)'};--ink:${ink}">${position || ''}</span>`;
   };
-  const content = system && units?.length ? units.map(unit => {
-    const label = (unit.variant === 'ht' ? 'AMS HT' : system) + (units.length > 1 ? ' ' + (unit.variant === 'ht' ? unit.id - 3 : unit.id + 1) : '');
-    return `<span class="fleet-filament-unit" role="group" aria-label="${esc(label)}"><small>${esc(label)}</small><span class="fleet-filament-dots">${unit.slots.map(slot => dot(slot, slot.id + 1, label)).join('')}</span></span>`;
-  }).join('') : `<span class="fleet-filament-unit"><small>${system && units === null ? system + ' ?' : t('Filament','Filament')}</small>${dot({ occupied: null }, '', system && units === null ? t('Équipement non communiqué','Equipment not reported') : '')}</span>`;
+  const shown = units?.find(unit => unit.slots.some(slot => slot.active && slot.occupied !== false)) ?? units?.[0];
+  const label = shown ? (shown.variant === 'ht' ? 'AMS HT' : system) + ' ' + (shown.variant === 'ht' ? shown.id - 3 : shown.id + 1) : '';
+  const count = units?.length > 1 ? `<small>${units.length} ${esc(system)}</small>` : '';
+  const content = system && shown
+    ? `<span class="fleet-filament-unit" role="group" aria-label="${esc(label)}">${count}<span class="fleet-filament-dots">${shown.slots.map(slot => dot(slot, slot.id + 1, label)).join('')}</span></span>`
+    : `<span class="fleet-filament-unit">${dot({ occupied: null }, '', system && units === null ? t('Équipement non communiqué','Equipment not reported') : '')}</span>`;
   return `<style>
-    .card-indicators{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:none;max-width:55%}
-    .fleet-filaments{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;max-width:100%}
-    .fleet-filament-unit{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--raised);padding:5px 7px;border-radius:20px}
+    .machine:has(.fleet-filaments){position:relative;padding-top:26px}
+    .cards:has(.fleet-filaments){padding-top:16px;row-gap:28px}
+    .card-indicators{display:flex;align-items:flex-start;flex:none;max-width:55%}
+    .fleet-filaments{position:absolute;right:12px;top:-18px;max-width:calc(100% - 24px);z-index:1}
+    .fleet-filament-unit{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--raised);padding:5px 7px;border-radius:20px}
     .fleet-filament-unit small{font-size:9px;font-weight:700;letter-spacing:.03em;white-space:nowrap}
-    .fleet-filament-dots{display:flex;gap:5px}.fleet-filament-dot{display:inline-grid;place-items:center;flex:none;width:23px;height:23px;border:1px solid #80808070;border-radius:50%;background:var(--spool);color:var(--ink);font-size:11px;font-weight:750;line-height:1}
-    .fleet-filament-dot[data-active=true]{outline:2px solid var(--accent);outline-offset:2px}
+    .fleet-filament-dots{display:flex;isolation:isolate}.fleet-filament-dots .fleet-filament-dot+.fleet-filament-dot{margin-left:-3px}.fleet-filament-dot{display:inline-grid;place-items:center;flex:none;width:23px;height:23px;position:relative;box-shadow:0 0 0 1px var(--card);border:1px solid #80808070;border-radius:50%;background:var(--spool);color:var(--ink);font-size:11px;font-weight:750;line-height:1}
+    .fleet-filament-dot[data-active=true]{outline:2px solid var(--accent);outline-offset:1px;z-index:2}
     .fleet-filament-dot[data-empty=true]{border:1px dashed var(--dim);color:var(--dim);background:var(--card)}
     .fleet-filament-dot[data-unknown=true]{background:repeating-linear-gradient(135deg,transparent 0 3px,var(--line) 3px 4px),var(--raised)}
-    @media(max-width:440px){.card-indicators{max-width:60%}.fleet-filament-unit small{display:none}.fleet-filament-dot{width:21px;height:21px}}
+    @media(max-width:440px){.card-indicators{max-width:60%}.fleet-filament-dot{width:21px;height:21px}}
   </style><div class="fleet-filaments" aria-label="${t('Filaments','Filaments')}">${content}</div>`;
 }
 
