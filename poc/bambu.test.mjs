@@ -100,3 +100,21 @@ test('P2S : lumière sur le canal system, accusé corrélé et session MQTT uniq
     assert.equal(monitor.controlState(machine).lights[0].value, false, 'seul le rapport fait foi');
   } finally { monitor.close(); }
 });
+
+test('P2S : températures compactes et rapports imbriqués partiels sans perte des consignes', () => {
+  const client = new EventEmitter(); client.subscribe = (_t, cb) => cb(null, [{ qos: 0 }]); client.publish = () => {}; client.end = () => {};
+  const monitor = createBambuMonitor(() => client);
+  const machine = { id: 'packed', serial: 'TEST', origin: 'mqtts://192.168.1.2:8883' };
+  const push = delta => client.emit('message', 'device/TEST/report', Buffer.from(JSON.stringify({ print: { command: 'push_status', ...delta } })));
+  try {
+    monitor.read(machine); client.emit('connect');
+    push({ gcode_state: 'IDLE', device: { bed: { info: { temp: (60 << 16) + 21 } }, extruder: { info: [{ id: 0, temp: (200 << 16) + 23 }] } } });
+    assert.equal(monitor.read(machine).nozzle, 23); assert.equal(monitor.read(machine).bed, 21);
+    push({ device: { bed: { info: { other: 1 } } } });
+    assert.equal(monitor.controlState(machine).heaters[1].target, 60);
+    assert.equal(monitor.controlState(machine).heaters[0].target, 200);
+    push({ device: { bed: { info: { temp: 22 } } } });
+    assert.equal(monitor.controlState(machine).heaters[1].target, 0);
+    client.emit('close'); assert.equal(monitor.controlState(machine), undefined);
+  } finally { monitor.close(); }
+});

@@ -255,3 +255,11 @@ En cours. Chaque sous-étape passe à `Testé matériel` une fois vérifiée sur
 - [ ] POC-11.10 Bilan technique et décisions d’architecture pour [MVP-00](MVP.md#mvp-00--cadrage).
 
 [Guide d’exploitation et de configuration](../poc/README.md)
+
+## P2S : consignes de chauffe non confirmées · 19 novembre 2026
+
+**État : ouvert, branche `fix/p2s-heater-confirmation`, non déployé.** Signalement : la chauffe buse/plateau ne fonctionne pas, malgré « G-code accepté ». Le LXC a été contrôlé en lecture seule : commit `5bdaff9` installé. Les commandes M104/M140 correspondent à l’implémentation de référence ha-bambulab ; cela ne valide pas leur application par ce firmware.
+
+Ajout de la lecture des températures/consignes compactes `device.bed.info.temp` et `device.extruder.info[].temp`, avec repli legacy. Conservation des champs imbriqués reçus séparément. Après l’accusé MQTT d’une chauffe, FabCore attend jusqu’à cinq secondes que la consigne remontée corresponde à la demande ; sinon, erreur dédiée, sans renvoi de commande. « Confirmée » désigne la consigne, jamais la température atteinte. Un état de contrôle hors ligne/périmé ne confirme pas une action.
+
+Vérifications : 84 tests réussis après intégration de main (humidité AMS), syntaxe JS et diff vérifiés. Aucun ordre matériel envoyé. **Le défaut de chauffe matériel reste à qualifier** après fusion/mise à jour : vérifier la consigne sur l’écran de la P2S et dans FabCore. Si inchangée, relever version firmware et autorisations LAN/développeur ; ne pas changer les modes ou rejouer une commande automatiquement. Le correctif évite un faux succès et prend en charge les nouveaux retours, il ne prouve pas que la machine accepte les écritures.

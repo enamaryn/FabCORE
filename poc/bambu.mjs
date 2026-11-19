@@ -14,6 +14,16 @@ const states = new Map([
 const request = JSON.stringify({ pushing: { sequence_id: '0', command: 'pushall' } });
 const empty = (status, issue) => ({ status, issue, nozzle: null, bed: null, progress: 0, file: '' });
 const temperature = (value) => Number.isFinite(value) ? Math.round(value * 10) / 10 : null;
+// Keep nested temperature fields across incremental firmware reports.
+function mergeReport(previous, update) {
+  const result = { ...previous };
+  for (const [key, value] of Object.entries(update)) {
+    if (['__proto__', 'constructor', 'prototype'].includes(key)) continue;
+    result[key] = value && typeof value === 'object' && !Array.isArray(value)
+      ? mergeReport(previous?.[key] ?? {}, value) : value;
+  }
+  return result;
+}
 
 export function createBambuMonitor(connectPrinter = connect, diagnostics) {
   const printers = new Map();
@@ -82,7 +92,7 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
         return;
       }
       if (delta?.command !== 'push_status') return;
-      report = { ...report, ...delta };
+      report = { ...report, ...delta, ...(delta.device ? { device: mergeReport(report.device ?? {}, delta.device) } : {}) };
       if (delta.ams && typeof delta.ams === 'object' && !Array.isArray(delta.ams)) {
         const units = Array.isArray(delta.ams.ams) ? delta.ams.ams.map(unit => {
           const previous = ams?.ams?.find(item => String(item?.id) === String(unit?.id));
@@ -102,8 +112,8 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
       printer.current = {
         status,
         issue: status === 'error' ? 'bambu-print' : null,
-        nozzle: temperature(report.nozzle_temper),
-        bed: temperature(report.bed_temper),
+        nozzle: temperature(printer.controls.heaters.find(item => item.id === 'nozzle')?.current),
+        bed: temperature(printer.controls.heaters.find(item => item.id === 'bed')?.current),
         progress: status === 'done' ? 100 : !clearedFailure && Number.isFinite(report.mc_percent)
           ? Math.round(Math.max(0, Math.min(100, report.mc_percent))) : 0,
         ...(filaments !== null ? { filaments } : {}),
@@ -143,7 +153,11 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
   }
 
   return {
-    controlState(machine) { return printers.get(machine.id)?.controls; },
+    controlState(machine) {
+      const printer = printers.get(machine.id);
+      if (!printer?.lastReport || Date.now() - printer.lastReport > 60000 || !['ready', 'done', 'printing', 'paused'].includes(printer.current.status)) return undefined;
+      return printer.controls;
+    },
     send(machine, command, params = {}, channel = 'print') {
       if (!printers.has(machine.id)) printers.set(machine.id, open(machine, true));
       return printers.get(machine.id).send(command, params, channel);

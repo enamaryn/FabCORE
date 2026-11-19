@@ -37,7 +37,7 @@ test('contrôles Klipper : objets présents, plafond firmware, couleurs, ventila
 test('Bambu : état rapporté distinct de la commande, lumière système et G-code borné', async () => {
   const state = reportedControls('bambu', { nozzle_temper: 25, nozzle_target_temper: 0, cooling_fan_speed: '15', lights_report: [{ node: 'chamber_light', mode: 'off' }] });
   const calls = [];
-  const control = createManualControls('bambu', { read: () => state, send: async (...args) => { calls.push(args); return true; } });
+  const control = createManualControls('bambu', { read: () => state, wait: async () => { state.heaters[0].target = 240; }, send: async (...args) => { calls.push(args); return true; } });
   await control.execute(machine, validateControl({ action: 'light', id: 'chamber_light', value: true, confirm: true }, state), state);
   assert.equal(calls[0][1], 'ledctrl'); assert.equal(calls[0][3], 'system');
   assert.equal(state.lights[0].value, false, 'pas de mise à jour optimiste');
@@ -68,4 +68,36 @@ test('CC2 : lecture réelle et aucune commande activée sur la base de numéros 
   assert.equal(state.lights[0].value, true); assert.equal(state.heaters[0].target, 200); assert.equal(state.fans[0].rpm, 1234);
   assert.equal(validateControl({ action: 'heat', id: 'nozzle', value: 200, confirm: true }, state), null);
   assert.equal(validateControl({ action: 'light', id: 'main', value: false, confirm: true }, state), null);
+});
+
+test('Bambu : un accusé sans consigne confirmée échoue, sans renvoi de commande', async () => {
+  const state = reportedControls('bambu', { nozzle_target_temper: 0, bed_target_temper: 0 });
+  for (const id of ['nozzle', 'bed']) {
+    let sends = 0;
+    const control = createManualControls('bambu', { read: () => state, send: async () => { sends++; return true; }, wait: async () => {}, confirmationAttempts: 3 });
+    await assert.rejects(control.execute(machine, { action: 'heat', id, value: id === 'nozzle' ? 200 : 60 }, state), /heater-unconfirmed/);
+    assert.equal(sends, 1);
+    assert.equal(state.heaters.find(item => item.id === id).target, 0);
+  }
+});
+
+test('Bambu : consigne reçue en différé confirmée, température atteinte non présumée', async () => {
+  for (const [id, value] of [['nozzle', 200], ['bed', 60], ['bed', 0]]) {
+    let target = value === 0 ? 60 : 0, reads = 0, sends = 0;
+    const control = createManualControls('bambu', { read: () => reportedControls('bambu', { nozzle_temper: 22, bed_temper: 21, [id === 'nozzle' ? 'nozzle_target_temper' : 'bed_target_temper']: target }),
+      send: async () => { sends++; return true; }, wait: async () => { if (++reads === 2) target = value; }, confirmationAttempts: 3 });
+    assert.deepEqual(await control.execute(machine, { action: 'heat', id, value }, {}), { outcome: 'confirmed' });
+    assert.equal(sends, 1); assert.equal(reads, 2);
+    assert.equal((await control.read(machine)).heaters[0].current, 22);
+  }
+});
+
+test('Bambu : format de température compact, zéro valide et valeurs invalides ignorées', () => {
+  const controls = reportedControls('bambu', { nozzle_temper: 10, nozzle_target_temper: 1, device: {
+    extruder: { info: [{ id: 0, temp: (220 << 16) + 23 }] }, bed: { info: { temp: (60 << 16) + 21 } } } });
+  assert.deepEqual(controls.heaters.map(({ current, target }) => [current, target]), [[23, 220], [21, 60]]);
+  assert.equal(reportedControls('bambu', { device: { bed: { info: { temp: 0 } } } }).heaters[1].target, 0);
+  for (const temp of [null, -1, 0xffffffff, '12', true, 0x100000000, 2.5]) {
+    assert.equal(reportedControls('bambu', { bed_target_temper: 55, device: { bed: { info: { temp } } } }).heaters[1].target, 55);
+  }
 });

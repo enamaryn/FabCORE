@@ -1,16 +1,24 @@
 import { moonrakerOrigin, readResponse } from './connector-http.mjs';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const numeric = value => Number.isFinite(value) ? value : null;
 const percent = value => Number.isFinite(value) && value >= 0 && value <= 100 ? Math.round(value) : null;
 const safeName = name => /^[A-Za-z0-9_]+$/.test(name);
 export const emptyControls = () => ({ lights: [], heaters: [], fans: [], motion: null });
 const heater = (id, current, target, max, writable = true) => ({ id, current: numeric(current), target: numeric(target), max, writable });
+function packedTemperature(value) {
+  if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) return null;
+  const current = value & 0xffff, target = value >>> 16;
+  return current <= 500 && target <= 500 ? { current, target } : null;
+}
 
 // Values below are software ceilings, not a substitute for firmware limits.
 export function reportedControls(kind, report) {
   const out = emptyControls();
   if (kind === 'bambu') {
-    out.heaters = [heater('nozzle', report.nozzle_temper, report.nozzle_target_temper, 260), heater('bed', report.bed_temper, report.bed_target_temper, 100)];
+    const nozzle = packedTemperature(report.device?.extruder?.info?.find?.(item => item.id === 0)?.temp);
+    const bed = packedTemperature(report.device?.bed?.info?.temp);
+    out.heaters = [heater('nozzle', nozzle?.current ?? report.nozzle_temper, nozzle?.target ?? report.nozzle_target_temper, 260), heater('bed', bed?.current ?? report.bed_temper, bed?.target ?? report.bed_target_temper, 100)];
     const light = report.lights_report?.find(item => item.node === 'chamber_light');
     if (light) out.lights.push({ id: 'chamber_light', value: light.mode === 'on' ? true : light.mode === 'off' ? false : null, writable: true });
     for (const [id, key] of [['part', 'cooling_fan_speed'], ['aux', 'big_fan1_speed'], ['chamber', 'big_fan2_speed']]) {
@@ -55,7 +63,7 @@ export function validateControl(data, controls) {
   return null;
 }
 
-export function createManualControls(kind, { fetcher = fetch, send, read } = {}) {
+export function createManualControls(kind, { fetcher = fetch, send, read, wait = delay, confirmationAttempts = 25 } = {}) {
   async function call(machine, path, body) {
     if (moonrakerOrigin(machine.origin) !== machine.origin) throw new Error('invalid-machine');
     const response = await fetcher(machine.origin + path, { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(10000),
@@ -96,6 +104,15 @@ export function createManualControls(kind, { fetcher = fetch, send, read } = {})
     if (kind === 'bambu') {
       const ok = action === 'light' ? await send(machine, 'ledctrl', { led_node: 'chamber_light', led_mode: value ? 'on' : 'off', led_on_time: 500, led_off_time: 500, loop_times: 1, interval_time: 1000 }, 'system')
         : await send(machine, 'gcode_line', { param: action === 'heat' ? `${id === 'nozzle' ? 'M104' : 'M140'} S${value}\n` : `M106 P${{ part: 1, aux: 2, chamber: 3 }[id]} S${Math.round(value / 100 * 255)}\n` });
+      if (ok && action === 'heat') {
+        // A MQTT acknowledgement alone does not prove the setpoint changed.
+        for (let attempt = 0; attempt < confirmationAttempts; attempt++) {
+          await wait(200);
+          const reported = await snapshot(machine);
+          if (reported.heaters.find(item => item.id === id)?.target === value) return { outcome: 'confirmed' };
+        }
+        throw new Error('heater-unconfirmed');
+      }
       return { outcome: ok ? 'accepted' : 'rejected' };
     }
     if (kind === 'octoprint') {
