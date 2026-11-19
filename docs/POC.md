@@ -3,7 +3,15 @@
 **État : phase active, complément de pilotage manuel en revue, recette matérielle en cours.**
 Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-concept)) : vérifier les risques techniques sur du matériel réel avant le [MVP](MVP.md).
 
-**Prochaine action :** dérouler la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
+**Prochaine action :** traiter l’incident urgent [#78](https://github.com/enamaryn/FabCORE/issues/78), puis le pilote cloud [#79](https://github.com/enamaryn/FabCORE/issues/79), avant de reprendre la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
+
+## Priorité incident et documentation · 19 novembre 2026
+
+[Issue urgente #78](https://github.com/enamaryn/FabCORE/issues/78) ouverte : qualifier un arrêt d’urgence distinct pour chaque capacité réelle, puis fiabiliser la confirmation Pause/Stop CC2. Le mapping 1021/1022 est confirmé ; l’arrêt normal pendant nivellement reste non validé. L’intervention 1007 a reçu ACK zéro, exception 803 et état 14 ; les températures après cet arrêt n’ont pas été confirmées. Aucun bouton d’urgence livré par cette documentation.
+
+Valentin a depuis confirmé la chauffe buse/plateau CC2 et la coupure des deux. La PR #77 est fusionnée ; les mentions antérieures « non déployé / recette chauffe à faire » ci-dessous décrivent l’état lors de son ouverture et sont dépassées par ce retour matériel (version firmware non relevée).
+
+[Dossier par fabricant/modèle](protocols/README.md) ajouté pour transmettre les protocoles LAN, leurs limites et les observations matérielles. [Recherche cloud Bambu](protocols/BAMBU-CLOUD.md) et [issue #79](https://github.com/enamaryn/FabCORE/issues/79) : multicomptes, LAN ou cloud par machine, pilote lecture seule avant commandes/fichiers/vidéo. Recherche uniquement : aucun cloud connecté ou déployé. **Ordre demandé : #78, puis pilote #79**, puis reprise de la recette POC-10. Le socle SaaS multisite complet reste au MVP.
 
 ## Chauffe native CC2 · 19 novembre 2026
 
