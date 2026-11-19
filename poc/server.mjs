@@ -408,9 +408,16 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (!activeSession) return error(res, 401, 'sign-in');
       const machines = await Promise.all(store.state.machines.map(async (machine) => {
         const definition = connectorDefinition(machine.kind ?? 'klipper');
-        const connector = definition?.live ? await connectors.get(machine.kind) : null;
+        let telemetry;
+        try {
+          const connector = definition?.live ? await connectors.get(machine.kind) : null;
+          telemetry = connector ? await connector.read(machine) : snapshot(machine);
+          if (!['connecting', 'ready', 'printing', 'paused', 'done', 'offline', 'error'].includes(telemetry?.status)) throw new Error('invalid-telemetry');
+        } catch {
+          // One failed connector must not hide the rest of the fleet.
+          telemetry = { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' };
+        }
         if (!store.state.machines.includes(machine)) return null;
-        const telemetry = connector ? connector.read(machine) : snapshot(machine);
         diagnostics.status(machine.id, telemetry);
         return {
           id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial,
