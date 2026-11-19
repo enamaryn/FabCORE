@@ -184,3 +184,9 @@ Le panneau **Contrôles** affiche les états d’éclairage, températures actue
 Sur Klipper/OctoPrint, les déplacements utilisent des pas de 0,1, 1 ou 10 mm ; la prise d’origine demande confirmation. Ils sont interdits pendant une impression ou une pause. Klipper exige les axes référencés et vérifie les limites remontées ; OctoPrint confie ces vérifications au firmware. Une modification de chauffe/ventilateur pendant fabrication demande une confirmation supplémentaire. Aucun état optimiste ni renvoi automatique en cas de réponse perdue : vérifier la machine avant de recommencer.
 
 La [matrice du POC](../docs/POC.md#contrôles-manuels--19-novembre-2026) précise les capacités : P2S lumière/chauffe/ventilateurs, Klipper selon objets déclarés, OctoPrint chauffe/déplacement, CC2 retours seuls. Les commandes CC2 correspondantes restent commentées dans le SDK ; aucun bouton spéculatif n’est activé. Ce jalon n’ajoute pas de pilotage manuel xTool, CC1 ou PrusaLink.
+
+### Agencement de la fiche machine
+
+**Vue machine** regroupe la caméra, les filaments, la fabrication, les températures et les contrôles disponibles. Les consignes sont à côté des températures ; les actions rapides regroupent lumière et ventilateurs, puis la croix X/Y et les commandes Z si le connecteur les permet. Un contrôle grisé est explicitement indisponible. Tous les modules AMS/CANVAS remontés sont visibles, avec une représentation compacte.
+
+**Fichiers** conserve recherche, tri, pagination, téléchargement, transfert et lancement. **Choisir un fichier** ouvre cet onglet. **Console** est disponible sur les connecteurs avec terminal. La caméra ne démarre pas automatiquement en quittant/revenant aux onglets : la vue machine charge un aperçu, puis **Voir la caméra** ouvre le flux. Sur la fiche, les réglages du compte, langue, thème, diagnostics et déconnexion sont regroupés dans le menu utilisateur en haut à droite.
