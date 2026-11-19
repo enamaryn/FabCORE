@@ -1,3 +1,4 @@
+import { createCloudMonitor } from './bambu-cloud-monitor.mjs';
 import { randomBytes, randomUUID, createCipheriv, createDecipheriv } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
@@ -40,9 +41,12 @@ export function safeCloudPayload(value, secrets = [], depth = 0, key = '') {
 }
 
 // Log sanitized protocol bodies and selected HTTP metadata, never raw credentials or exceptions.
-export function createCloudAccounts({ store, directory, fetcher = fetch, now = Date.now }) {
+export function createCloudAccounts({ store, directory, fetcher = fetch, now = Date.now, connectMqtt }) {
   const logDirectory = join(directory, 'cloud-logs');
   mkdirSync(logDirectory, { recursive: true, mode: 0o700 });
+  const monitors = new Map();
+  const starts = new Map();
+  let closed = false;
   const pending = new Map();
   const busy = new Set();
   const authRequests = new Map();
@@ -100,7 +104,8 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
     const flow = pending.get(account.id);
     return { id: account.id, provider: account.provider, name: account.name, email: account.email, region: account.region,
       status: account.status, issue: account.issue ?? null, connectedAt: account.connectedAt ?? null,
-      checkedAt: account.checkedAt ?? null, devices: account.devices ?? [], truncated: account.truncated ?? false,
+      checkedAt: account.checkedAt ?? null, devices: (account.devices ?? []).map(device => { const machine = store.state.machines.find(item => ['bambu', 'bambu-cloud'].includes(item.kind) && item.serial === device.serial); return { ...device, fleetId: machine?.id ?? null, fleetMode: machine?.kind === 'bambu-cloud' ? 'cloud' : machine ? 'lan' : null }; }), truncated: account.truncated ?? false,
+      telemetryEnabled: account.telemetryEnabled === true, telemetry: monitors.get(account.id)?.snapshot() ?? null,
       challenge: flow && flow.expires > now() ? flow.kind : null, challengeExpiresAt: flow ? new Date(flow.expires).toISOString() : null };
   }
   function rate(id) {
@@ -204,6 +209,32 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       return publicAccount(update(next, { issue: code, status: ['cloud-auth', 'cloud-access'].includes(code) ? 'reauth' : 'connected' }));
     }
   }
+  function stopMonitor(id) { monitors.get(id)?.close(); monitors.delete(id); }
+  async function startMonitor(id) {
+    if (monitors.has(id) || starts.has(id) || closed) return starts.get(id);
+    const task = (async () => {
+      const account = find(id); bases(account);
+      if (!account.secret || !account.devices?.length) fail('cloud-auth', 401);
+      const secret = account.secret; const token = decrypt(account);
+      let username;
+      try { username = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).username; } catch { /* Opaque tokens use the preference endpoint. */ }
+      if (!/^u_\d{1,30}$/.test(username ?? '')) {
+        const { data } = await request(account, bases(account).api, '/v1/design-user-service/my/preference', { token });
+        if (!/^\d{1,30}$/.test(String(data.uid ?? ''))) fail('cloud-response');
+        username = 'u_' + data.uid;
+      }
+      const current = find(id);
+      if (closed || !current.telemetryEnabled || current.secret !== secret) return;
+      monitors.set(id, createCloudMonitor({ account: current, token, username, now, connectMqtt,
+        log: (event, details) => log(id, event, safeCloudPayload(details, [token])) }));
+    })();
+    starts.set(id, task);
+    try { await task; } finally { starts.delete(id); }
+  }
+  // Resume only accounts explicitly enabled by an administrator.
+  queueMicrotask(() => { if (!closed) for (const account of entries()) if (account.telemetryEnabled && account.status === 'connected') {
+    startMonitor(account.id).catch(error => { if (closed || !entries().some(item => item.id === account.id)) return; try { log(account.id, 'mqtt-start-failed', { code: error instanceof CloudError ? error.message : 'cloud-unavailable' }); } catch {} });
+  } });
   return {
     list() { return { providers: cloudProviders, accounts: entries().map(publicAccount) }; },
     add(data) {
@@ -222,9 +253,10 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       const previous = loginAttempts.get(id);
       if (previous !== undefined && now() - previous < 60_000) { log(id, 'login-throttled'); fail('cloud-login-wait', 429); }
       loginAttempts.set(id, now());
+      stopMonitor(id);
       clearPending(id);
       // A new authentication attempt explicitly disconnects the previous credential.
-      update(account, { secret: undefined, status: 'disconnected', devices: [], issue: null });
+      update(account, { secret: undefined, status: 'disconnected', telemetryEnabled: false, devices: [], issue: null });
       const { data: result } = await request(account, api, '/v1/user-service/user/login', { method: 'POST', body: { account: account.email, password: data.password, apiError: '' }, signal });
       if (result.accessToken) return complete(find(id), result.accessToken, signal);
       if (result.loginType === 'verifyCode') {
@@ -259,8 +291,42 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       if (!account.secret) fail('cloud-auth', 401);
       return publicAccount(update(account, await devices(account, decrypt(account), signal)));
     }); },
+    importDevice(id, serial) { return locked(id, async () => {
+      const account = find(id); bases(account);
+      const device = account.devices?.find(item => item.serial === serial);
+      if (!device || !account.secret || account.status !== 'connected') fail('cloud-auth', 401);
+      if (store.state.machines.some(item => ['bambu', 'bambu-cloud'].includes(item.kind) && item.serial === serial)) fail('cloud-machine-exists', 409);
+      update(account, { telemetryEnabled: true }); await startMonitor(id);
+      // Recheck after the asynchronous identity request, across all accounts and LAN.
+      if (store.state.machines.some(item => ['bambu', 'bambu-cloud'].includes(item.kind) && item.serial === serial)) fail('cloud-machine-exists', 409);
+      const machine = { id: randomUUID(), kind: 'bambu-cloud', name: device.name, model: 'Bambu Lab · ' + device.model,
+        serial, cloudAccountId: id, mode: 'cloud', origin: 'mqtts://' + (account.region === 'china' ? 'cn' : 'us') + '.mqtt.bambulab.com:8883' };
+      store.save({ ...store.state, machines: [...store.state.machines, machine] });
+      log(id, 'machine-imported', { serial, machineId: machine.id });
+      return { id: machine.id };
+    }); },
+    readMachine(machine) {
+      const session = monitors.get(machine.cloudAccountId)?.snapshot();
+      const device = session?.devices.find(item => item.serial === machine.serial);
+      const stale = !device || device.stale;
+      const states = { RUNNING: 'printing', PAUSE: 'paused', FINISH: 'done', IDLE: 'ready', FAILED: 'error', PREPARE: 'printing' };
+      return { status: stale ? session?.status === 'connecting' ? 'connecting' : 'offline' : states[device.state] ?? 'ready',
+        issue: session?.issue ?? null, nozzle: stale ? null : device.heaters.find(item => item.id === 'nozzle')?.current ?? null,
+        bed: stale ? null : device.heaters.find(item => item.id === 'bed')?.current ?? null,
+        progress: stale ? 0 : device.progress, file: stale ? '' : device.file,
+        filaments: stale ? [] : device.filaments, checkedAt: device?.checkedAt ?? null };
+    },
+    telemetry(id, enabled) { return locked(id, async () => {
+      const account = find(id); bases(account);
+      if (enabled && (!account.secret || account.status !== 'connected')) fail('cloud-auth', 401);
+      update(account, { telemetryEnabled: enabled });
+      if (enabled) await startMonitor(id); else stopMonitor(id);
+      return publicAccount(find(id));
+    }); },
     disconnect(id, remove = false) {
       const account = find(id); if (busy.has(id)) fail('cloud-busy', 409);
+      if (remove && store.state.machines.some(machine => machine.cloudAccountId === id)) fail('cloud-in-use', 409);
+      stopMonitor(id);
       clearPending(id);
       if (remove) {
         store.save({ ...store.state, cloudAccounts: entries().filter(item => item.id !== id) });
@@ -268,13 +334,13 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
         limits.delete(id); loginAttempts.delete(id); return { deleted: true };
       }
       log(id, 'disconnected');
-      return publicAccount(update(account, { secret: undefined, status: 'disconnected', devices: [], issue: null }));
+      return publicAccount(update(account, { secret: undefined, status: 'disconnected', telemetryEnabled: false, devices: [], issue: null }));
     },
     logs(id) {
       if (!uuid.test(id)) fail('missing', 404); find(id);
       return ['.1', ''].map(suffix => { try { return readFileSync(logPath(id) + suffix, 'utf8'); } catch (error) { if (error.code !== 'ENOENT') throw error; return ''; } }).join('');
     },
     forgetOwner(owner) { for (const entry of authRequests.values()) if (entry.owner === owner) entry.abort.abort(); for (const [id, flow] of pending) if (flow.owner === owner) clearPending(id); },
-    close() { for (const entry of authRequests.values()) entry.abort.abort(); for (const id of pending.keys()) clearPending(id); }
+    close() { closed = true; for (const id of monitors.keys()) stopMonitor(id); for (const entry of authRequests.values()) entry.abort.abort(); for (const id of pending.keys()) clearPending(id); }
   };
 }

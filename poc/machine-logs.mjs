@@ -64,7 +64,7 @@ export function instrumentConnector(connector, diagnostics) {
     target[key] = async function(machine, ...args) {
       const at = Date.now();
       let endpoint = {};
-      try { const url = new URL(machine.origin); endpoint = { transport: url.protocol.replace(':', ''), host: url.hostname, port: url.port, mode: 'lan' }; } catch { /* No unvalidated origin is logged. */ }
+      try { const url = new URL(machine.origin); endpoint = { transport: url.protocol.replace(':', ''), host: url.hostname, port: url.port, mode: machine.mode ?? 'lan' }; } catch { /* No unvalidated origin is logged. */ }
       const request = operation === 'control.execute' ? { command: args[0] } : operation === 'command' ? { action: args[0] } : operation === 'gcode' ? { command: '[terminal command omitted]' } : {};
       trace(machine, 'operation-start', { operation, ...endpoint, ...request });
       try {
