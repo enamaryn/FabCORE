@@ -24,7 +24,7 @@ Bambu documente ses méthodes de connexion dans son [livre blanc sécurité](htt
 
 Transport sortant HTTPS uniquement, hôtes fixés dans le code par région. Aucun hôte fourni par l’utilisateur, aucune redirection suivie, aucune identité Bambu Studio/Orca imitée. Délai de huit secondes par requête, réponses limitées à 1 Mo, cinq opérations par minute et par compte plus la limite HTTP existante. Aucun retry automatique, aucune commande de fabrication.
 
-Parcours utilisés : login `/v1/user-service/user/login`, code email `/v1/user-service/user/sendemail/code`, inventaire GET `/v1/iot-service/api/user/bind`. Pour TOTP, requête CSRF puis `/api/sign-in/tfa` sur le portail régional, avec les cookies de cette seule vérification. Un blocage de portail ou un refus est affiché ; aucun contournement automatique. **Le parcours TOTP réel reste à vérifier : cet endpoint peut refuser les clients tiers.**
+Parcours utilisés : login `/v1/user-service/user/login`, inventaire GET `/v1/iot-service/api/user/bind`. Le login déclenche déjà l’email de vérification : aucun second appel d’envoi de code n’est fait après `verifyCode`. Un nouveau démarrage de connexion est temporisé une minute par compte, sans bloquer la vérification en cours. Pour TOTP, requête CSRF puis `/api/sign-in/tfa` sur le portail régional, avec les cookies de cette seule vérification. Un blocage de portail ou un refus est affiché ; aucun contournement automatique. **Le parcours TOTP réel reste à vérifier : cet endpoint peut refuser les clients tiers.**
 
 Référence d’implémentation étudiée : [ha-bambulab, bambu_cloud.py](https://github.com/greghesp/ha-bambulab/blob/main/custom_components/bambu_lab/pybambu/bambu_cloud.py). La recherche complémentaire figure dans la PR documentaire #80 ; les appels réels n’ont pas été effectués avec un compte utilisateur pendant ce développement.
 
@@ -56,8 +56,12 @@ Toutes les mutations exigent session admin, origine exacte et JSON. Les challeng
 
 ## Validation et suite
 
-96 tests passent, dont huit tests cloud : isolation multicomptes/régions, chiffrement après redémarrage, absence de secrets, challenge email/TOTP simulé, expiration et propriétaire, erreurs HTTP/corps bornés, verrou et absence de rejeu, rotation/suppression des logs, droits/origine/téléchargement et rendu des données échappées avec aide Google. Ce sont des tests locaux avec réponses simulées, pas des essais des serveurs Bambu.
+97 tests passent, dont neuf tests cloud : isolation multicomptes/régions, chiffrement après redémarrage, absence de secrets, challenge email/TOTP simulé, expiration et propriétaire, erreurs HTTP/corps bornés, verrou et absence de rejeu, rotation/suppression des logs, droits/origine/téléchargement et rendu des données échappées avec aide Google. Ce sont des tests locaux avec réponses simulées, pas des essais des serveurs Bambu.
 
 Le navigateur Chromium du poste de développement ne démarre pas (création de socket interdite). Le rendu et les clics réels restent donc à vérifier après déploiement, sur desktop/mobile et en FR/EN. Aucun déploiement ni login réel effectué par l’IA.
 
 Recette utilisateur : créer un compte Bambu, terminer la vérification, contrôler l’inventaire et télécharger le log ; tester ensuite un second compte sans effet sur le premier. Si refus, examiner le journal filtré pour corriger sur une réponse réelle. Le pilote MQTT, l’import explicite dans le parc, les sites/organisations, les commandes, fichiers et caméra cloud sont des jalons distincts (#79). L’urgence machine #78 reste ouverte et indépendante.
+
+## Correctif vérification email · 19 novembre 2026
+
+Le journal matériel relève `login` HTTP 200 avec `loginType=verifyCode`, puis `sendemail/code` HTTP 200 non JSON, suivi de `cloud-response`. Valentin confirme deux emails avec le même code. Le second appel d’envoi automatique est supprimé ; le champ à six chiffres est ouvert directement après la réponse du login. La validation du code et la lecture des machines restent strictement JSON. Aucun nouvel email n’a été demandé pour diagnostiquer le problème ; lecture seule des logs du LXC 119. Libellé du formulaire : « Adresse email cloud ».
