@@ -1,5 +1,7 @@
 # Ajouter un connecteur FabCore
 
+Références par fabricant et modèle : [dossier des protocoles](../docs/protocols/README.md), dont la [recherche Bambu Cloud](../docs/protocols/BAMBU-CLOUD.md).
+
 Ajouter une définition dans [le registre](connectors.mjs). Le registre sert les métadonnées publiques au navigateur, puis charge l’adaptateur réseau au premier accès à une machine de ce type.
 
 - `model` et `form` déterminent le nom et le formulaire. Pour une API HTTP locale, réutiliser `httpConnector`.

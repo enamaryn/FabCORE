@@ -5,6 +5,8 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-mvp--produit-uti
 
 Le découpage suit la même convention que le [POC](POC.md#lire-ce-plan) : étapes `MVP-xx`, sous-étapes `MVP-xx.y`, états `À faire` · `En cours` · `Ouvert` · `Fusionné` · `Déployé` · `Testé matériel` · `Reporté`. L’ordre des étapes est l’ordre de travail recommandé. MVP-00 est un préalable bloquant.
 
+Recherche initiale : [Bambu Cloud et comptes multiples](protocols/BAMBU-CLOUD.md), [pilote #79](https://github.com/enamaryn/FabCORE/issues/79). Le pilote demandé après l’urgence #78 ne signifie pas que le socle SaaS multisite du MVP est implémenté.
+
 ## Vue d’ensemble
 
 | Étape | Contenu | État |
