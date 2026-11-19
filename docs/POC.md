@@ -5,6 +5,12 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** dérouler la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Correctif de dépendance FTP · 19 novembre 2026
+
+Mise à jour proposée de `basic-ftp` 5.3.1 vers `^6.2.6`, verrouillée en 6.2.6, à la suite du signalement utilisateur. Avis concernés : [GHSA-c475-qrg2-pj4r](https://github.com/advisories/GHSA-c475-qrg2-pj4r), [GHSA-5pm8-86m8-9m6r](https://github.com/advisories/GHSA-5pm8-86m8-9m6r) et [GHSA-r4jh-29pc-gfqr](https://github.com/advisories/GHSA-r4jh-29pc-gfqr).
+
+Vérifications locales : 54 tests réussis, `npm audit` sans vulnérabilité signalée, constructeur et parseur MLSD réels vérifiés, y compris un champ `__proto__` sans exception. Aucun transfert matériel effectué. Valentin rapporte avoir installé cette version et passé les 54 tests sur son LXC ; l’IA n’a pas modifié le LXC. Le transfert réel P2S reste dans la recette POC-10. Prochaine action : fusionner le correctif pour aligner les installations et l’installateur sur la dépendance corrigée.
+
 ## Lire ce plan
 
 - **Phase** : POC, puis [MVP](MVP.md), puis [développement complet](FULL-DEVELOPPEMENT.md).
