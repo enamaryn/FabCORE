@@ -43,7 +43,7 @@ test('cloud : plusieurs fabricants et comptes, secrets chiffrés et inventaires 
   const state = await readFile(join(directory, 'state.json'), 'utf8');
   assert.doesNotMatch(state, /SYNTHETIC|NEVER_EXPOSE|password/);
   assert.equal((await stat(join(directory, 'cloud-secret.key'))).mode & 0o777, 0o600);
-  const logs = manager.logs(first.id); assert.match(logs, /http-result/); assert.match(logs, /devices-read/);
+  const logs = manager.logs(first.id); assert.match(logs, /http-result/); assert.match(logs, /devices-read/); assert.match(logs, /P2STEST123/); assert.match(logs, /dev_product_name/);
   assert.doesNotMatch(logs, /SYNTHETIC|NEVER_EXPOSE|Authorization/);
   const restarted = createCloudAccounts({ directory, store: openStore(directory), fetcher }); ctx.after(() => restarted.close());
   assert.equal((await restarted.refresh(first.id)).devices.length, 1);

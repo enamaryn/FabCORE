@@ -428,10 +428,12 @@ function liveFilaments(machine) {
 const machineTabs = new Map();
 function machineTab(id = state.machine) {
   const tab = machineTabs.get(id) ?? 'overview';
+  if (tab === 'logs' && state.role !== 'admin') return 'overview';
   return tab === 'console' && !machineConnectors[machine(id)?.kind]?.terminal ? 'overview' : tab;
 }
 function selectMachineTab(tab) {
-  if (!['overview', 'files', 'console'].includes(tab)) return;
+  if (!['overview', 'files', 'console', 'logs'].includes(tab)) return;
+  if (tab === 'logs' && state.role !== 'admin') return;
   if (tab === 'console' && !machineConnectors[machine(state.machine)?.kind]?.terminal) return;
   machineTabs.set(state.machine, tab);
   renderLive();
@@ -451,7 +453,7 @@ function liveDetail() {
       <p data-camera-status role="status" hidden></p>
       <div class="row wrap camera-toolbar">${btn('camera-start',t('Voir la caméra','View camera'),'camera')}${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
     </section>` : '';
-  const tabs = [['overview', t('Vue machine','Machine view')], ['files', t('Fichiers','Files')], ...(machineConnectors[m.kind]?.terminal ? [['console', t('Console','Console')]] : [])];
+  const tabs = [['overview', t('Vue machine','Machine view')], ['files', t('Fichiers','Files')], ...(state.role === 'admin' ? [['logs', t('Logs','Logs')]] : []), ...(machineConnectors[m.kind]?.terminal ? [['console', t('Console','Console')]] : [])];
   return `<div class="machine-cockpit">
     <style>
       .machine-workspace{grid-template-columns:76px minmax(0,1fr)}.machine-workspace .sidebar{padding:18px 10px;gap:18px}.machine-workspace .brand{font-size:0;padding:0;justify-content:center}.machine-workspace .brand strong{display:none}.machine-workspace .sidebar nav button{font-size:0;justify-content:center;padding:12px}.machine-workspace .sidebar .sidefoot{font-size:10px;text-align:center}.machine-workspace .top{min-height:48px;padding:6px 20px}.machine-workspace .area{max-width:1600px;padding:16px 20px 24px}
@@ -472,7 +474,7 @@ function liveDetail() {
     <header class="cockpit-header row between"><div class="row">${btn('nav:machines', '←', '', 'ghost', `aria-label="${t('Retour au parc','Back to fleet')}"`)}<div><h1>${esc(m.name)}</h1><small>${esc(m.model)}</small></div><span data-machine-status>${badge(m.status)}</span></div>${state.role === 'admin' ? btn('edit', '', 'control', 'ghost', `aria-label="${t('Modifier la machine','Edit machine')}"`) : ''}</header>
     <div class="machine-tabs" role="tablist" aria-label="${t('Fiche machine','Machine details')}">${tabs.map(([key, label]) => `<button type="button" id="machine-tab-${key}" role="tab" aria-selected="${tab === key}" aria-controls="machine-tab-panel" tabindex="${tab === key ? 0 : -1}" data-action="machine-tab:${key}">${label}</button>`).join('')}</div>
     <div role="tabpanel" id="machine-tab-panel" aria-labelledby="machine-tab-${tab}">
-      ${tab === 'files' ? filesPanel(m) : tab === 'console' ? terminalPanel(m) : `<div class="cockpit-grid"><div class="cockpit-column">${camera}<div data-live-filaments>${liveFilaments(m)}</div></div><div class="cockpit-column"><div data-live-telemetry>${liveFabrication(m)}</div>${machineConnectors[m.kind]?.controls ? manualControlsPanel(m, 'heat') + `<div class="cockpit-bottom">${manualControlsPanel(m, 'quick')}${manualControlsPanel(m, 'motion')}</div>` : liveTemperatures(m)}</div></div>`}
+      ${tab === 'logs' ? machineLogPanel(m) : tab === 'files' ? filesPanel(m) : tab === 'console' ? terminalPanel(m) : `<div class="cockpit-grid"><div class="cockpit-column">${camera}<div data-live-filaments>${liveFilaments(m)}</div></div><div class="cockpit-column"><div data-live-telemetry>${liveFabrication(m)}</div>${machineConnectors[m.kind]?.controls ? manualControlsPanel(m, 'heat') + `<div class="cockpit-bottom">${manualControlsPanel(m, 'quick')}${manualControlsPanel(m, 'motion')}</div>` : liveTemperatures(m)}</div></div>`}
     </div>
   </div>`;
 }
@@ -627,6 +629,7 @@ function renderLive() {
   if (compact) app.querySelectorAll('.sidebar nav button').forEach(button => { button.title = button.textContent.trim(); });
   if (signedIn && live.page === 'detail' && machineTab() === 'overview') { showPreview(); loadManualControls(state.machine); }
   if (signedIn && live.page === 'viewer') mountGcode();
+  if (signedIn && live.page === 'detail' && machineTab() === 'logs' && machineLogState(state.machine).data === null) loadMachineLogs(state.machine);
   if (signedIn && live.page === 'detail' && machineTab() === 'files' && state.machine && machineConnectors[machine(state.machine)?.kind]?.files && filesState(state.machine).files === null) loadFiles(state.machine);
 }
 
@@ -727,6 +730,7 @@ function openWorkshop(username, role) {
   temperatureHistory.clear();
   Object.assign(gcode, { machine: null, path: '', size: 0, result: null, layer: 0, loading: null, error: '', view: null });
   machineFiles.clear();
+  machineLogStates.clear();
   terminalLogs.clear();
   terminalDrafts.clear();
   live.phase = 'workshop';
@@ -2073,3 +2077,57 @@ dialog.addEventListener('close', () => {
 });
 renderLive();
 loadSession();
+
+const machineLogStates = new Map();
+function machineLogState(id) {
+  if (!machineLogStates.has(id)) machineLogStates.set(id, { data: null, pending: false, error: '' });
+  return machineLogStates.get(id);
+}
+function logEventLabel(event) {
+  const names = {
+    'operation-start': ['Opération demandée', 'Operation requested'], 'operation-result': ['Résultat de l’opération', 'Operation result'],
+    'operation-error': ['Échec de l’opération', 'Operation failed'], 'mqtt-connect-start': ['Connexion MQTT TLS', 'MQTT TLS connection'],
+    'mqtt-send': ['Requête MQTT envoyée', 'MQTT request sent'], 'mqtt-receive': ['Rapport MQTT reçu', 'MQTT report received'],
+    'mqtt-command-response': ['Réponse constructeur à la commande', 'Manufacturer command response'],
+    'mqtt-command-timeout': ['Aucune réponse corrélée dans le délai', 'No correlated response within deadline'],
+    'mqtt-error': ['Erreur de connexion MQTT', 'MQTT connection error'], 'mqtt-subscribe': ['Abonnement MQTT', 'MQTT subscription'],
+    'heater-confirmation': ['Vérification de la consigne de chauffe', 'Heating setpoint verification']
+  };
+  return names[event] ? t(...names[event]) : event;
+}
+function machineLogPanel(m) {
+  const entry = machineLogState(m.id);
+  return `<section class="panel stack" data-machine-log>
+    <style>.machine-log-entries{max-height:60vh;overflow:auto;min-width:0}.machine-log-entries details{padding:8px 0;border-bottom:1px solid var(--line)}.machine-log-entries pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;margin:6px 0}.machine-log-entries summary{cursor:pointer;overflow-wrap:anywhere;font-size:13px}</style>
+    <div class="row between wrap"><h2>${t('Logs de la machine', 'Machine logs')}</h2><div class="row wrap">${btn('machine-logs-refresh', t('Actualiser', 'Refresh'), '', '', entry.pending ? 'disabled' : '')}<a href="/api/machines/${esc(m.id)}/logs-download" download>${t('Télécharger le fichier log', 'Download log file')}</a></div></div>
+    <p class="notice">${t('Connexion de cette fiche : LAN. Les logs du compte cloud sont séparés. Requêtes, réponses filtrées et délais ; aucun mot de passe, jeton ou code LAN. Les rapports MQTT périodiques sont échantillonnés toutes les dix secondes, les réponses de commande sont toutes conservées.', 'This device uses LAN. Cloud account logs are separate. Requests, filtered responses and timings; no passwords, tokens or LAN access codes. Periodic MQTT reports are sampled every ten seconds; all command responses are retained.')}</p>
+    <label>${t('Rechercher dans les logs', 'Search logs')}<input type="search" data-machine-log-search placeholder="${t('chauffe, gcode_line, reason, MQTT…', 'heating, gcode_line, reason, MQTT…')}"></label>
+    ${entry.error ? `<p class="error" role="alert">${t('Journal indisponible. Vérifiez le stockage ou reconnectez-vous.', 'Log unavailable. Check storage or sign in again.')}</p>` : ''}
+    <small role="status">${entry.pending ? t('Lecture…', 'Reading…') : t('500 dernières entrées conservées · détails techniques ci-dessous.', 'Last 500 retained entries · technical details below.')}</small>
+    <div class="machine-log-entries">${entry.data ? entry.data.lines.slice().reverse().map(line => `<details open data-log-entry><summary>${esc(new Date(line.at).toLocaleString(state.lang))} · ${esc(logEventLabel(line.event))} ${line.details?.operation ? '· ' + esc(line.details.operation) : ''}</summary><pre>${esc(JSON.stringify(line.details ?? {}, null, 2))}</pre></details>`).join('') || `<p>${t('Aucune entrée conservée pour cette machine. Les opérations futures seront journalisées après cette mise à jour.', 'No retained entries for this device. Future operations will be logged after this update.')}</p>` : ''}</div>
+  </section>`;
+}
+async function loadMachineLogs(id) {
+  if (state.role !== 'admin') return;
+  const entry = machineLogState(id); if (entry.pending) return;
+  entry.pending = true; entry.error = '';
+  try {
+    const data = await api('machines/' + id + '/logs');
+    if (live.phase !== 'workshop') return;
+    entry.data = data;
+  } catch (error) { entry.error = error.code; }
+  finally {
+    entry.pending = false;
+    if (live.phase === 'workshop' && live.page === 'detail' && state.machine === id && machineTab() === 'logs') {
+      const panel = app.querySelector('[data-machine-log]'); if (panel) panel.outerHTML = machineLogPanel(machine(id));
+    }
+  }
+}
+app.addEventListener('click', event => {
+  if (event.target.closest('[data-action]')?.dataset.action === 'machine-logs-refresh') loadMachineLogs(state.machine);
+});
+app.addEventListener('input', event => {
+  if (!event.target.matches('[data-machine-log-search]')) return;
+  const text = event.target.value.toLocaleLowerCase();
+  app.querySelectorAll('[data-log-entry]').forEach(item => { item.hidden = !item.textContent.toLocaleLowerCase().includes(text); });
+});

@@ -42,7 +42,7 @@ function cloudPage() {
       ${btn('cloud-logs:' + account.id, t('Journal du compte', 'Account log'))}
       ${account.status !== 'disconnected' || account.challenge ? btn('cloud-disconnect:' + account.id, t('Déconnecter', 'Disconnect')) : ''}
       ${btn('cloud-delete:' + account.id, t('Supprimer', 'Delete'), '', 'danger')}</div>
-      ${account.status === 'connected' && account.checkedAt ? `<div class="cloud-scroll"><table><thead><tr><th>${t('Machine', 'Device')}</th><th>${t('Modèle', 'Model')}</th><th>${t('Numéro de série', 'Serial number')}</th><th>${t('État cloud', 'Cloud status')}</th><th>${t('Parc FabCore', 'FabCore fleet')}</th></tr></thead><tbody>${account.devices.map(device => `<tr><td>${esc(device.name)}</td><td>${esc(device.model || '—')}</td><td>${esc(device.serial)}</td><td>${esc(device.status || (device.online === true ? t('En ligne', 'Online') : device.online === false ? t('Hors ligne', 'Offline') : '—'))}</td><td>${state.machines.some(machine => machine.kind === 'bambu' && machine.serial === device.serial) ? t('Déjà ajoutée en LAN', 'Already added via LAN') : t('Non ajoutée', 'Not added')}</td></tr>`).join('') || `<tr><td colspan="5">${t('Aucune machine renvoyée par ce compte.', 'No devices returned by this account.')}</td></tr>`}</tbody></table></div>` : ''}
+      ${account.status === 'connected' && account.checkedAt ? `<div class="cloud-scroll"><table><thead><tr><th>${t('Machine', 'Device')}</th><th>${t('Modèle', 'Model')}</th><th>${t('Numéro de série', 'Serial number')}</th><th>${t('État d’impression renvoyé', 'Reported print state')}</th><th>${t('Parc FabCore', 'FabCore fleet')}</th></tr></thead><tbody>${account.devices.map(device => `<tr><td>${esc(device.name)}</td><td>${esc(device.model || '—')}</td><td>${esc(device.serial)}</td><td>${esc((device.status === 'FAIL' ? t('Échec d’impression signalé (FAIL)', 'Print failure reported (FAIL)') : device.status) || (device.online === true ? t('En ligne', 'Online') : device.online === false ? t('Hors ligne', 'Offline') : '—'))}</td><td>${state.machines.some(machine => machine.kind === 'bambu' && machine.serial === device.serial) ? t('Déjà ajoutée en LAN', 'Already added via LAN') : t('Non ajoutée · ajout cloud indisponible', 'Not added · cloud import unavailable')}</td></tr>`).join('') || `<tr><td colspan="5">${t('Aucune machine renvoyée par ce compte.', 'No devices returned by this account.')}</td></tr>`}</tbody></table></div>` : ''}
       ${account.truncated ? `<small>${t('Affichage limité aux 200 premières machines reçues.', 'Display limited to the first 200 devices received.')}</small>` : ''}
       </section>`;
     }).join('') || `<section class="panel"><p>${t('Aucun compte cloud. Ajoutez votre premier compte constructeur.', 'No cloud accounts. Add your first manufacturer account.')}</p></section>`}</div>`;
@@ -67,6 +67,18 @@ function cloudAccountForm(account) {
     <div class="row wrap">${btn('close', t('Annuler', 'Cancel'))}${verify ? btn('cloud-restart:' + account.id, t('Recommencer la connexion', 'Restart sign-in')) : ''}<button type="submit" class="primary">${account ? verify ? t('Vérifier', 'Verify') : t('Se connecter', 'Sign in') : t('Enregistrer', 'Save')}</button></div></form>`;
   if (!dialog.open) dialog.showModal();
 }
+function cloudLogLabel(line) {
+  const labels = {
+    'http-start': ['Requête envoyée à Bambu', 'Request sent to Bambu'], 'http-headers': ['Statut HTTP reçu', 'HTTP status received'],
+    'http-result': ['Réponse Bambu reçue', 'Bambu response received'], 'authenticated': ['Connexion au compte réussie', 'Account sign-in succeeded'],
+    'devices-read': ['Inventaire des machines reçu', 'Device inventory received'], 'challenge-required': ['Code de vérification demandé', 'Verification code requested'],
+    'operation-failed': ['Opération échouée', 'Operation failed'], 'login-throttled': ['Nouvelle connexion temporisée', 'New sign-in throttled'],
+    'account-created': ['Compte enregistré dans FabCore', 'Account saved in FabCore'], 'disconnected': ['Compte déconnecté', 'Account disconnected']
+  };
+  return (labels[line.event] ? t(...labels[line.event]) : line.event) +
+    (line.path ? ' · ' + (line.method ?? '') + ' ' + line.path : '') +
+    (line.status ? ' · HTTP ' + line.status : '') + (line.count !== undefined ? ' · ' + line.count + ' ' + t('machine(s)', 'device(s)') : '');
+}
 async function cloudClick(event) {
   const action = event.target.closest('[data-action]')?.dataset.action;
   if (!action?.startsWith('cloud-') || live.phase !== 'workshop' || state.role !== 'admin') return;
@@ -82,7 +94,7 @@ async function cloudClick(event) {
     if (kind === 'cloud-logs') {
       const data = await api('cloud-accounts/' + id + '/logs');
       if (live.phase !== 'workshop') return;
-      dialog.innerHTML = `<form method="dialog" class="stack"><h2>${t('Journal du compte', 'Account log')} · ${esc(account.name)}</h2><small>${t('300 dernières lignes · mots de passe, codes, jetons et cookies exclus.', 'Last 300 lines · passwords, codes, tokens and cookies excluded.')}</small><pre class="cloud-log">${esc(data.lines.map(line => JSON.stringify(line)).join('\n'))}</pre><div class="row wrap"><a class="button" href="/api/cloud-accounts/${id}/logs-download" download>${t('Télécharger le fichier log', 'Download log file')}</a>${btn('close', t('Fermer', 'Close'))}</div></form>`;
+      dialog.innerHTML = `<form method="dialog" class="stack"><h2>${t('Journal du compte', 'Account log')} · ${esc(account.name)}</h2><small>${t('300 dernières lignes · mots de passe, codes, jetons et cookies exclus.', 'Last 300 lines · passwords, codes, tokens and cookies excluded.')}</small><pre class="cloud-log">${esc(data.lines.map(line => new Date(line.at).toLocaleString(state.lang) + ' · ' + cloudLogLabel(line) + '\n' + JSON.stringify(line, null, 2)).join('\n\n'))}</pre><div class="row wrap"><a class="button" href="/api/cloud-accounts/${id}/logs-download" download>${t('Télécharger le fichier log', 'Download log file')}</a>${btn('close', t('Fermer', 'Close'))}</div></form>`;
       if (!dialog.open) dialog.showModal();
     } else {
       const operation = ({ 'cloud-devices': 'devices', 'cloud-disconnect': 'disconnect', 'cloud-delete': 'delete' })[kind];

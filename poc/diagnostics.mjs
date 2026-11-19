@@ -1,7 +1,8 @@
-export function createDiagnostics() {
+export function createDiagnostics({ journal } = {}) {
   const events = [];
   const machines = new Map();
-  function record(area, code, id = null) {
+  function record(area, code, id = null, details = {}) {
+    journal?.record(id, area, code, details);
     events.unshift({ at: new Date().toISOString(), area, code, id });
     if (events.length > 300) events.pop();
   }
@@ -11,6 +12,7 @@ export function createDiagnostics() {
   }
   return {
     record,
+    trace(id, event, details) { journal?.record(id, 'protocol', event, details); },
     report(id) { entry(id).reportAt = new Date().toISOString(); },
     frame(id) { entry(id).frameAt = new Date().toISOString(); },
     status(id, { status, issue }) {

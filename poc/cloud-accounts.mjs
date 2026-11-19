@@ -16,7 +16,30 @@ const fail = (code, status) => { throw new CloudError(code, status); };
 const text = (value, max) => typeof value === 'string' && value.length <= max ? value.trim() : '';
 const safeCode = value => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
-// Only explicitly selected fields are logged. Never serialize provider bodies or exceptions.
+// Retain unknown protocol fields for debugging, but never authentication secrets.
+export function safeCloudPayload(value, secrets = [], depth = 0, key = '') {
+  if (depth > 10) return '[depth limit]';
+  if (/password|passwd|token|secret|cookie|authorization|access.?code|api.?key|tfa.?key|csrf|auth.?key|credential|signature/i.test(key) ||
+      /^(code|tfaCode|verificationCode)$/i.test(key) && typeof value !== 'number') return '[redacted]';
+  if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    let result = value.slice(0, 1000);
+    for (const secret of secrets) if (typeof secret === 'string' && secret.length) result = result.replaceAll(secret, '[redacted]');
+    return result.replace(/Bearer\s+[^\s"<>]+/gi, 'Bearer [redacted]')
+      .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[redacted]')
+      .replace(/((?:token|password|authkey|passwd|signature|credential|code)=)[^&\s"<>]+/gi, '$1[redacted]');
+  }
+  if (Array.isArray(value)) return value.slice(0, 200).map(item => safeCloudPayload(item, secrets, depth + 1));
+  if (typeof value !== 'object') return undefined;
+  const result = {};
+  for (const [name, item] of Object.entries(value).slice(0, 100)) {
+    if (['__proto__', 'constructor', 'prototype'].includes(name)) continue;
+    result[name] = safeCloudPayload(item, secrets, depth + 1, name);
+  }
+  return result;
+}
+
+// Log sanitized protocol bodies and selected HTTP metadata, never raw credentials or exceptions.
 export function createCloudAccounts({ store, directory, fetcher = fetch, now = Date.now }) {
   const logDirectory = join(directory, 'cloud-logs');
   mkdirSync(logDirectory, { recursive: true, mode: 0o700 });
@@ -35,7 +58,9 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
     try {
       if (statSync(path).size >= 256 * 1024) renameSync(path, path + '.1');
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    appendFileSync(path, JSON.stringify({ at: new Date(now()).toISOString(), event, ...details }) + '\n', { mode: 0o600 });
+    let entry = { at: new Date(now()).toISOString(), event, ...details };
+    if (Buffer.byteLength(JSON.stringify(entry)) > 64 * 1024) entry = { at: entry.at, event, truncated: true, status: details.status, path: details.path, detailBytes: Buffer.byteLength(JSON.stringify(entry)) };
+    appendFileSync(path, JSON.stringify(entry) + '\n', { mode: 0o600 });
   }
   function key() {
     try { const bytes = readFileSync(keyFile); if (bytes.length !== 32) fail('cloud-storage'); return bytes; }
@@ -105,7 +130,8 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
   async function request(account, origin, path, { method = 'GET', body, token, headers = {}, cookies = false, signal } = {}) {
     if (signal?.aborted) fail('cloud-unavailable');
     const start = now();
-    log(account.id, 'http-start', { method, host: new URL(origin).hostname, path });
+    const secrets = [body?.password, body?.code, body?.tfaCode, body?.tfaKey, token, headers.Cookie, headers['x-bbl-csrf-token']];
+    log(account.id, 'http-start', { method, host: new URL(origin).hostname, path, request: safeCloudPayload(body ?? {}, secrets) });
     let response;
     try {
       response = await fetcher(origin + path, { method, redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000),
@@ -117,13 +143,14 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       fail('cloud-unavailable');
     }
     log(account.id, 'http-headers', { status: response.status, elapsedMs: now() - start });
-    let data = null;
-    // Limit provider responses before parsing and never expose the body to a caller or log.
+    let data = null; let bodyBytes = 0;
+    // Bound provider responses before parsing; only sanitized JSON is logged.
     try {
       if (response.body) {
         const reader = response.body.getReader(); let size = 0; const chunks = [];
         try {
           for (;;) { const item = await reader.read(); if (item.done) break; size += item.value.length; if (size > 1024 * 1024) fail('cloud-response'); chunks.push(Buffer.from(item.value)); }
+          bodyBytes = size;
           if (size) { try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* HTML challenges are reported by HTTP status. */ } }
         } finally { await reader.cancel().catch(() => {}); }
       }
@@ -132,7 +159,9 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
     log(account.id, 'http-result', { method, path, status: response.status, elapsedMs: now() - start,
       contentType: response.headers.get('content-type')?.includes('json') ? 'json' : 'other',
       code: safeCode(data?.code), loginType: ['verifyCode', 'tfa'].includes(data?.loginType) ? data.loginType : undefined,
-      tokenPresent: Boolean(data?.accessToken), deviceCount: Array.isArray(data?.devices) ? data.devices.length : undefined });
+      tokenPresent: Boolean(data?.accessToken), deviceCount: Array.isArray(data?.devices) ? data.devices.length : undefined,
+      bodyBytes, response: safeCloudPayload(data, [...secrets, data?.accessToken, data?.tfaKey]),
+      retryAfter: /^\d{1,6}$/.test(response.headers.get('retry-after') ?? '') ? Number(response.headers.get('retry-after')) : undefined });
     if (response.status === 429) fail('cloud-rate', 429);
     if (response.status === 401) fail('cloud-auth', 401);
     if (response.status === 403) fail('cloud-access', 403);
@@ -158,7 +187,7 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       return [{ serial, name: text(item.name, 120) || serial, model: text(item.dev_product_name, 120) || text(item.dev_model_name, 120),
         online: typeof item.online === 'boolean' ? item.online : null, status: text(item.print_status, 40) }];
     });
-    log(account.id, 'devices-read', { count: list.length, truncated: data.devices.length > 200 });
+    log(account.id, 'devices-read', { count: list.length, truncated: data.devices.length > 200, devices: list });
     return { devices: list, truncated: data.devices.length > 200, checkedAt: new Date(now()).toISOString(), issue: null };
   }
   async function complete(account, token, signal) {

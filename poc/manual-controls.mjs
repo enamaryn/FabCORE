@@ -64,13 +64,15 @@ export function validateControl(data, controls) {
   return null;
 }
 
-export function createManualControls(kind, { fetcher = fetch, send, request, read, wait = delay, confirmationAttempts = 25 } = {}) {
+export function createManualControls(kind, { fetcher = fetch, send, request, read, wait = delay, confirmationAttempts = 25, trace } = {}) {
   async function confirmHeat(machine, id, value) {
     // An acknowledgement alone does not prove the setpoint changed.
     for (let attempt = 0; attempt < confirmationAttempts; attempt++) {
       await wait(200);
       const reported = await snapshot(machine);
-      if (reported.heaters.find(item => item.id === id)?.target === value) return { outcome: 'confirmed' };
+      const actual = reported.heaters.find(item => item.id === id)?.target;
+      if (attempt === 0 || attempt === confirmationAttempts - 1 || actual === value) trace?.(machine.id, 'heater-confirmation', { id, expected: value, actual, attempt, confirmed: actual === value });
+      if (actual === value) return { outcome: 'confirmed' };
     }
     throw new Error('heater-unconfirmed');
   }
