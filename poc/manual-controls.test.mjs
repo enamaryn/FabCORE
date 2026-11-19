@@ -63,10 +63,10 @@ test('OctoPrint : consignes et jog natifs sans inventer éclairage ou retour ven
   assert.deepEqual(sent.at(-1)[1], { command: 'jog', z: -0.1, absolute: false, speed: 120 });
 });
 
-test('CC2 : lecture réelle et aucune commande activée sur la base de numéros commentés', () => {
-  const state = reportedControls('elegoo', { led: { status: 1 }, extruder: { temperature: 25, target: 200 }, fans: { fan: { speed: 40, rpm: 1234 } } });
+test('CC2 : chauffe uniquement à l’arrêt ou en impression, autres contrôles en lecture seule', () => {
+  const state = reportedControls('elegoo', { machine_status: { status: 1 }, led: { status: 1 }, extruder: { temperature: 25, target: 200 }, fans: { fan: { speed: 40, rpm: 1234 } } });
   assert.equal(state.lights[0].value, true); assert.equal(state.heaters[0].target, 200); assert.equal(state.fans[0].rpm, 1234);
-  assert.equal(validateControl({ action: 'heat', id: 'nozzle', value: 200, confirm: true }, state), null);
+  assert.equal(validateControl({ action: 'heat', id: 'nozzle', value: 200, confirm: true }, state).value, 200);
   assert.equal(validateControl({ action: 'light', id: 'main', value: false, confirm: true }, state), null);
 });
 
@@ -100,4 +100,46 @@ test('Bambu : format de température compact, zéro valide et valeurs invalides 
   for (const temp of [null, -1, 0xffffffff, '12', true, 0x100000000, 2.5]) {
     assert.equal(reportedControls('bambu', { bed_target_temper: 55, device: { bed: { info: { temp } } } }).heaters[1].target, 55);
   }
+});
+
+test('CC2 : chauffe native isolée par élément et arrêt à zéro, confirmation par retour réel', async () => {
+  for (const [id, value] of [['nozzle', 200], ['bed', 60], ['nozzle', 0], ['bed', 0]]) {
+    const state = reportedControls('elegoo', { machine_status: { status: 1 }, extruder: { temperature: 22, target: 100 }, heater_bed: { temperature: 20, target: 40 } });
+    const sent = []; let polls = 0;
+    const control = createManualControls('elegoo', { read: () => state, request: async (...args) => { sent.push(args); return true; },
+      wait: async () => { if (++polls === 2) state.heaters.find(item => item.id === id).target = value; }, confirmationAttempts: 3 });
+    const result = await control.execute(machine, validateControl({ action: 'heat', id, value, confirm: true }, state), state);
+    assert.deepEqual(result, { outcome: 'confirmed' });
+    assert.deepEqual(sent, [[machine, 1028, { [id === 'nozzle' ? 'extruder' : 'heater_bed']: value }]]);
+    assert.equal(state.heaters.find(item => item.id !== id).target, id === 'nozzle' ? 40 : 100);
+    assert.equal(state.heaters[0].current, 22); assert.equal(polls, 2);
+  }
+});
+
+test('CC2 : refus, accusé sans consigne et perte de réponse sans renvoi', async () => {
+  const state = reportedControls('elegoo', { machine_status: { status: 1 }, extruder: { temperature: 22, target: 0 } });
+  const command = { action: 'heat', id: 'nozzle', value: 200 };
+  for (const outcome of ['refused', 'no-echo', 'timeout']) {
+    let sends = 0;
+    const control = createManualControls('elegoo', { read: () => state, request: async () => { sends++; if (outcome === 'timeout') throw new Error('command-unconfirmed'); return outcome !== 'refused'; }, wait: async () => {}, confirmationAttempts: 2 });
+    if (outcome === 'refused') assert.deepEqual(await control.execute(machine, command, state), { outcome: 'rejected' });
+    else await assert.rejects(control.execute(machine, command, state), outcome === 'no-echo' ? /heater-unconfirmed/ : /command-unconfirmed/);
+    assert.equal(sends, 1); assert.equal(state.heaters[0].target, 0);
+  }
+});
+
+test('CC2 : limites conservées, calibration/chargement et contrôles non implémentés bloqués', async () => {
+  const report = { machine_status: { status: 1 }, extruder: { target: 0 }, heater_bed: { target: 0 } };
+  const state = reportedControls('elegoo', report);
+  for (const [id, value] of [['nozzle', 261], ['bed', 101], ['bed', -1], ['bed', 40.5], ['other', 20]]) {
+    assert.equal(validateControl({ action: 'heat', id, value, confirm: true }, state), null);
+  }
+  for (const status of [0, 3, 4, 5, 6, 10, 13, undefined]) {
+    const controls = reportedControls('elegoo', { ...report, machine_status: { status } });
+    assert.equal(validateControl({ action: 'heat', id: 'bed', value: 60, confirm: true }, controls), null);
+  }
+  let sends = 0;
+  const control = createManualControls('elegoo', { request: async () => { sends++; return true; } });
+  assert.deepEqual(await control.execute(machine, { action: 'light', id: 'main', value: true }, state), { outcome: 'rejected' });
+  assert.equal(sends, 0);
 });

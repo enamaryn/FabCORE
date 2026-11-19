@@ -5,6 +5,16 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** dérouler la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Chauffe native CC2 · 19 novembre 2026
+
+**État : ouvert, branche `feat/cc2-heater-controls`, non déployé.** La buse et le plateau des CC2, avec ou sans CANVAS, deviennent réglables via la méthode MQTT native `1028`. Un seul champ est envoyé par action (`extruder` ou `heater_bed`), y compris zéro pour Couper ; aucune modification implicite de l’autre chauffage. Session existante, identifiant de transaction corrélé, QoS 0 sans rétention et sans rejeu. Plafonds logiciels inchangés (260/100 °C). Chauffe disponible uniquement à l’arrêt ou en fabrication/pause, confirmation supplémentaire pendant fabrication, droits administrateur et protections HTTP existantes.
+
+Après une réponse sans erreur, la consigne remontée doit correspondre à la demande dans les cinq secondes ; sinon « consigne non confirmée ». Un contrôle hors ligne ou sans rapport récent n’est pas utilisé pour confirmer une action. Chargement filament, calibration et autres opérations n’activent pas la chauffe. Lumière, ventilateurs et déplacements CC2 restent non activés.
+
+Vérifications : 88 tests réussis, syntaxe JavaScript et diff vérifiés. Tests de commandes natives isolées, arrêt à zéro, refus, absence de confirmation, droits de lecture dans l’interface, corrélation MQTT, session unique et cache périmé.
+
+Sources : paramètres du SDK officiel elegoo-link (construction existante mais mapping commenté), [essai MQTT pycentauri sur firmware 01.03.02.51](https://github.com/bjan/pycentauri/blob/main/docs/PROTOCOL.md#centauri-carbon-2-cc2-protocol-notes), [commandes elegoo-web](https://github.com/runnane/elegoo-web/blob/main/src/ui/controls.ts). Aucune commande matérielle envoyée pendant le développement. **Prochaine action après fusion/mise à jour :** vérifier séparément la consigne buse, la consigne plateau, puis Couper sur la CC2 réelle ; confirmer à l’écran et dans FabCore. L’acceptation sur le firmware de Valentin reste à valider.
+
 ## Humidité des modules filament · 19 novembre 2026
 
 **État : ouvert, branche `feat/filament-humidity`, non déployé.** Une goutte et le pourcentage réel sont affichés dans l’en-tête de chaque module de la fiche machine. Bambu utilise `humidity_raw` (0–100), jamais l’indice `humidity` (1–5). Les mesures absentes ou invalides ne créent aucun indicateur. Le rendu commun accepte la mesure de tout connecteur qui la fournit ; aucun champ d’humidité vérifié dans le SDK CANVAS Elegoo consulté, donc pas de mesure inventée pour les CC2. Les rapports Bambu partiels d’un module conservent ses autres champs.
@@ -30,7 +40,7 @@ Vérifications : 78 tests réussis (dont onglets isolés, quatre modules et sais
 | Bambu P2S | Caisson, si remonté | Consignes et coupure | Non exposés dans ce jalon | Pièce, auxiliaire et caisson si remontés |
 | Klipper/Moonraker | Objets LED déclarés (led, neopixel, dotstar, pca9533, pca9632) | Chauffages présents | Oui, pas 0,1/1/10 mm ; origine requise avant jog ; limites vérifiées | fan et fan_generic déclarés |
 | OctoPrint | Pas de commande universelle | Chauffages remontés | Jog et origine natifs ; contrôle des limites confié au firmware | Pas de retour standard exploité |
-| Elegoo CC2 | Lecture seule | Lecture seule | Non exposés | Lecture seule, vitesse et tr/min si remontés |
+| Elegoo CC2 | Lecture seule | Buse et plateau via MQTT 1028 (recette matérielle à faire) | Non exposés | Lecture seule, vitesse et tr/min si remontés |
 | CC1, PrusaLink, xTool M2 | Aucun nouveau contrôle dans ce jalon | — | — | — |
 
 Plafonds logiciels : buse 260 °C, plateau 100 °C, abaissés si Klipper déclare une limite inférieure. Ces plafonds ne remplacent pas les protections firmware. Les consignes et retours d’état restent distincts ; jamais d’état optimiste. Seuls les administrateurs agissent, les observateurs lisent. Déplacements/origine bloqués pendant impression et pause, confirmation d’origine dans l’interface, confirmation supplémentaire pour chauffe/ventilateur pendant fabrication. Validation serveur, verrous communs aux commandes/envois, 30 actions/minute et intervalle de 500 ms, aucun rejeu automatique après perte de réponse. Les lectures du panneau sont espacées de dix secondes ; les sessions MQTT existantes restent partagées.

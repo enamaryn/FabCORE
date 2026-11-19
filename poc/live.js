@@ -21,9 +21,9 @@ const problem = (code) => ({
   forbidden: t('Cette action est réservée à l’administrateur.', 'Only an administrator can perform this action.'),
   'command-busy': t('Une commande est déjà en cours sur cette imprimante.', 'A command is already in progress for this printer.'),
   'command-state': t('L’état actuel de l’imprimante ne permet pas cette commande.', 'The current printer state does not allow this command.'),
-  'command-rejected': t('Moonraker a refusé la commande.', 'Moonraker rejected the command.'),
+  'command-rejected': t('La machine a refusé la commande.', 'The machine rejected the command.'),
   'command-unconfirmed': t('État non confirmé. Vérifiez l’imprimante avant de réessayer.', 'State not confirmed. Check the printer before retrying.'),
-  'heater-unconfirmed': t('La machine a accusé réception, mais n’a pas confirmé la consigne de chauffe. Vérifiez la consigne sur son écran et les autorisations de commande LAN.', 'The machine acknowledged the request but did not confirm the heating setpoint. Check its screen and LAN control permissions.'),
+  'heater-unconfirmed': t('La machine a accusé réception, mais n’a pas confirmé la consigne de chauffe. Vérifiez la consigne sur son écran.', 'The machine acknowledged the request but did not confirm the heating setpoint. Check the setpoint on its screen.'),
   'files-unavailable': t('La machine ne donne pas accès à ses fichiers. Vérifiez la connexion et la clé API.', 'The machine does not give access to its files. Check the connection and API key.'),
   'upload-rejected': t('La machine a refusé le fichier.', 'The machine rejected the file.'),
   'upload-failed': t('Envoi interrompu. Vérifiez la liste avant de recommencer.', 'Upload interrupted. Check the list before trying again.'),
@@ -128,7 +128,7 @@ function diagnosticMessage(code) {
     accepted: t('Commande G-code acceptée.', 'G-code command accepted.'),
     confirmed: t('Consigne de chauffe confirmée par la machine.', 'Heating setpoint confirmed by the machine.'),
     'heater-unconfirmed': t('Consigne de chauffe non confirmée malgré l’accusé de réception.', 'Heating setpoint not confirmed despite acknowledgement.'),
-    rejected: t('Commande G-code refusée.', 'G-code command rejected.'),
+    rejected: t('Commande refusée par la machine.', 'Command rejected by the machine.'),
     unconfirmed: t('Commande G-code non confirmée.', 'G-code command not confirmed.')
   })[code] || t(...(statusLabels[code] ?? [code, code]));
 }

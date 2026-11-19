@@ -30,8 +30,9 @@ export function reportedControls(kind, report) {
       }
     }
   } else if (kind === 'elegoo') {
-    if (report.extruder) out.heaters.push(heater('nozzle', report.extruder.temperature, report.extruder.target, 260, false));
-    if (report.heater_bed) out.heaters.push(heater('bed', report.heater_bed.temperature, report.heater_bed.target, 100, false));
+    const canHeat = [1, 2].includes(report.machine_status?.status);
+    if (report.extruder) out.heaters.push(heater('nozzle', report.extruder.temperature, report.extruder.target, 260, canHeat));
+    if (report.heater_bed) out.heaters.push(heater('bed', report.heater_bed.temperature, report.heater_bed.target, 100, canHeat));
     if ([0, 1].includes(report.led?.status)) out.lights.push({ id: 'main', value: report.led.status === 1, writable: false });
     for (const [id, fan] of Object.entries(report.fans ?? {})) if (['fan', 'aux_fan', 'box_fan', 'heater_fan', 'controller_fan'].includes(id)) {
       out.fans.push({ id, percent: percent(fan.speed), rpm: numeric(fan.rpm), writable: false });
@@ -63,7 +64,16 @@ export function validateControl(data, controls) {
   return null;
 }
 
-export function createManualControls(kind, { fetcher = fetch, send, read, wait = delay, confirmationAttempts = 25 } = {}) {
+export function createManualControls(kind, { fetcher = fetch, send, request, read, wait = delay, confirmationAttempts = 25 } = {}) {
+  async function confirmHeat(machine, id, value) {
+    // An acknowledgement alone does not prove the setpoint changed.
+    for (let attempt = 0; attempt < confirmationAttempts; attempt++) {
+      await wait(200);
+      const reported = await snapshot(machine);
+      if (reported.heaters.find(item => item.id === id)?.target === value) return { outcome: 'confirmed' };
+    }
+    throw new Error('heater-unconfirmed');
+  }
   async function call(machine, path, body) {
     if (moonrakerOrigin(machine.origin) !== machine.origin) throw new Error('invalid-machine');
     const response = await fetcher(machine.origin + path, { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(10000),
@@ -104,16 +114,13 @@ export function createManualControls(kind, { fetcher = fetch, send, read, wait =
     if (kind === 'bambu') {
       const ok = action === 'light' ? await send(machine, 'ledctrl', { led_node: 'chamber_light', led_mode: value ? 'on' : 'off', led_on_time: 500, led_off_time: 500, loop_times: 1, interval_time: 1000 }, 'system')
         : await send(machine, 'gcode_line', { param: action === 'heat' ? `${id === 'nozzle' ? 'M104' : 'M140'} S${value}\n` : `M106 P${{ part: 1, aux: 2, chamber: 3 }[id]} S${Math.round(value / 100 * 255)}\n` });
-      if (ok && action === 'heat') {
-        // A MQTT acknowledgement alone does not prove the setpoint changed.
-        for (let attempt = 0; attempt < confirmationAttempts; attempt++) {
-          await wait(200);
-          const reported = await snapshot(machine);
-          if (reported.heaters.find(item => item.id === id)?.target === value) return { outcome: 'confirmed' };
-        }
-        throw new Error('heater-unconfirmed');
-      }
+      if (ok && action === 'heat') return confirmHeat(machine, id, value);
       return { outcome: ok ? 'accepted' : 'rejected' };
+    }
+    if (kind === 'elegoo') {
+      if (action !== 'heat' || !validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
+      const ok = await request(machine, 1028, { [id === 'nozzle' ? 'extruder' : 'heater_bed']: value });
+      return ok ? confirmHeat(machine, id, value) : { outcome: 'rejected' };
     }
     if (kind === 'octoprint') {
       if (action === 'heat') await call(machine, id === 'nozzle' ? '/api/printer/tool' : '/api/printer/bed', id === 'nozzle' ? { command: 'target', targets: { tool0: value } } : { command: 'target', target: value });

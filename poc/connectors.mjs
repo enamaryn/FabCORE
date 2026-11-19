@@ -85,7 +85,7 @@ const definitions = {
     const read = readCC2 ?? monitor.read;
     const { createElegooFiles } = await import('./elegoo-files.mjs');
     return {
-      read, controlState: monitor?.controlState, close: monitor?.close, command: (...args) => monitor?.command(...args),
+      read, controlState: monitor?.controlState, request: monitor?.request, close: monitor?.close, command: (...args) => monitor?.command(...args),
       files: retainedFiles(join(directory, 'files'), createElegooFiles((...args) => monitor.request(...args), { fetcher: fetchFiles })),
       forget(id, changed) { if (changed) monitor?.forget(id); },
       async probe(machine, options) {
@@ -149,7 +149,7 @@ export function createConnectorRegistry(options, definition = connectorDefinitio
         pending.set(kind, Promise.resolve().then(() => entry.load(options)).then(async connector => {
           if (entry.controls) {
             const { createManualControls } = await import('./manual-controls.mjs');
-            connector.control = createManualControls(kind, { fetcher: options.fetchFiles, send: (...args) => connector.send(...args), read: connector.controlState });
+            connector.control = createManualControls(kind, { fetcher: options.fetchFiles, send: (...args) => connector.send(...args), request: (...args) => connector.request(...args), read: connector.controlState });
           }
           if (closed) { connector.close?.(); return null; }
           loaded.set(kind, connector);
