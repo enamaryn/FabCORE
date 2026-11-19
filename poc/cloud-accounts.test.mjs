@@ -61,18 +61,18 @@ test('cloud : challenge email lié à la session, aucun mot de passe conservé, 
   const calls = [];
   const { manager, directory } = await setup(ctx, async (url, options) => {
     const body = options.body ? JSON.parse(options.body) : null; calls.push([url, body]);
-    if (url.endsWith('/sendemail/code')) return Response.json({ success: true });
+    assert.equal(url.endsWith('/sendemail/code'), false, 'aucune seconde demande de code');
     if (body?.password) return Response.json({ loginType: 'verifyCode', accessToken: '' });
     if (body?.code) return Response.json({ accessToken: token });
     return Response.json(responseDevices);
   });
   const account = manager.add(metadata);
   assert.equal((await manager.login(account.id, { password: 'SECRET-PASS' }, 'owner')).challenge, 'email');
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
   await assert.rejects(manager.verify(account.id, { code: '123456' }, 'different-owner'), /forbidden/);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
   assert.equal((await manager.verify(account.id, { code: '123456' }, 'owner')).status, 'connected');
-  assert.equal(calls[2][1].password, undefined);
+  assert.equal(calls[1][1].password, undefined);
   assert.doesNotMatch(await readFile(join(directory, 'state.json'), 'utf8'), /SECRET-PASS|123456/);
   assert.doesNotMatch(manager.logs(account.id), /SECRET-PASS|123456/);
   // Expiration without waiting: inject a controllable clock on a fresh manager.
@@ -197,6 +197,7 @@ test('cloud UI : inventaire réel échappé, plusieurs comptes, marques planifi�
       { id: 'two', provider: 'creality', name: 'Planned', devices: [], status: 'disconnected', region: 'global' }] };
   const html = sandbox.renderCloud(); assert.doesNotMatch(html, /<script>/); assert.match(html, /Journal du compte/);
   assert.match(html, /non encore intégré/); assert.doesNotMatch(html, /cloud-login:two/);
+  sandbox.form(); assert.match(sandbox.dialog.innerHTML, /Adresse email cloud/); assert.doesNotMatch(sandbox.dialog.innerHTML, /Adresse email du compte constructeur/);
   sandbox.form(sandbox.ui.data.accounts[0]); assert.match(sandbox.dialog.innerHTML, /Google/); assert.match(sandbox.dialog.innerHTML, /jamais celui de Google/);
   assert.doesNotMatch(sandbox.dialog.innerHTML, /value=".*password/);
 });
@@ -211,4 +212,23 @@ test('cloud : déconnexion FabCore pendant le login empêche la conservation tar
   await assert.rejects(attempt, /cloud-unavailable/);
   assert.equal(store.state.cloudAccounts[0].secret, undefined);
   assert.equal(manager.list().accounts[0].status, 'disconnected');
+});
+
+
+test('cloud : login unique déclenche directement le champ code, nouvel essai temporisé sans bloquer la vérification', async ctx => {
+  let calls = 0;
+  const { manager } = await setup(ctx, async (url, options) => {
+    calls++;
+    assert.equal(url.endsWith('/sendemail/code'), false);
+    if (url.endsWith('/login')) return Response.json(JSON.parse(options.body).code ? { accessToken: token } : { loginType: 'verifyCode' });
+    return Response.json(responseDevices);
+  });
+  const account = manager.add(metadata);
+  assert.equal((await manager.login(account.id, { password: 'SECRET_PASSWORD' }, 'owner')).challenge, 'email');
+  assert.equal(calls, 1);
+  await assert.rejects(manager.login(account.id, { password: 'SECRET_PASSWORD' }, 'owner'), /cloud-login-wait/);
+  assert.equal(calls, 1, 'le cooldown ne provoque aucun appel constructeur');
+  assert.equal(manager.list().accounts[0].challenge, 'email', 'le code reste utilisable');
+  assert.equal((await manager.verify(account.id, { code: '123456' }, 'owner')).status, 'connected');
+  assert.equal(calls, 3, 'login, vérification et inventaire uniquement');
 });

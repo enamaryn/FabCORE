@@ -24,6 +24,7 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
   const busy = new Set();
   const authRequests = new Map();
   const limits = new Map();
+  const loginAttempts = new Map();
   const timers = new Map();
   const keyFile = join(directory, 'cloud-secret.key');
   const entries = () => store.state.cloudAccounts ?? [];
@@ -189,13 +190,16 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
     login(id, data, owner, signal) { return locked(id, async signal => {
       const account = find(id); const { api } = bases(account);
       if (!account.email || typeof data.password !== 'string' || !data.password || data.password.length > 256) fail('cloud-invalid', 400);
+      const previous = loginAttempts.get(id);
+      if (previous !== undefined && now() - previous < 60_000) { log(id, 'login-throttled'); fail('cloud-login-wait', 429); }
+      loginAttempts.set(id, now());
       clearPending(id);
       // A new authentication attempt explicitly disconnects the previous credential.
       update(account, { secret: undefined, status: 'disconnected', devices: [], issue: null });
       const { data: result } = await request(account, api, '/v1/user-service/user/login', { method: 'POST', body: { account: account.email, password: data.password, apiError: '' }, signal });
       if (result.accessToken) return complete(find(id), result.accessToken, signal);
       if (result.loginType === 'verifyCode') {
-        await request(account, api, '/v1/user-service/user/sendemail/code', { method: 'POST', body: { email: account.email, type: 'codeLogin' }, signal });
+        // Bambu already dispatches the code during login. Do not send a second email.
         challenge(id, { owner, kind: 'email' });
       } else if (result.loginType === 'tfa' && typeof result.tfaKey === 'string' && result.tfaKey.length <= 16384) {
         challenge(id, { owner, kind: 'totp', tfaKey: result.tfaKey });
@@ -232,7 +236,7 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       if (remove) {
         store.save({ ...store.state, cloudAccounts: entries().filter(item => item.id !== id) });
         for (const suffix of ['', '.1']) { try { unlinkSync(logPath(id) + suffix); } catch (error) { if (error.code !== 'ENOENT') throw error; } }
-        limits.delete(id); return { deleted: true };
+        limits.delete(id); loginAttempts.delete(id); return { deleted: true };
       }
       log(id, 'disconnected');
       return publicAccount(update(account, { secret: undefined, status: 'disconnected', devices: [], issue: null }));
