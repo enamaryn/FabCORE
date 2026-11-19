@@ -183,7 +183,7 @@ Le panneau **Contrôles** affiche les états d’éclairage, températures actue
 
 Sur Klipper/OctoPrint, les déplacements utilisent des pas de 0,1, 1 ou 10 mm ; la prise d’origine demande confirmation. Ils sont interdits pendant une impression ou une pause. Klipper exige les axes référencés et vérifie les limites remontées ; OctoPrint confie ces vérifications au firmware. Une modification de chauffe/ventilateur pendant fabrication demande une confirmation supplémentaire. Aucun état optimiste ni renvoi automatique en cas de réponse perdue : vérifier la machine avant de recommencer.
 
-La [matrice du POC](../docs/POC.md#contrôles-manuels--19-novembre-2026) précise les capacités : P2S lumière/chauffe/ventilateurs, Klipper selon objets déclarés, OctoPrint chauffe/déplacement, CC2 retours seuls. Les commandes CC2 correspondantes restent commentées dans le SDK ; aucun bouton spéculatif n’est activé. Ce jalon n’ajoute pas de pilotage manuel xTool, CC1 ou PrusaLink.
+La [matrice du POC](../docs/POC.md#contrôles-manuels--19-novembre-2026) précise les capacités : P2S lumière/chauffe/ventilateurs, Klipper selon objets déclarés, OctoPrint chauffe/déplacement, CC2 chauffe buse/plateau via la commande MQTT native 1028 (recette matérielle à faire). Les CC2 proposent Appliquer et Couper séparément ; une consigne n’est confirmée qu’après son retour dans la télémétrie. Lumière, ventilateurs et déplacements CC2 restent non activés. Ce jalon n’ajoute pas de pilotage manuel xTool, CC1 ou PrusaLink.
 
 ### Agencement de la fiche machine
 

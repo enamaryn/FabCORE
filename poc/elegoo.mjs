@@ -181,6 +181,7 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
       clearTimeout(watchdog);
       entry.close = null;
       entry.rpc = null;
+      entry.controls = undefined;
       for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error('command-unconfirmed')); }
       pending.clear();
       client.end(true);
@@ -259,12 +260,17 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
       if (report.issue === 'elegoo-report') return;
       clearTimeout(watchdog);
       lastReport = now();
+      entry.controlAt = lastReport;
       diagnostics?.report(machine.id);
       entry.current = { ...entry.current, ...report, serial: machine.serial };
     });
   }
   return {
-    controlState(machine) { return sessions.get(machine.id)?.controls; },
+    controlState(machine) {
+      const entry = sessions.get(machine.id);
+      if (!entry?.rpc || now() - entry.controlAt > 30000) return undefined;
+      return entry.controls;
+    },
     request(machine, method, params = {}) {
       const entry = sessions.get(machine.id);
       if (!entry?.rpc) throw new Error('elegoo-connection');

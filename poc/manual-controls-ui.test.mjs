@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { connectorCatalog } from './connectors.mjs';
+import { reportedControls } from './manual-controls.mjs';
 
 test('panneau contrôles : lecture observateur, actions administrateur et capacités réelles', () => {
   const source = readFileSync(new URL('./live.js', import.meta.url), 'utf8');
@@ -23,4 +24,12 @@ test('panneau contrôles : lecture observateur, actions administrateur et capaci
   sandbox.state.role = 'admin';
   html = sandbox.panel({ ...machine, status: 'offline' });
   assert.match(html, /data-action="manual-light:0:off" disabled/);
+  const cc2 = { id: 'cc2', kind: 'elegoo', status: 'ready' };
+  sandbox.entry(cc2.id).data = { status: 'ready', ...reportedControls('elegoo', { machine_status: { status: 1 }, extruder: { temperature: 22, target: 0 }, heater_bed: { temperature: 20, target: 0 } }) };
+  html = sandbox.panel(cc2);
+  assert.equal((html.match(/data-manual-form="heat"/g) ?? []).length, 2);
+  assert.doesNotMatch(html, /data-manual-form="fan"|manual-light:/);
+  sandbox.state.role = 'viewer'; html = sandbox.panel(cc2);
+  assert.match(html, /22 °C/); assert.doesNotMatch(html, /data-manual-form=/);
+
 });
