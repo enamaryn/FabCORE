@@ -140,6 +140,12 @@ Tickets [#31](https://github.com/enamaryn/FabCORE/issues/31) et [#32](https://gi
 - [x] POC-09.3 Suivi en direct : couche en cours, partie imprimée et position de la buse.
 - [x] POC-09.4 Terminal G-code administrateur : réponses Moonraker, statut « Acceptée » OctoPrint, confirmation pendant une impression, débit borné, aucun renvoi automatique.
 
+## Liste des fichiers · ergonomie du 19 novembre 2026
+
+Recherche par nom/chemin dans la liste chargée, tri récent/ancien ou A–Z, cinq fichiers affichés par défaut et choix de vingt par page, navigation précédente/suivante et compteur de résultats. Les réglages sont propres à chaque machine durant la session. Les actions Visualiser et Lancer conservent la cible d’origine après filtrage, tri ou pagination. Les dates inconnues restent en dernier, sans date inventée.
+
+Pour Elegoo, la liste reste celle des fichiers envoyés par FabCore : son état vide ne signifie pas que la machine ne contient aucun fichier préinstallé. Le libellé est corrigé en conséquence. Recette navigateur sur le LXC à confirmer ; aucun inventaire natif CC2 ajouté par ce changement. La demande d’inventaire natif pour toutes les familles est consignée dans PRODUCT.md et MVP-09.4/09.5. Dans le SDK elegoo-link consulté, GET_FILE_LIST/1044 est commenté ; cette référence ne suffit pas à implémenter une lecture fiable des fichiers de démonstration.
+
 ## POC-10 · Recette matérielle sur le LXC
 
 ### Extension fichiers et commandes · en développement

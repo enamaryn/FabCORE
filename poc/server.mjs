@@ -453,7 +453,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (req.method === 'GET' && route === 'files') {
         try {
           const list = await files.list(machine);
-          return answer(res, 200, { files: list.sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0)).slice(0, 300) });
+          return answer(res, 200, { files: list.sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0)).slice(0, 300), ...(list.length > 300 ? { truncated: true } : {}) });
         } catch { return error(res, 502, 'files-unavailable'); }
       }
       if (req.method === 'GET' && route === 'file') {
