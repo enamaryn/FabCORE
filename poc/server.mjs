@@ -99,7 +99,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -107,7 +107,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const secure = publicUrl.protocol === 'https:';
   const allowedHost = publicUrl.host;
   const store = openStore(directory);
-  const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch });
+  const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt });
   const token = store.state.admin ? null : (activationToken ?? randomBytes(24).toString('base64url'));
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
   const sessions = new Map();
@@ -115,7 +115,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const machineLogs = createMachineLogs({ directory, machines: () => store.state.machines });
   const diagnostics = createDiagnostics({ journal: machineLogs });
   diagnostics.record('server', 'started');
-  const connectors = createConnectorRegistry({ directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera });
+  const connectors = createConnectorRegistry({ directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera, cloud });
   const snapshot = monitor(async (machine) => {
     const connector = await connectors.get(machine.kind ?? 'klipper');
     const { serial, fingerprint, ...telemetry } = await connector.read(machine);
@@ -230,7 +230,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         ...(secure && oidc && store.state.admin ? { oidcEnabled: true } : {})
       });
     }
-    const cloudRoute = path.match(/^\/api\/cloud-accounts(?:\/([a-f0-9-]{36})\/(login|verify|devices|disconnect|delete|logs|logs-download))?$/);
+    const cloudRoute = path.match(/^\/api\/cloud-accounts(?:\/([a-f0-9-]{36})\/(login|verify|devices|disconnect|delete|logs|logs-download|telemetry-start|telemetry-stop|import))?$/);
     if (cloudRoute) {
       if (!viewer) return error(res, 401, 'sign-in');
       if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
@@ -254,6 +254,8 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         if (!id) result = cloud.add(data);
         else if (action === 'login') result = await cloud.login(id, data, activeSession, abort.signal);
         else if (action === 'verify') result = await cloud.verify(id, data, activeSession, abort.signal);
+        else if (action === 'telemetry-start' || action === 'telemetry-stop') result = await cloud.telemetry(id, action === 'telemetry-start');
+        else if (action === 'import') result = await cloud.importDevice(id, data.serial);
         else if (action === 'devices') result = await cloud.refresh(id, abort.signal);
         else if (action === 'disconnect' || action === 'delete') result = cloud.disconnect(id, action === 'delete');
         else return error(res, 405, 'missing');
@@ -278,7 +280,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (!machine) return error(res, 404, 'missing');
       try {
         const content = machineLogs.read(machine.id);
-        if (machineLogRoute[2] === 'logs') return answer(res, 200, { machine: { id: machine.id, name: machine.name, kind: machine.kind, mode: 'lan' }, lines: content.trim().split('\n').filter(Boolean).slice(-500).map(line => JSON.parse(line)) });
+        if (machineLogRoute[2] === 'logs') return answer(res, 200, { machine: { id: machine.id, name: machine.name, kind: machine.kind, mode: machine.mode ?? 'lan' }, lines: content.trim().split('\n').filter(Boolean).slice(-500).map(line => JSON.parse(line)) });
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': `attachment; filename="fabcore-machine-${machine.id}.log"` });
         return res.end(content);
       } catch { return error(res, 503, 'logs-unavailable'); }
@@ -412,7 +414,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         diagnostics.status(machine.id, telemetry);
         return {
           id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial,
-          model: definition?.model ?? connectorCatalog.klipper.model,
+          model: machine.kind === 'bambu-cloud' ? machine.model : definition?.model ?? connectorCatalog.klipper.model,
           cameraOpen: [...cameraStreams.values()].some(stream => stream.machineId === machine.id && [...stream.viewers.values()].some(({ owner }) => owner === activeSession)),
           ...telemetry
         };
@@ -712,6 +714,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const connection = definition?.configure(data, existing);
       if (!name || !connection) return error(res, 400, 'machine-invalid');
       const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
+      if (kind === 'bambu' && store.state.machines.some(item => item.id !== machine.id && ['bambu', 'bambu-cloud'].includes(item.kind) && item.serial === machine.serial)) return error(res, 409, 'cloud-machine-exists');
       const testing = path === '/api/machines/test';
       const pairing = path === '/api/machines/pair';
       if (pairing) {

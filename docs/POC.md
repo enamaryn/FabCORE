@@ -5,6 +5,10 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** traiter l’incident urgent [#78](https://github.com/enamaryn/FabCORE/issues/78), puis le pilote cloud [#79](https://github.com/enamaryn/FabCORE/issues/79), avant de reprendre la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Suivi cloud Bambu · températures et AMS
+
+En revue sur `feat/cloud-telemetry` : suivi MQTT cloud lecture seule, activable par compte et persistant après redémarrage. Températures buse/plateau et consignes, AMS/couleurs/matières/humidité, modules/séries/firmwares et journal technique. Les anciennes requêtes `pushall`/`get_version` ont été validées ponctuellement sur la P2S réelle ; le suivi continu et le rendu restent à tester après fusion/mise à jour. Ajout explicite au parc via « Ajout automatique » par ligne, puis suppression avec confirmation ; unicité LAN/cloud. Aucun pilotage cloud. Prochaine action : Comptes cloud → Activer le suivi cloud, vérifier buse/plateau et les quatre emplacements AMS, puis arrêt/reprise et reconnexion. Voir [le guide](CLOUD-ACCOUNTS.md#suivi-mqtt-cloud--températures-et-ams).
+
 ## Journaux détaillés · 19 novembre 2026
 
 En revue sur `feat/machine-logs` : onglet Logs administrateur par machine, recherche et téléchargement JSONL persistant ; détails MQTT Bambu et RPC Elegoo, consignes attendues/réelles, délais et réponses corrélées. Journaux cloud enrichis avec requêtes/réponses JSON expurgées, y compris champs inconnus, noms, modèles, séries et états. Aucun pilotage cloud ni import dans le parc ajouté. Recette suivante : après mise à jour, relire l’inventaire avec le jeton existant, puis vérifier le journal ; pour un refus de chauffe LAN, relever demande, réponse et consigne remontée. Aucun essai matériel effectué par cette modification.

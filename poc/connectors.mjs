@@ -44,6 +44,8 @@ async function elegooCamera(machine, output, signal, onFrame, openCamera, identi
 }
 
 const definitions = {
+  'bambu-cloud': { model: 'Bambu Lab · Cloud', form: 'cloud', filaments: 'AMS', configure() { return null; },
+    async load({ cloud }) { return { read: machine => cloud.readMachine(machine) }; } },
   klipper: httpConnector('Klipper · Moonraker', 7125, false, async ({ readPrinter, sendCommand, sendGcode, fetchFiles }) => {
     const mod = await import('./moonraker.mjs');
     const read = readPrinter ?? mod.readMoonraker;

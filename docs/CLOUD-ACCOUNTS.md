@@ -1,6 +1,6 @@
 # Comptes cloud constructeur · pilote Bambu Lab
 
-État : branche `feat/cloud-accounts`, proposée en PR, non déployée. Premier périmètre : authentification HTTPS et inventaire retourné par un compte Bambu. Aucune commande machine ni connexion MQTT cloud dans ce jalon.
+État : branche `feat/cloud-accounts`, proposée en PR, non déployée. Premier périmètre : authentification HTTPS et inventaire retourné par un compte Bambu. Le pilote initial couvrait authentification et inventaire ; le suivi MQTT lecture seule est décrit dans le complément ci-dessous. Aucune commande de fabrication cloud.
 
 ## Utiliser la page
 
@@ -12,7 +12,7 @@
 
 Les marques Creality, Elegoo, Prusa, xTool et Anycubic ont des fiches de compte possibles, mais leur connexion reste explicitement « à venir ». Cela ne déclare aucune compatibilité cloud pour ces fabricants. Le modèle de compte est indépendant du connecteur Bambu.
 
-L’inventaire n’ajoute pas de machine au parc. Une série Bambu déjà enregistrée en LAN est signalée dans la liste. Les connexions LAN existantes restent inchangées. L’affichage est plafonné aux 200 premières entrées reçues, avec mention si la réponse en contient plus. La réussite de login ne garantit pas la disponibilité de la liste : les deux étapes et leurs erreurs sont distinctes.
+L’inventaire seul n’ajoute pas de machine au parc ; le bouton explicite « Ajout automatique » du complément ci-dessous le permet. Une série Bambu déjà enregistrée en LAN est signalée dans la liste. Les connexions LAN existantes restent inchangées. L’affichage est plafonné aux 200 premières entrées reçues, avec mention si la réponse en contient plus. La réussite de login ne garantit pas la disponibilité de la liste : les deux étapes et leurs erreurs sont distinctes.
 
 ## Compte créé avec Google, Apple ou Facebook
 
@@ -69,3 +69,25 @@ Le journal matériel relève `login` HTTP 200 avec `loginType=verifyCode`, puis 
 ## Diagnostic exploitable · 19 novembre 2026
 
 La connexion et la lecture de l’inventaire sont confirmées par Valentin. `FAIL` est une valeur d’état d’impression renvoyée dans l’inventaire, pas un échec d’authentification. L’interface distingue cet état et l’absence d’import cloud dans le parc. Après mise à jour, utiliser **Relire les machines**, puis **Journal du compte** : cette lecture réutilise le jeton et ne déclenche aucun email. Les anciens journaux ne peuvent pas retrouver des réponses qui n’avaient pas été enregistrées. Voir aussi [les logs par machine](MACHINE-LOGS.md).
+
+## Suivi MQTT cloud · températures et AMS
+
+Branche `feat/cloud-telemetry`, en revue, non déployée. Dans Comptes cloud, cliquer **Activer le suivi cloud** après connexion. Une session MQTT TLS est partagée par toutes les machines inventoriées du compte. Le suivi continue hors de la page et reprend au redémarrage pour les comptes explicitement activés. **Arrêter le suivi cloud**, déconnecter ou supprimer le compte ferme la session. Les comptes sont isolés.
+
+Le jeton est réutilisé sans nouvel email. Pour un jeton opaque, GET `/v1/design-user-service/my/preference` fournit l’UID, utilisé sous la forme `u_<uid>`. Brokers fixés par région : `us.mqtt.bambulab.com:8883` et `cn.mqtt.bambulab.com:8883`, vérification TLS activée. Après abonnement aux topics exacts `device/<série>/report`, seules deux requêtes de lecture sont publiées : `pushing.pushall` et `info.get_version`. Au plus une paire par machine et par cinq minutes sur cette session, même après reconnexion. Aucune commande de fabrication ou G-code. Reconnexion réseau toutes les dix secondes ; un refus d’authentification coupe les tentatives. Les rapports restent en mémoire et sont fusionnés ; après une minute sans rapport ou une coupure, les températures/filaments sont masqués comme périmés. Les modules sont disponibles dans les détails (modèle, série, firmware).
+
+La page affiche buse et plateau, leurs consignes, les modules AMS, humidité réelle, matières, couleurs et emplacements vides. Les pourcentages restants et marques ne sont pas inventés. Le navigateur relit le cache local toutes les cinq secondes uniquement sur cette page ; cela ne déclenche aucun appel au constructeur. Requêtes de lecture, rapports expurgés, modules et erreurs figurent dans le journal du compte.
+
+Essai ponctuel réel du 19 novembre 2026, avant cette intégration : `pushall` et `get_version` ont fourni plateau 20 °C, buse 23–24 °C, consignes à zéro, AMS 2 Pro, humidité 28 %, PETG blanc / PLA jaune / vide / PLA rouge. Le firmware P2S remonté est 01.03.00.00. Aucune donnée d’identité réelle n’est embarquée dans le code/tests. Le processus ponctuel a été confirmé terminé après le dépassement du délai de l’outil distant. La session persistante livrée ici et le rendu navigateur restent à valider après fusion/déploiement. L’import explicite au parc est décrit ci-dessous ; le pilotage cloud reste absent.
+
+Références de lecture : [request_full_status dans l’ancien client](https://github.com/coelacant1/Bambu-Lab-Cloud-API/blob/main/bambulab/mqtt.py), [formats pushall/get_version](https://github.com/Doridian/OpenBambuAPI/blob/main/mqtt.md), [identité MQTT et jetons opaques](https://github.com/greghesp/ha-bambulab/blob/main/custom_components/bambu_lab/pybambu/bambu_cloud.py).
+
+API administrateur : POST `/api/cloud-accounts/<id>/telemetry-start` et `/telemetry-stop`. GET `/api/cloud-accounts` fournit le cache normalisé, sans jeton ni identifiant MQTT. Les routes reprennent les protections session, origine et JSON des comptes cloud.
+
+## Ajout automatique et suppression depuis le compte
+
+Chaque ligne d’inventaire propose **Ajout automatique** si la série n’est pas déjà dans FabCore. Cette action active le suivi et crée une machine `bambu-cloud` reliée au compte : fiche, parc, températures et AMS utilisent le cache partagé, sans code LAN ni nouvelle authentification. La fiche reste en lecture seule : pas de chauffe, fichiers, commandes ni caméra cloud déclarés. Le modèle est celui de l’inventaire. Le bouton de réglages ramène à Comptes cloud.
+
+Si une série est déjà dans le parc, en LAN ou cloud, le bouton devient **Supprimer de FabCore**. Une confirmation « Êtes-vous sûr de vouloir supprimer cette machine de FabCore ? » indique son nom et précise qu’elle reste associée au compte constructeur. La suppression utilise la route existante (nettoyage du cache, connexions et logs machine), sans dissocier le compte Bambu ni effacer son inventaire. Les doublons sont bloqués côté serveur dans les deux sens LAN/cloud, y compris entre comptes. Une machine LAN n’est jamais convertie implicitement en cloud. Un compte ayant encore des machines cloud dans le parc ne peut être supprimé avant retrait de ces fiches.
+
+API admin : POST `/api/cloud-accounts/<id>/import`, corps `{ "serial": "..." }`, contrôle de présence dans l’inventaire du compte authentifié et unicité dans le parc. Les boutons et l’état d’ajout utilisent les identifiants du parc fournis par le serveur. La suppression reprend POST `/api/machines/delete` après confirmation dans l’interface.

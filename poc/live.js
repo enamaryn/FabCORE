@@ -330,7 +330,7 @@ function liveTemperatures(machine) {
 
 // Compact fleet summary, based only on reported slots. No fabricated spool colors.
 function fleetFilamentDots(machine) {
-  if (!['klipper', 'octoprint', 'prusalink', 'elegoo', 'elegoo-cc1', 'bambu'].includes(machine.kind)) return '';
+  if (!['klipper', 'octoprint', 'prusalink', 'elegoo', 'elegoo-cc1', 'bambu', 'bambu-cloud'].includes(machine.kind)) return '';
   const system = machineConnectors[machine.kind]?.filaments;
   const units = Array.isArray(machine.filaments) ? machine.filaments : null;
   const stale = machine.status === 'offline' ? ' · ' + t('Dernières données, hors ligne','Last readings, offline') : '';
@@ -471,7 +471,7 @@ function liveDetail() {
       @media(max-width:760px){.machine-workspace{display:block}.machine-workspace .sidebar{display:none}.cockpit-grid{grid-template-columns:1fr}.machine-workspace .area{padding-bottom:80px}.camera-stage{max-height:none}.cockpit-header{align-items:flex-start}.machine-tabs{overflow:auto}.machine-tabs button{white-space:nowrap}.machine-account summary{max-width:120px;overflow:hidden;text-overflow:ellipsis}.machine-workspace .top{padding:6px 12px}}
       @media(max-width:380px){.filament-modules{grid-template-columns:1fr}}
     </style>
-    <header class="cockpit-header row between"><div class="row">${btn('nav:machines', '←', '', 'ghost', `aria-label="${t('Retour au parc','Back to fleet')}"`)}<div><h1>${esc(m.name)}</h1><small>${esc(m.model)}</small></div><span data-machine-status>${badge(m.status)}</span></div>${state.role === 'admin' ? btn('edit', '', 'control', 'ghost', `aria-label="${t('Modifier la machine','Edit machine')}"`) : ''}</header>
+    <header class="cockpit-header row between"><div class="row">${btn('nav:machines', '←', '', 'ghost', `aria-label="${t('Retour au parc','Back to fleet')}"`)}<div><h1>${esc(m.name)}</h1><small>${esc(m.model)}</small></div><span data-machine-status>${badge(m.status)}</span></div>${state.role === 'admin' ? btn(m.kind === 'bambu-cloud' ? 'cloud-open' : 'edit', '', 'control', 'ghost', `aria-label="${t('Modifier la machine','Edit machine')}"`) : ''}</header>
     <div class="machine-tabs" role="tablist" aria-label="${t('Fiche machine','Machine details')}">${tabs.map(([key, label]) => `<button type="button" id="machine-tab-${key}" role="tab" aria-selected="${tab === key}" aria-controls="machine-tab-panel" tabindex="${tab === key ? 0 : -1}" data-action="machine-tab:${key}">${label}</button>`).join('')}</div>
     <div role="tabpanel" id="machine-tab-panel" aria-labelledby="machine-tab-${tab}">
       ${tab === 'logs' ? machineLogPanel(m) : tab === 'files' ? filesPanel(m) : tab === 'console' ? terminalPanel(m) : `<div class="cockpit-grid"><div class="cockpit-column">${camera}<div data-live-filaments>${liveFilaments(m)}</div></div><div class="cockpit-column"><div data-live-telemetry>${liveFabrication(m)}</div>${machineConnectors[m.kind]?.controls ? manualControlsPanel(m, 'heat') + `<div class="cockpit-bottom">${manualControlsPanel(m, 'quick')}${manualControlsPanel(m, 'motion')}</div>` : liveTemperatures(m)}</div></div>`}
@@ -777,7 +777,7 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
     ${existing ? `<input type="hidden" name="id" value="${esc(existing.id)}"><input type="hidden" name="kind" value="${kind}">` : ''}
     ${existing ? '' : btn('discover',t('Détecter sur le réseau','Discover on network'))}
     <div class="fields">
-      ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind">${Object.entries(machineConnectors).map(([id, entry]) =>
+      ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind">${Object.entries(machineConnectors).filter(([, entry]) => entry.form !== 'cloud').map(([id, entry]) =>
         `<option value="${esc(id)}" ${id === kind ? 'selected' : ''}>${esc(entry.model)}</option>`).join('')}</select></label>`}
       <label>${t('Nom de la machine','Machine name')}<input name="name" required maxlength="80" value="${esc(name)}"></label>
       ${form !== 'http' ? `
@@ -2100,7 +2100,7 @@ function machineLogPanel(m) {
   return `<section class="panel stack" data-machine-log>
     <style>.machine-log-entries{max-height:60vh;overflow:auto;min-width:0}.machine-log-entries details{padding:8px 0;border-bottom:1px solid var(--line)}.machine-log-entries pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;margin:6px 0}.machine-log-entries summary{cursor:pointer;overflow-wrap:anywhere;font-size:13px}</style>
     <div class="row between wrap"><h2>${t('Logs de la machine', 'Machine logs')}</h2><div class="row wrap">${btn('machine-logs-refresh', t('Actualiser', 'Refresh'), '', '', entry.pending ? 'disabled' : '')}<a href="/api/machines/${esc(m.id)}/logs-download" download>${t('Télécharger le fichier log', 'Download log file')}</a></div></div>
-    <p class="notice">${t('Connexion de cette fiche : LAN. Les logs du compte cloud sont séparés. Requêtes, réponses filtrées et délais ; aucun mot de passe, jeton ou code LAN. Les rapports MQTT périodiques sont échantillonnés toutes les dix secondes, les réponses de commande sont toutes conservées.', 'This device uses LAN. Cloud account logs are separate. Requests, filtered responses and timings; no passwords, tokens or LAN access codes. Periodic MQTT reports are sampled every ten seconds; all command responses are retained.')}</p>
+    <p class="notice">${m.kind === 'bambu-cloud' ? t('Connexion cloud : les échanges MQTT sont dans le journal du compte.', 'Cloud connection: MQTT exchanges are in the account log.') : ''} ${t('Les logs du compte cloud sont séparés. Requêtes, réponses filtrées et délais ; aucun mot de passe, jeton ou code LAN. Les rapports MQTT périodiques sont échantillonnés toutes les dix secondes, les réponses de commande sont toutes conservées.', 'Cloud account logs are separate. Requests, filtered responses and timings; no passwords, tokens or LAN access codes. Periodic MQTT reports are sampled every ten seconds; all command responses are retained.')}</p>
     <label>${t('Rechercher dans les logs', 'Search logs')}<input type="search" data-machine-log-search placeholder="${t('chauffe, gcode_line, reason, MQTT…', 'heating, gcode_line, reason, MQTT…')}"></label>
     ${entry.error ? `<p class="error" role="alert">${t('Journal indisponible. Vérifiez le stockage ou reconnectez-vous.', 'Log unavailable. Check storage or sign in again.')}</p>` : ''}
     <small role="status">${entry.pending ? t('Lecture…', 'Reading…') : t('500 dernières entrées conservées · détails techniques ci-dessous.', 'Last 500 retained entries · technical details below.')}</small>
