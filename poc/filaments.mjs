@@ -1,5 +1,10 @@
 const number = (value) => (typeof value === 'number' || typeof value === 'string') && /^\d{1,3}$/.test(value) ? Number(value) : -1;
 const label = (value) => typeof value === 'string' ? value.trim().slice(0, 80) : '';
+// Bambu humidity is an index (1–5); only humidity_raw is a percentage.
+const humidity = (value) => {
+  const parsed = number(value);
+  return parsed >= 0 && parsed <= 100 ? parsed : null;
+};
 
 function color(value) {
   return typeof value === 'string' && /^#?[a-f0-9]{6}([a-f0-9]{2})?$/i.test(value)
@@ -27,7 +32,7 @@ export function bambuFilaments(ams) {
     const index = ht ? id - 128 + 4 : id;
     if (present !== null && !(present & (1 << index))) return [];
     const trays = Array.isArray(unit.tray) ? unit.tray.slice(0, 4) : [];
-    return [{ id: index, variant: ht ? 'ht' : null, slots: Array.from({ length: ht ? 1 : 4 }, (_, i) => {
+    return [{ id: index, variant: ht ? 'ht' : null, humidity: humidity(unit.humidity_raw), slots: Array.from({ length: ht ? 1 : 4 }, (_, i) => {
       const tray = trays.find((item) => number(item?.id) === i) ?? (ht ? trays[0] : null);
       const bit = ht ? 16 + id - 128 : id * 4 + i;
       const occupied = mask === null ? null : Boolean(mask & (1 << bit));

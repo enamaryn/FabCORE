@@ -84,7 +84,11 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
       if (delta?.command !== 'push_status') return;
       report = { ...report, ...delta };
       if (delta.ams && typeof delta.ams === 'object' && !Array.isArray(delta.ams)) {
-        ams = { ...ams, ...delta.ams };
+        const units = Array.isArray(delta.ams.ams) ? delta.ams.ams.map(unit => {
+          const previous = ams?.ams?.find(item => String(item?.id) === String(unit?.id));
+          return { ...previous, ...unit };
+        }) : ams?.ams;
+        ams = { ...ams, ...delta.ams, ...(units ? { ams: units } : {}) };
         filaments = bambuFilaments(ams);
       }
       // The printer can retain a failed job after its print error was cleared.

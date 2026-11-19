@@ -52,3 +52,15 @@ test('cockpit : la saisie d’une consigne survit aux actualisations des autres 
   assert.equal(heat.outerHTML, 'target=235'); assert.equal(quick.outerHTML, 'updated:quick');
   sandbox.update('one', true); assert.equal(heat.outerHTML, 'updated:heat', 'actualisation explicitement demandée');
 });
+
+test('humidité : une goutte par module avec pourcentage réel, rien pour une mesure absente', () => {
+  const sandbox = { machineConnectors: connectorCatalog, t: fr => fr, esc: String };
+  const code = source.slice(source.indexOf('function liveFilaments('), source.indexOf('const machineTabs ='));
+  runInNewContext(code + '\nthis.filaments=liveFilaments;', sandbox);
+  for (const kind of ['bambu', 'elegoo']) {
+    const html = sandbox.filaments({ kind, filaments: [34, 0, null, 101].map((humidity, id) => ({ id, humidity, slots: [] })) });
+    assert.equal((html.match(/class="filament-humidity"/g) ?? []).length, 2);
+    assert.match(html, /Humidité 34 %/); assert.match(html, /Humidité 0 %/);
+    assert.doesNotMatch(html, /Humidité null|Humidité 101/);
+  }
+});

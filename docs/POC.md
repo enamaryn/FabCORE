@@ -5,6 +5,12 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** dérouler la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Humidité des modules filament · 19 novembre 2026
+
+**État : ouvert, branche `feat/filament-humidity`, non déployé.** Une goutte et le pourcentage réel sont affichés dans l’en-tête de chaque module de la fiche machine. Bambu utilise `humidity_raw` (0–100), jamais l’indice `humidity` (1–5). Les mesures absentes ou invalides ne créent aucun indicateur. Le rendu commun accepte la mesure de tout connecteur qui la fournit ; aucun champ d’humidité vérifié dans le SDK CANVAS Elegoo consulté, donc pas de mesure inventée pour les CC2. Les rapports Bambu partiels d’un module conservent ses autres champs.
+
+Vérifications : 80 tests réussis, syntaxe JS et diff vérifiés ; normalisation, indépendance des modules, mises à jour MQTT et rendu conditionnel ; recette P2S après fusion/mise à jour à faire. Le problème de commande de chauffe signalé reste une investigation distincte sur `fix/p2s-heater-confirmation`.
+
 ## Fiche machine : cockpit compact · 19 novembre 2026
 
 **État : ouvert, branche `feat/machine-cockpit`, non déployé.** Intégration de la maquette validée par Valentin : caméra/aperçu et filaments à gauche, fabrication, températures/consignes, actions rapides et déplacements à droite. Onglets « Vue machine », « Fichiers » et « Console » (si terminal disponible), mémorisés par machine durant la session. Fichiers chargés uniquement dans leur onglet ; aperçu uniquement en vue machine ; quitter cette vue ferme l’abonnement caméra du navigateur. « Choisir un fichier » ouvre l’onglet Fichiers. Navigation clavier des onglets et menu compte compact conservent les accès aux réglages, diagnostics, langue, thème et déconnexion.
