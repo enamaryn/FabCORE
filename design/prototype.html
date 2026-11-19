@@ -88,7 +88,7 @@ function listEvents(events=state.events){
 }
 function card(m){
  const isActive=['printing','paused'].includes(m.status);
- return `<article class="machine"><div class="row between"><div class="row"><span class="machine-mark">${icon('machine')}</span><div><h3>${esc(m.name)}</h3><small>${esc(m.model)}</small></div></div>${badge(m.status)}</div>
+ return `<article class="machine"><div class="row between"><div class="row"><span class="machine-mark">${icon('machine')}</span><div><h3>${esc(m.name)}</h3><small>${esc(m.model)}</small></div></div><div class="card-indicators">${liveMode?fleetFilamentDots(m):''}${badge(m.status)}</div></div>
  <div class="row between job"><span>${esc(m.file)||t('Aucune fabrication','No job')}</span><strong>${isActive?m.progress+' %':(m.status==='done'?'100 %':'')}</strong></div>
  <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>
  <div class="row between"><small>${m.eta?esc(m.eta)+' · ':''}${m.status==='offline'?t('Dernière liaison perdue','Connection lost'):[m.nozzle,m.bed].map(v=>v===null?'—':v+' °C').join(' · ')}</small>${liveMode?'':`<small>${esc(m.id)}</small>`}</div>
