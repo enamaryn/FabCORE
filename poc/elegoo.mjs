@@ -1,3 +1,4 @@
+import { reportedControls } from './manual-controls.mjs';
 import { createHash } from 'node:crypto';
 import { connect } from 'mqtt';
 import { canvasFilaments } from './filaments.mjs';
@@ -254,6 +255,7 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
         }
       }
       const report = normalize(latest);
+      entry.controls = reportedControls('elegoo', latest);
       if (report.issue === 'elegoo-report') return;
       clearTimeout(watchdog);
       lastReport = now();
@@ -262,6 +264,7 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
     });
   }
   return {
+    controlState(machine) { return sessions.get(machine.id)?.controls; },
     request(machine, method, params = {}) {
       const entry = sessions.get(machine.id);
       if (!entry?.rpc) throw new Error('elegoo-connection');

@@ -14,6 +14,7 @@ import { cameraPreview } from './camera-preview.mjs';
 import { createOidc } from './oidc.mjs';
 import { internalNtfy, notificationSettings, publicNotifications, sendNotification } from './notifications.mjs';
 import { openStore } from './store.mjs';
+import { validateControl } from './manual-controls.mjs';
 import { filePath } from './connector-http.mjs';
 import { productionPath } from './production-files.mjs';
 import { transferMachineFile } from './file-transfer.mjs';
@@ -401,6 +402,45 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         snapshot.forget(machine.id);
         pendingCommands.delete(machine.id);
       }
+    }
+    const controlsRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/controls$/);
+    if (controlsRoute && ['GET', 'POST'].includes(req.method)) {
+      if (!viewer) return error(res, 401, 'sign-in');
+      const machine = store.state.machines.find(entry => entry.id === controlsRoute[1]);
+      if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.controls) return error(res, 404, 'missing');
+      if (req.method === 'POST' && viewer.role !== 'admin') return error(res, 403, 'forbidden');
+      if (req.method === 'POST' && !requireJson(req, res)) return;
+      let data;
+      if (req.method === 'POST') { try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); } }
+      if (req.method === 'POST' && (pendingCommands.has(machine.id) || pendingUploads.has(machine.id))) return error(res, 409, 'command-busy');
+      if (req.method === 'POST') {
+        const now = Date.now(), key = 'controls:' + machine.id;
+        const recent = (terminalUse.get(key) ?? []).filter(at => now - at < minute);
+        if (recent.length >= 30 || (recent.length && now - recent.at(-1) < 500)) return error(res, 429, 'rate');
+        terminalUse.set(key, [...recent, now]);
+        pendingCommands.add(machine.id);
+      }
+      let attempted = false;
+      try {
+        const connector = await connectors.get(machine.kind ?? 'klipper');
+        const status = (await connector.read(machine)).status;
+        if (req.method === 'POST' && !['ready', 'done', 'printing', 'paused'].includes(status)) return error(res, 409, 'command-state');
+        const controls = await connector.control.read(machine);
+        if (req.method === 'GET') return answer(res, 200, { ...controls, status });
+        const command = validateControl(data, controls);
+        if (!command) return error(res, 400, 'control-invalid');
+        if (['move', 'home'].includes(command.action) && !['ready', 'done'].includes(status)) return error(res, 409, 'command-state');
+        if (['printing', 'paused'].includes(status) && ['heat', 'fan'].includes(command.action) && data.duringPrint !== true) return error(res, 409, 'control-confirm');
+        if (res.destroyed) return;
+        if (!session(req)) return error(res, 401, 'sign-in');
+        attempted = true;
+        const result = await connector.control.execute(machine, command, controls);
+        diagnostics.record('controls', result.outcome, machine.id);
+        return answer(res, result.outcome === 'rejected' ? 502 : 200, result.outcome === 'rejected' ? { error: 'command-rejected' } : result);
+      } catch (failure) {
+        diagnostics.record('controls', !attempted ? 'request-failed' : failure.message === 'command-rejected' ? 'rejected' : 'unconfirmed', machine.id);
+        return error(res, !attempted || failure.message === 'command-rejected' ? 502 : 504, !attempted ? 'controls-unavailable' : failure.message === 'command-rejected' ? 'command-rejected' : 'command-unconfirmed');
+      } finally { if (req.method === 'POST') pendingCommands.delete(machine.id); }
     }
     const terminal = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/gcode$/);
     if (req.method === 'POST' && terminal) {
