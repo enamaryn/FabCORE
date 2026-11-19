@@ -61,7 +61,7 @@ Mêmes règles de sécurité que les lasers.
 
 ## FD-05 · Production et multi-ateliers
 
-- [ ] FD-05.1 Multi-ateliers dans une même instance.
+- [x] FD-05.1 Socle multi-organisations, sites et fermes/ateliers : **périmètre remonté au MVP** le 19 novembre 2026, pas encore implémenté. Voir [MVP-04.7](MVP.md#mvp-04--comptes-rôles-et-permissions) et [MVP-10b](MVP.md#mvp-10b--comptes-constructeur-multiples-et-parc-lancloud-multisite). La planification avancée de production reste en FD-05.5 à FD-05.7.
 - [ ] FD-05.2 Files d’attente de fabrication.
 - [ ] FD-05.3 Gestion des commandes clients.
 - [ ] FD-05.4 Calcul des coûts.

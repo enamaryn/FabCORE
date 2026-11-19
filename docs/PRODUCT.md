@@ -47,3 +47,16 @@ Règles durables tirées des essais du POC. Elles s’appliquent à toute nouvel
 - Installer les dépendances des fonctions livrées (Node.js, FFmpeg…). Rendre `fabcore-update` disponible dès l’installation.
 - Préserver les données, droits et réglages lors des mises à jour. Documenter les limites et les vérifications réellement faites.
 - Garder un README accessible, orienté produit, avec des compatibilités honnêtes et des liens vers les guides techniques.
+
+## Organisations, sites, fermes et comptes constructeur
+
+Décision du 19 novembre 2026 : privilégier les fonctions cloud validées, tout en permettant un parc de machines LAN et cloud dans FabCore.
+
+- Une machine a un seul mode de connexion configuré : **LAN ou cloud**, jamais les deux simultanément. Une capacité absente du mode choisi est signalée indisponible. Aucun basculement automatique ; changer de mode demande une action explicite et ferme l’ancienne connexion avant d’ouvrir la nouvelle.
+- Une organisation peut gérer plusieurs sites et plusieurs fermes/ateliers par site, avec des gestionnaires et droits distincts. La vue consolidée ne montre que les périmètres autorisés.
+- Plusieurs comptes du même constructeur (Bambu Lab, Creality, Elegoo, etc.) peuvent coexister, avec jetons et sessions indépendants. La compatibilité cloud est vérifiée par marque, modèle, firmware et fonction avant d’être annoncée.
+- Ne pas confondre utilisateur FabCore, compte constructeur, site et ferme. Un compte peut présenter des machines de plusieurs sites ; un site peut contenir des machines issues de plusieurs comptes et des machines LAN.
+- L’import affecte explicitement chaque machine à son site et sa ferme. Une identité déjà configurée dans un mode n’est pas ajoutée en double dans l’autre. Aucun rapprochement automatique entre organisations.
+- Une panne ou révocation d’un compte ne déconnecte pas les autres comptes. Les identifiants et jetons restent inaccessibles aux autres gestionnaires ; les autorisations s’appliquent aux API, commandes, fichiers, caméras et événements.
+
+Exemple de recette : une CC2 en cloud via le compte A et une seconde CC2 en LAN, sur le même site ou sur deux sites différents. FabCore les distingue et affiche le mode propre à chacune. Le compte constructeur éventuellement utilisé par ailleurs pour la seconde n’est pas requis pour sa connexion LAN.
