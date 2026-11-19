@@ -48,13 +48,13 @@ const definitions = {
     const read = readPrinter ?? mod.readMoonraker;
     return { read: machine => read(machine), probe: probeStatus(machine => read(machine), ['print']), command: sendCommand ?? mod.commandMoonraker,
       files: mod.createMoonrakerFiles(fetchFiles), gcode: sendGcode ?? mod.sendMoonrakerGcode };
-  }, { commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true }),
+  }, { commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true, controls: true }),
   octoprint: httpConnector('OctoPrint', 5000, true, async ({ readOcto, sendGcode, fetchFiles, sendCommand }) => {
     const mod = await import('./octoprint.mjs');
     const read = readOcto ?? mod.readOctoPrint;
     return { read, probe: probeStatus(read, ['octoprint-disconnected', 'octoprint-printer-error'], true), files: mod.createOctoPrintFiles(fetchFiles),
       gcode: sendGcode ?? mod.sendOctoPrintGcode, command: sendCommand ?? ((machine, action) => mod.commandOctoPrint(machine, action, fetchFiles)) };
-  }, { interval: 5000, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true }),
+  }, { interval: 5000, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true, controls: true }),
   prusalink: httpConnector('PrusaLink', 80, true, async ({ readPrusa, fetchFiles }) => {
     const mod = await import('./prusalink.mjs');
     const read = readPrusa ?? mod.readPrusaLink;
@@ -74,7 +74,7 @@ const definitions = {
         if (!(await streamBambuCamera(machine, output, signal, frame))) return 'no-stream';
       }
     };
-  }, { camera: true, filaments: 'AMS', live: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, projects: true, externalFilament: true }),
+  }, { camera: true, filaments: 'AMS', controls: true, live: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, projects: true, externalFilament: true }),
   elegoo: localConnector('Elegoo · Centauri Carbon 2', 'elegoo', (host, data, existing) => {
     const accessCode = secret(data, existing, 'accessCode', 64);
     if (/^[!-~]{1,64}$/.test(accessCode)) return { origin: `mqtt://${host}:1883`, serial: existing?.serial, accessCode };
@@ -85,7 +85,7 @@ const definitions = {
     const read = readCC2 ?? monitor.read;
     const { createElegooFiles } = await import('./elegoo-files.mjs');
     return {
-      read, close: monitor?.close, command: (...args) => monitor?.command(...args),
+      read, controlState: monitor?.controlState, close: monitor?.close, command: (...args) => monitor?.command(...args),
       files: retainedFiles(join(directory, 'files'), createElegooFiles((...args) => monitor.request(...args), { fetcher: fetchFiles })),
       forget(id, changed) { if (changed) monitor?.forget(id); },
       async probe(machine, options) {
@@ -98,7 +98,7 @@ const definitions = {
       },
       camera: (machine, output, signal, frame) => elegooCamera(machine, output, signal, frame, openCamera, identify)
     };
-  }, { camera: true, filaments: 'CANVAS', interval: 7000, verify: true, commands: true, commandActions: ['pause', 'stop'], files: true, retainedOnly: true, externalFilament: true }),
+  }, { camera: true, filaments: 'CANVAS', controls: true, interval: 7000, verify: true, commands: true, commandActions: ['pause', 'stop'], files: true, retainedOnly: true, externalFilament: true }),
   'elegoo-cc1': localConnector('Elegoo · Centauri Carbon', 'elegoo-cc1', (host, data, existing) => {
     const serial = existing?.serial ?? value(data, 'serial', 64);
     if (!serial || /^[a-zA-Z0-9_-]{6,64}$/.test(serial)) return { origin: `ws://${host}:3030`, serial: serial || undefined };
@@ -134,8 +134,8 @@ function identified(result, tolerated) {
 }
 export const connectorDefinition = kind => typeof kind === 'string' && Object.hasOwn(definitions, kind) ? definitions[kind] : null;
 export const connectorCatalog = Object.fromEntries(Object.entries(definitions).map(([kind, {
-  model, form, port, required, camera = false, commands = false, commandActions = [], files = false, projects = false, retainedOnly = false, externalFilament = false, terminal = false, filaments = null, temperatures = true, printJob = true
-}]) => [kind, { model, form, port, required, camera, commands, commandActions, files, projects, retainedOnly, externalFilament, terminal, filaments, temperatures, printJob }]));
+  model, form, port, required, camera = false, commands = false, commandActions = [], files = false, projects = false, retainedOnly = false, externalFilament = false, terminal = false, filaments = null, temperatures = true, printJob = true, controls = false
+}]) => [kind, { model, form, port, required, camera, commands, commandActions, files, projects, retainedOnly, externalFilament, terminal, filaments, temperatures, printJob, controls }]));
 
 export function createConnectorRegistry(options, definition = connectorDefinition) {
   const pending = new Map();
@@ -146,7 +146,11 @@ export function createConnectorRegistry(options, definition = connectorDefinitio
       const entry = definition(kind);
       if (!entry || closed) return null;
       if (!pending.has(kind)) {
-        pending.set(kind, Promise.resolve().then(() => entry.load(options)).then(connector => {
+        pending.set(kind, Promise.resolve().then(() => entry.load(options)).then(async connector => {
+          if (entry.controls) {
+            const { createManualControls } = await import('./manual-controls.mjs');
+            connector.control = createManualControls(kind, { fetcher: options.fetchFiles, send: (...args) => connector.send(...args), read: connector.controlState });
+          }
           if (closed) { connector.close?.(); return null; }
           loaded.set(kind, connector);
           return connector;

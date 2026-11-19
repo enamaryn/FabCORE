@@ -33,6 +33,9 @@ const problem = (code) => ({
   'file-exists': t('Un fichier porte déjà ce nom. Renommez-le avant de l’envoyer.', 'A file already uses this name. Rename it before uploading.'),
   'file-quota': t('Limite de stockage FabCore atteinte pour cette machine (2 Go ou 300 fichiers).', 'FabCore storage limit reached for this machine (2 GB or 300 files).'),
   'command-unsupported': t('Cette commande n’est pas prise en charge par ce connecteur.', 'This connector does not support this command.'),
+  'control-invalid': t('Réglage invalide, équipement absent, axes non référencés ou déplacement hors limites.', 'Invalid setting, missing equipment, unhomed axes or out-of-bounds move.'),
+  'control-confirm': t('Confirmez la modification pendant la fabrication.', 'Confirm changing a setting during the print.'),
+  'controls-unavailable': t('Lecture des contrôles indisponible.', 'Controls are unavailable.'),
   'filament-confirm': t('Confirmez l’utilisation de la bobine externe.', 'Confirm the use of the external spool.'),
   'file-too-large': t('Fichier vide ou trop volumineux (512 Mo au maximum).', 'File empty or too large (512 MB maximum).'),
   missing: t('Élément introuvable.', 'Item not found.'),
@@ -91,7 +94,7 @@ function liveIssue(issue) {
 }
 
 async function api(path, data, cancel) {
-  const timeout = AbortSignal.timeout(path.endsWith('/transfer') ? 900_000 : path.endsWith('/gcode') ? 65_000 : path === 'machines/pair' ? 50_000
+  const timeout = AbortSignal.timeout(path.endsWith('/controls') ? 30000 : path.endsWith('/transfer') ? 900_000 : path.endsWith('/gcode') ? 65_000 : path === 'machines/pair' ? 50_000
     : path === 'discovery' || path.startsWith('machines') || path.startsWith('notifications') ? 18000 : 5000);
   const signal = cancel ? AbortSignal.any([timeout, cancel]) : timeout;
   const response = await fetch('/api/' + path, data === undefined ? { signal } : {
@@ -132,7 +135,7 @@ function diagnosticsPage() {
   const scope = live.diagnosticScope ?? '';
   const date = (at) => at ? new Date(at).toLocaleString(state.lang) : '—';
   const labels = {
-    server: 'FabCore', mqtt: 'MQTT', camera: t('Caméra', 'Camera'), status: t('État', 'Status'), files: t('Fichiers', 'Files'), terminal: t('Terminal', 'Terminal')
+    server: 'FabCore', mqtt: 'MQTT', camera: t('Caméra', 'Camera'), status: t('État', 'Status'), files: t('Fichiers', 'Files'), controls: t('Contrôles', 'Controls'), terminal: t('Terminal', 'Terminal')
   };
   const header = title(t('Diagnostics', 'Diagnostics'), '', btn('diagnostics', t('Actualiser', 'Refresh'), 'activity'));
   if (!data) return header + '<p role="status">' +
@@ -454,6 +457,7 @@ function liveDetail() {
     <div class="machine-detail">
       <div class="machine-detail-row">${camera}${liveTemperatures(m)}</div>
       <div class="machine-detail-row"><div data-live-telemetry>${liveFabrication(m)}</div><div data-live-filaments>${liveFilaments(m)}</div></div>
+      ${manualControlsPanel(m)}
       ${filesPanel(m)}
       ${terminalPanel(m)}
     </div>`;
@@ -602,7 +606,7 @@ function renderLive() {
       ${signedIn?screens[live.page]():credentialsPage()}
     </main></div></div>
     ${signedIn?`<nav class="mobile" style="grid-template-columns:repeat(3,1fr)" aria-label="${t('Navigation mobile','Mobile navigation')}">${liveNavigation()}</nav>`:''}`;
-  if (signedIn && live.page === 'detail') showPreview();
+  if (signedIn && live.page === 'detail') { showPreview(); loadManualControls(state.machine); }
   if (signedIn && live.page === 'viewer') mountGcode();
   if (signedIn && live.page === 'detail' && state.machine && machineConnectors[machine(state.machine)?.kind]?.files && filesState(state.machine).files === null) loadFiles(state.machine);
 }
@@ -638,6 +642,7 @@ async function refresh() {
     const changed = compare(machines) !== compare(state.machines);
     state.machines = machines;
     recordTemperatures(machines);
+    if (live.page === 'detail' && state.machine) loadManualControls(state.machine);
     const timestamp = live.page === 'detail' && app.querySelector('#last-check');
     const current = machine(state.machine);
     const cameraImage = app.querySelector('[data-camera-live]');
@@ -1083,6 +1088,94 @@ document.addEventListener('submit', async (event) => {
 // Le fichier est lu depuis la machine via FabCore ; la position d’impression vient de la télémétrie.
 const gcodeLimit = 512 * 1024 * 1024;
 const gcode = { machine: null, path: '', size: 0, result: null, layer: 0, read: 0, loading: null, error: '', travel: true, previous: true, follow: true, view: null, mode: '2d', yaw: -0.6, pitch: 0.65, playing: false, cursor: null, speed: 10, frame: null };
+const manualStates = new Map();
+function manualState(id) {
+  if (!manualStates.has(id)) manualStates.set(id, { data: null, at: 0, loading: false, busy: false, error: '', result: '' });
+  return manualStates.get(id);
+}
+function manualControlsPanel(m) {
+  if (!machineConnectors[m.kind]?.controls) return '';
+  const entry = manualState(m.id), data = entry.data;
+  const admin = state.role === 'admin';
+  const online = data && !entry.error && ['ready', 'done', 'printing', 'paused'].includes(m.status) && ['ready', 'done', 'printing', 'paused'].includes(data.status);
+  const disabled = entry.busy || !online ? 'disabled' : '';
+  const value = (n, suffix = '') => Number.isFinite(n) ? n.toLocaleString(state.lang, { maximumFractionDigits: 1 }) + suffix : '—';
+  const labels = { chamber_light: t('Caisson','Chamber'), main: t('Caisson','Chamber'), fan: t('Refroidissement pièce','Part cooling'), aux_fan: t('Auxiliaire','Auxiliary'), box_fan: t('Caisson','Chamber'), heater_fan: t('Refroidissement tête','Hotend cooling'), controller_fan: t('Électronique','Controller'), nozzle: t('Buse','Nozzle'), bed: t('Plateau','Bed'), part: t('Refroidissement pièce','Part cooling'), aux: t('Auxiliaire','Auxiliary'), chamber: t('Caisson','Chamber') };
+  const label = id => labels[id] || id;
+  const setting = (item, action, index) => admin && item.writable ? `<form class="row wrap" data-manual-form="${action}" data-control-id="${esc(item.id)}">
+    <label>${action === 'heat' ? t('Consigne °C','Target °C') : t('Commande %','Set %')} <input name="value" aria-label="${esc(label(item.id))}" type="number" min="0" max="${action === 'heat' ? item.max : 100}" step="1" required style="width:85px" ${disabled}></label>
+    <button type="submit" ${disabled}>${t('Appliquer','Apply')}</button>${action === 'heat' ? btn('manual-off:' + index, t('Couper','Off'), '', '', disabled) : ''}</form>` : '';
+  return `<section class="panel stack" data-manual-controls>
+    <div class="row between wrap"><h2>${t('Contrôles','Controls')}</h2>${btn('manual-refresh', t('Actualiser','Refresh'), '', 'ghost', entry.loading ? 'disabled' : '')}</div>
+    ${entry.error ? `<p class="error" role="alert">${esc(entry.error)}</p>` : ''}
+    ${entry.result ? `<p role="status">${esc(entry.result)}</p>` : ''}
+    ${!data ? `<p>${t('Lecture des contrôles disponibles…','Reading available controls…')}</p>` : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px">
+      <div class="stack"><h3>${t('Éclairage','Lighting')}</h3>${data.lights.length ? data.lights.map((item, index) => `<div class="stack"><p>${esc(label(item.id))} · ${item.value === true ? t('Allumé','On') : item.value === false ? t('Éteint','Off') : t('État inconnu','Unknown state')}</p>${admin && item.writable ? `<div class="row">${btn('manual-light:' + index + ':on', t('Allumer','Turn on'), '', '', disabled)}${btn('manual-light:' + index + ':off', t('Éteindre','Turn off'), '', '', disabled)}</div>` : ''}</div>`).join('') : `<small>${t('Aucun éclairage pilotable déclaré.','No controllable lighting reported.')}</small>`}</div>
+      <div class="stack"><h3>${t('Chauffe','Heating')}</h3>${data.heaters.map((item, index) => `<div class="stack"><p><strong>${label(item.id)}</strong> · ${value(item.current, ' °C')} → ${value(item.target, ' °C')}</p>${setting(item, 'heat', index)}${item.writable ? `<small>${t('Plafond FabCore','FabCore ceiling')} : ${item.max} °C</small>` : ''}</div>`).join('') || `<small>${t('Indisponible','Unavailable')}</small>`}</div>
+      <div class="stack"><h3>${t('Ventilateurs','Fans')}</h3>${data.fans.map(item => `<div class="stack"><p><strong>${esc(label(item.id))}</strong> · ${value(item.percent, ' %')}${Number.isFinite(item.rpm) ? ' · ' + value(item.rpm, ' tr/min') : ''}</p>${setting(item, 'fan')}</div>`).join('') || `<small>${t('Aucun ventilateur remonté par le protocole.','No fan reported by the protocol.')}</small>`}</div>
+      ${data.motion && admin ? `<div class="stack"><h3>${t('Déplacements','Movement')}</h3><small>${data.motion.homed === null ? t('Origine et limites vérifiées par le firmware.','Homing and limits checked by firmware.') : t('Axes référencés','Homed axes') + ' : ' + (esc(data.motion.homed) || '—')}</small><label>${t('Pas','Step')} <select data-jog-step ${disabled}><option>0.1</option><option selected>1</option><option>10</option></select> mm</label>
+        <div class="row wrap">${['X', 'Y', 'Z'].map(axis => [-1, 1].map(sign => btn('manual-jog:' + axis + ':' + sign, axis + (sign < 0 ? ' −' : ' +'), '', '', entry.busy || !online || !['ready', 'done'].includes(data.status) || (data.motion.homed !== null && !['x','y','z'].every(a => data.motion.homed.includes(a))) ? 'disabled' : '')).join('')).join('')}</div>
+        ${btn('manual-home', t('Prise d’origine XYZ','Home XYZ'), '', '', entry.busy || !online || !['ready', 'done'].includes(data.status) ? 'disabled' : '')}</div>` : ''}
+    </div>`}
+    ${m.kind === 'elegoo' ? `<p class="notice">${t('CC2 : retours d’état uniquement. Les commandes correspondantes ne sont pas activées dans le SDK constructeur.', 'CC2: state readings only. These commands are not enabled in the manufacturer SDK.')}</p>` : ''}
+    <small>${t('Les valeurs affichées proviennent de la machine ; une commande acceptée ne confirme pas son exécution. Les déplacements sont bloqués pendant une fabrication ou une pause.', 'Displayed values come from the machine; an accepted command does not confirm execution. Movement is blocked during printing or pause.')}</small>
+  </section>`;
+}
+async function loadManualControls(id, force = false) {
+  if (!machineConnectors[machine(id)?.kind]?.controls || live.page !== 'detail' || state.machine !== id) return;
+  const entry = manualState(id);
+  if (entry.loading || entry.busy || (!force && Date.now() - entry.at < 10000)) return;
+  entry.loading = true;
+  try { entry.data = await api('machines/' + id + '/controls'); entry.error = ''; }
+  catch (error) { entry.error = problem(error.code); }
+  finally {
+    entry.loading = false; entry.at = Date.now();
+    const panel = app.querySelector('[data-manual-controls]');
+    if (panel && state.machine === id && (force || !panel.contains(document.activeElement))) panel.outerHTML = manualControlsPanel(machine(id));
+  }
+}
+async function sendManualControl(id, command) {
+  if (state.role !== 'admin') return;
+  const entry = manualState(id);
+  if (entry.busy) return;
+  const printing = ['printing', 'paused'].includes(entry.data?.status);
+  if (command.action === 'home' && !window.confirm(t('Effectuer la prise d’origine XYZ ? Vérifiez que les axes sont dégagés.', 'Home XYZ? Check that the axes are clear.'))) return;
+  if (printing && ['heat', 'fan'].includes(command.action) && !window.confirm(t('Modifier ce réglage pendant la fabrication ou sa pause ?', 'Change this setting during the print or its pause?'))) return;
+  entry.busy = true; entry.error = ''; entry.result = '';
+  const panel = app.querySelector('[data-manual-controls]');
+  panel?.querySelectorAll('button,input,select').forEach(node => { node.disabled = true; });
+  try {
+    const result = await api('machines/' + id + '/controls', { ...command, confirm: true, duringPrint: printing });
+    entry.result = result.outcome === 'executed' ? t('Commande exécutée.','Command executed.') : t('Commande acceptée ; vérifiez le retour machine.','Command accepted; check the machine report.');
+  } catch (error) { entry.error = problem(error.code); }
+  finally {
+    entry.busy = false;
+    if (state.machine === id && live.page === 'detail') {
+      const current = app.querySelector('[data-manual-controls]');
+      if (current) current.outerHTML = manualControlsPanel(machine(id));
+      loadManualControls(id, true);
+    }
+  }
+}
+app.addEventListener('submit', event => {
+  const form = event.target.closest('[data-manual-form]');
+  if (!form) return;
+  event.preventDefault();
+  const value = Number(new FormData(form).get('value'));
+  sendManualControl(state.machine, { action: form.dataset.manualForm, id: form.dataset.controlId, value });
+});
+app.addEventListener('click', event => {
+  const [action, index, value] = (event.target.closest('[data-action]')?.dataset.action ?? '').split(':');
+  if (!action.startsWith('manual-')) return;
+  const data = manualState(state.machine).data;
+  if (action === 'manual-refresh') return loadManualControls(state.machine, true);
+  if (!data) return;
+  if (action === 'manual-light' && data.lights[index]) sendManualControl(state.machine, { action: 'light', id: data.lights[index].id, value: value === 'on' });
+  if (action === 'manual-off' && data.heaters[index]) sendManualControl(state.machine, { action: 'heat', id: data.heaters[index].id, value: 0 });
+  if (action === 'manual-home') sendManualControl(state.machine, { action: 'home' });
+  if (action === 'manual-jog') sendManualControl(state.machine, { action: 'move', axis: index, distance: Number(app.querySelector('[data-jog-step]').value) * Number(value) });
+});
+
 const machineFiles = new Map();
 const fileName = (path) => path.split('/').at(-1);
 

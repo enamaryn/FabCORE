@@ -1,3 +1,4 @@
+import { reportedControls } from './manual-controls.mjs';
 import { readFileSync } from 'node:fs';
 import { checkServerIdentity } from 'node:tls';
 import { randomInt } from 'node:crypto';
@@ -69,9 +70,10 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
     client.on('message', (topic, payload) => {
       if (topic !== reportTopic || payload.length > 512 * 1024) return;
       let delta;
-      try { delta = JSON.parse(payload)?.print; } catch { return; }
+      let channel;
+      try { const envelope = JSON.parse(payload); channel = envelope.print ? 'print' : 'system'; delta = envelope[channel]; } catch { return; }
       const acknowledgement = pending.get(String(delta?.sequence_id));
-      if (acknowledgement && delta.command === acknowledgement.command) {
+      if (acknowledgement && delta.command === acknowledgement.command && channel === acknowledgement.channel) {
         pending.delete(String(delta.sequence_id));
         clearTimeout(acknowledgement.timer);
         if (delta.result === 'success') acknowledgement.resolve(true);
@@ -91,6 +93,7 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
       if (!status) return;
       clearTimeout(timeout);
       printer.lastReport = Date.now();
+      printer.controls = reportedControls('bambu', report);
       if (tracked) diagnostics?.report(machine.id);
       printer.current = {
         status,
@@ -122,13 +125,13 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
       pending.clear();
       client.end(true);
     };
-    printer.send = (command, params) => new Promise((resolve, reject) => {
+    printer.send = (command, params, channel = 'print') => new Promise((resolve, reject) => {
       if (!client.connected || !printer.lastReport || Date.now() - printer.lastReport > 60000) return reject(new Error('bambu-connection'));
       const id = String(randomInt(1, 0x7fffffff));
       const timer = setTimeout(() => { pending.delete(id); reject(new Error('command-unconfirmed')); }, 6000);
-      pending.set(id, { command, resolve, reject, timer });
+      pending.set(id, { command, channel, resolve, reject, timer });
       // QoS 0 avoids MQTT replay after reconnect; execution is verified by state.
-      client.publish(requestTopic, JSON.stringify({ print: { ...params, command, sequence_id: id } }), { qos: 0, retain: false }, error => {
+      client.publish(requestTopic, JSON.stringify({ [channel]: { ...params, command, sequence_id: id } }), { qos: 0, retain: false }, error => {
         if (error && pending.has(id)) { pending.delete(id); clearTimeout(timer); reject(error); }
       });
     });
@@ -136,9 +139,10 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
   }
 
   return {
-    send(machine, command, params = {}) {
+    controlState(machine) { return printers.get(machine.id)?.controls; },
+    send(machine, command, params = {}, channel = 'print') {
       if (!printers.has(machine.id)) printers.set(machine.id, open(machine, true));
-      return printers.get(machine.id).send(command, params);
+      return printers.get(machine.id).send(command, params, channel);
     },
     command(machine, action) {
       if (!['pause', 'resume', 'stop'].includes(action)) return false;

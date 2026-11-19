@@ -67,3 +67,30 @@ test('P2S lit le rapport MQTT, fusionne les mises à jour et se reconnecte sans 
   monitor.close();
   assert.ok(closed);
 });
+
+test('P2S : lumière sur le canal system, accusé corrélé et session MQTT unique', async () => {
+  const client = new EventEmitter(); client.connected = true;
+  client.subscribe = (_topic, callback) => callback(null, [{ qos: 0 }]); client.end = () => {};
+  const topic = 'device/TESTP2S123/report';
+  const packets = [];
+  client.publish = (_topic, payload, options, callback) => {
+    const packet = JSON.parse(payload);
+    if (!packet.system) return;
+    packets.push(packet); callback();
+    assert.deepEqual(options, { qos: 0, retain: false });
+    queueMicrotask(() => {
+      client.emit('message', topic, Buffer.from(JSON.stringify({ print: { ...packet.system, result: 'fail' } })));
+      client.emit('message', topic, Buffer.from(JSON.stringify({ system: { ...packet.system, result: 'success' } })));
+    });
+  };
+  let connections = 0;
+  const monitor = createBambuMonitor(() => { connections++; return client; });
+  const machine = { id: 'one', origin: 'mqtts://192.168.1.2:8883', serial: 'TESTP2S123', accessCode: '12345678' };
+  try {
+    monitor.read(machine); client.emit('connect');
+    client.emit('message', topic, Buffer.from(JSON.stringify({ print: { command: 'push_status', gcode_state: 'IDLE', lights_report: [{ node: 'chamber_light', mode: 'off' }] } })));
+    assert.equal(await monitor.send(machine, 'ledctrl', { led_node: 'chamber_light', led_mode: 'on' }, 'system'), true);
+    assert.equal(packets.length, 1); assert.equal(connections, 1);
+    assert.equal(monitor.controlState(machine).lights[0].value, false, 'seul le rapport fait foi');
+  } finally { monitor.close(); }
+});

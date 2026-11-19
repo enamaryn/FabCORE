@@ -1,9 +1,27 @@
 # Phase 1 · POC — preuve de concept
 
-**État : phase active, développement terminé, recette matérielle en cours.**
+**État : phase active, complément de pilotage manuel en revue, recette matérielle en cours.**
 Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-concept)) : vérifier les risques techniques sur du matériel réel avant le [MVP](MVP.md).
 
 **Prochaine action :** dérouler la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
+
+## Contrôles manuels · 19 novembre 2026
+
+**État : ouvert, branche `feat/machine-controls`, non déployé.** Panneau « Contrôles » sur la fiche, après caméra/télémétrie et fabrication/filaments. Éclairage et chauffe, puis déplacements et ventilateurs, selon les capacités réellement intégrées :
+
+| Connecteur | Éclairage | Chauffe buse/plateau | Déplacements XYZ / origine | Ventilateurs |
+| --- | --- | --- | --- | --- |
+| Bambu P2S | Caisson, si remonté | Consignes et coupure | Non exposés dans ce jalon | Pièce, auxiliaire et caisson si remontés |
+| Klipper/Moonraker | Objets LED déclarés (led, neopixel, dotstar, pca9533, pca9632) | Chauffages présents | Oui, pas 0,1/1/10 mm ; origine requise avant jog ; limites vérifiées | fan et fan_generic déclarés |
+| OctoPrint | Pas de commande universelle | Chauffages remontés | Jog et origine natifs ; contrôle des limites confié au firmware | Pas de retour standard exploité |
+| Elegoo CC2 | Lecture seule | Lecture seule | Non exposés | Lecture seule, vitesse et tr/min si remontés |
+| CC1, PrusaLink, xTool M2 | Aucun nouveau contrôle dans ce jalon | — | — | — |
+
+Plafonds logiciels : buse 260 °C, plateau 100 °C, abaissés si Klipper déclare une limite inférieure. Ces plafonds ne remplacent pas les protections firmware. Les consignes et retours d’état restent distincts ; jamais d’état optimiste. Seuls les administrateurs agissent, les observateurs lisent. Déplacements/origine bloqués pendant impression et pause, confirmation d’origine dans l’interface, confirmation supplémentaire pour chauffe/ventilateur pendant fabrication. Validation serveur, verrous communs aux commandes/envois, 30 actions/minute et intervalle de 500 ms, aucun rejeu automatique après perte de réponse. Les lectures du panneau sont espacées de dix secondes ; les sessions MQTT existantes restent partagées.
+
+Références consultées : [OpenBambuAPI MQTT](https://github.com/Doridian/OpenBambuAPI/blob/main/mqtt.md), [G-code Bambu](https://github.com/Doridian/OpenBambuAPI/blob/main/gcode.md), [API Moonraker](https://moonraker.readthedocs.io/en/latest/external_api/printer/), [G-code Klipper](https://www.klipper3d.org/G-Codes.html), [états Klipper](https://www.klipper3d.org/Status_Reference.html), [API OctoPrint](https://docs.octoprint.org/en/main/api/printer.html). Dans [elegoo-link ec2d226](https://github.com/elegooofficial/elegoo-link/blob/ec2d2269b588608a1b9ccb4ff9627ddb758ea482/src/lan/adapters/elegoo_fdm_cc2/elegoo_fdm_cc2_message_adapter.cpp), HOME_AXES/1026, MOVE_AXES/1027, SET_TEMPERATURE/1028, SET_LIGHT/1029 et SET_FAN_SPEED/1030 sont commentés dans la table active : pas de boutons CC2 spéculatifs. L’adaptateur CC1 a la même restriction pour ces commandes.
+
+Vérifications : 75 tests réussis, syntaxe JS et diff vérifiés. Tests de capacités et paramètres, plafonds, homing/bornes, payloads natifs, lumière Bambu sur le canal system et corrélation sans nouvelle session, droits/origine/état/confirmation/débit, absence de rejeu et interface observateur. Aucune commande réelle, aucun déploiement ; rendu navigateur et comportement matériel restent à vérifier. Prochaine action : fusion puis recette éclairage, consignes et coupure sur une machine disponible, avant ventilateurs et pas de déplacement de 0,1 mm. Reprendre ensuite POC-10.2 ; pas d’extension filament, laser ou cloud.
 
 ## Ajustement des pastilles · 19 novembre 2026
 
@@ -165,6 +183,7 @@ Tickets [#31](https://github.com/enamaryn/FabCORE/issues/31) et [#32](https://gi
 - [x] POC-09.2 Visualiseur par couches depuis la fiche machine : extrusions, déplacements à vide, zoom, déplacement.
 - [x] POC-09.3 Suivi en direct : couche en cours, partie imprimée et position de la buse.
 - [x] POC-09.4 Terminal G-code administrateur : réponses Moonraker, statut « Acceptée » OctoPrint, confirmation pendant une impression, débit borné, aucun renvoi automatique.
+- [ ] POC-09.5 Contrôles manuels · ouvert (`feat/machine-controls`), voir la matrice en tête de ce document.
 
 ## Liste des fichiers · ergonomie du 19 novembre 2026
 

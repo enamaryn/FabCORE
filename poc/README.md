@@ -176,3 +176,11 @@ Dans la liste, **Télécharger** récupère le fichier original sur votre ordina
 À la fin, choisissez **Ne pas lancer**, **Tout lancer** sur les destinations disponibles, ou cochez des machines et **Lancer la sélection**. Les copies échouées ne sont jamais proposées. Vérifiez les plateaux, matériaux et le profil machine : FabCore copie le fichier sans le retrancher. Les restrictions AMS/CANVAS et celles des connecteurs restent applicables. Gardez la page ouverte jusqu’au bilan ; un résultat inconnu doit être vérifié sur la machine avant de recommencer.
 
 Les fichiers accessibles dépendent du connecteur : stockage natif sur Bambu, Moonraker, OctoPrint et PrusaLink ; copies des envois FabCore pour Elegoo. Le transfert natif xTool M2, résine et CNC n’est pas ajouté par cette fonction.
+
+## Contrôles manuels
+
+Le panneau **Contrôles** affiche les états d’éclairage, températures actuelles/cibles et ventilateurs disponibles. Les administrateurs disposent des actions prises en charge ; les observateurs voient les mesures seules. **Couper** fixe la consigne du chauffage concerné à zéro. Les plafonds FabCore sont 260 °C pour la buse et 100 °C pour le plateau, ou moins si la configuration Klipper l’exige.
+
+Sur Klipper/OctoPrint, les déplacements utilisent des pas de 0,1, 1 ou 10 mm ; la prise d’origine demande confirmation. Ils sont interdits pendant une impression ou une pause. Klipper exige les axes référencés et vérifie les limites remontées ; OctoPrint confie ces vérifications au firmware. Une modification de chauffe/ventilateur pendant fabrication demande une confirmation supplémentaire. Aucun état optimiste ni renvoi automatique en cas de réponse perdue : vérifier la machine avant de recommencer.
+
+La [matrice du POC](../docs/POC.md#contrôles-manuels--19-novembre-2026) précise les capacités : P2S lumière/chauffe/ventilateurs, Klipper selon objets déclarés, OctoPrint chauffe/déplacement, CC2 retours seuls. Les commandes CC2 correspondantes restent commentées dans le SDK ; aucun bouton spéculatif n’est activé. Ce jalon n’ajoute pas de pilotage manuel xTool, CC1 ou PrusaLink.

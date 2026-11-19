@@ -82,3 +82,10 @@ Appliquer recherche par nom/chemin, tris récent/ancien et A–Z, cinq élément
 - Un administrateur peut copier vers une ou plusieurs machines proposant le stockage du format concerné. Afficher le périmètre réel des fichiers disponibles ; ne pas confondre compatibilité de format et fichier tranché pour la destination.
 - Afficher une ligne par destination, avec attente, animation pendant l’opération, réussite verte ou échec rouge et explication. Un échec ne masque pas les autres résultats.
 - Après les copies, proposer « Ne pas lancer », « Tout lancer » ou le lancement de la sélection ; exclure les copies échouées et les machines indisponibles. Vérifier à nouveau les droits et l’état côté serveur. Aucun lancement automatique ou renvoi automatique d’une commande au résultat inconnu.
+
+## Contrôles manuels
+
+- Séparer état réel et consigne ; ne pas afficher une action acceptée comme un état matériel confirmé. Montrer uniquement les capacités du connecteur et les équipements remontés.
+- Écriture réservée aux administrateurs, lecture aux observateurs. Valider paramètres, états, limites, droits et origine côté serveur ; utiliser les verrous de commande existants et ne jamais rejouer automatiquement une action.
+- Bloquer les déplacements et la prise d’origine pendant impression ou pause ; demander confirmation pour l’origine et pour une modification de chauffe/ventilateur pendant fabrication. Utiliser des pas bornés, préserver le mode G-code sur Klipper et vérifier origine/limites quand le protocole les fournit.
+- Les retours CC2 ne prouvent pas que les commandes commentées du SDK sont utilisables. Ne pas activer des numéros de méthode spéculatifs.
