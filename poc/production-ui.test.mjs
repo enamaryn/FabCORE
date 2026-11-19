@@ -49,6 +49,8 @@ test('fichiers : filtrer et paginer conserve la cible exacte des actions', () =>
     assert.equal(entry.files[index].path, file.path);
     assert.match(html, new RegExp('files-print:' + index + '"'));
     assert.match(html, new RegExp('viewer-open:' + index + '"'));
+    assert.match(html, new RegExp('files-transfer:' + index + '"'));
+    assert.ok(html.includes('path=' + encodeURIComponent(file.path)), 'téléchargement du chemin exact après tri');
   }
   entry.page = 1;
   page = sandbox.filePage(entry);
@@ -65,8 +67,33 @@ test('fichiers : filtrer et paginer conserve la cible exacte des actions', () =>
   entry.sort = 'oldest';
   assert.equal(sandbox.filePage(entry).rows.at(-1).file.modified, null, 'dates inconnues toujours en dernier');
   assert.equal(sandbox.filesState('other').query, '', 'recherche indépendante par machine');
+  sandbox.state.role = 'viewer';
+  html = sandbox.filesPanel(machine);
+  assert.match(html, /download=1/);
+  assert.doesNotMatch(html, /files-transfer:/);
+  sandbox.state.role = 'admin';
   const cc2 = sandbox.filesState('cc2'); cc2.files = [];
   html = sandbox.filesPanel({ id: 'cc2', kind: 'elegoo', status: 'ready' });
   assert.match(html, /Aucun fichier envoyé via FabCore/);
   assert.doesNotMatch(html, /Aucun fichier G-code sur la machine/);
+});
+
+
+test('transfert multiple : sélection compatible, échec partiel et un seul essai par machine', async () => {
+  const source = readFileSync(new URL('./live.js', import.meta.url), 'utf8');
+  const code = source.slice(source.indexOf('function fileTransferCandidates('), source.indexOf('function openFileTransfer('));
+  const sandbox = { state: { machines: [{ id: 'source', kind: 'bambu' }, { id: 'bambu', kind: 'bambu' }, { id: 'cc2', kind: 'elegoo' }, { id: 'laser', kind: 'xtool-m2' }] }, machineConnectors: connectorCatalog };
+  runInNewContext(code + '\nthis.candidates=fileTransferCandidates;this.run=runFileBatch;', sandbox);
+  assert.deepEqual(Array.from(sandbox.candidates('source', 'cube.gcode'), m => m.id), ['bambu', 'cc2']);
+  assert.deepEqual(Array.from(sandbox.candidates('source', 'cube.3mf'), m => m.id), ['bambu']);
+  const attempted = [], changes = [], started = [];
+  const results = await sandbox.run(['one', 'two', 'three'], async item => {
+    attempted.push(item);
+    if (item === 'two') throw new Error('unknown outcome');
+    return item + '.gcode';
+  }, (result, count, total) => changes.push([result.ok, count, total]), item => started.push(item));
+  assert.deepEqual(started, ['one', 'two', 'three']);
+  assert.deepEqual(attempted, ['one', 'two', 'three']);
+  assert.deepEqual(changes, [[true, 1, 3], [false, 2, 3], [true, 3, 3]]);
+  assert.deepEqual(Array.from(results.filter(r => r.ok), r => r.value), ['one.gcode', 'three.gcode']);
 });

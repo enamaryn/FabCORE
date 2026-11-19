@@ -192,6 +192,17 @@ test('3MF : lit un seul plateau tranché, rejette archives ambiguës et chemins 
   assert.equal(productionPath('../a.3mf'), null); assert.equal(productionPath('/a.3mf'), null); assert.equal(productionPath('cache/a.3mf'), 'cache/a.3mf');
 });
 
+test('3MF : télécharger conserve le projet original, visualiser extrait seulement le G-code', async ctx => {
+  const directory = await mkdtemp(join(tmpdir(), 'fabcore-original-'));
+  ctx.after(() => rm(directory, { recursive: true, force: true }));
+  const bytes = project(['Metadata/plate_2.gcode']);
+  const native = { download: async () => new Response(bytes) };
+  const files = retainedFiles(directory, native, { projects: true });
+  const machine = { id: 'one', origin: 'mqtts://192.168.1.2:8883', serial: 'BAMBU1' };
+  assert.deepEqual(Buffer.from(await (await files.downloadOriginal(machine, 'cache/cube.3mf')).arrayBuffer()), bytes);
+  assert.equal(await (await files.download(machine, 'cache/cube.3mf')).text(), 'G1 X1 E1\n');
+});
+
 test('Visualiseur laser : M3/M4, puissance nulle, M5 et déplacements rapides', () => {
   const parser = createGcodeParser({ laser: true });
   parser.write('M4 S100\nG1 X10\nG0 X20\nG1 X30 S0\nG1 X40 S50\nM5\nG1 X50\n');

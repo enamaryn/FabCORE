@@ -16,6 +16,7 @@ import { internalNtfy, notificationSettings, publicNotifications, sendNotificati
 import { openStore } from './store.mjs';
 import { filePath } from './connector-http.mjs';
 import { productionPath } from './production-files.mjs';
+import { transferMachineFile } from './file-transfer.mjs';
 
 const derive = promisify(scrypt);
 const digest = (secret) => createHash('sha256').update(secret).digest();
@@ -441,7 +442,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         pendingCommands.delete(machine.id);
       }
     }
-    const fileRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/(files|file|print)(?:\?(.*))?$/);
+    const fileRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/(files|file|print|transfer)(?:\?(.*))?$/);
     if (fileRoute) {
       if (!viewer) return error(res, 401, 'sign-in');
       const [, id, route, query = ''] = fileRoute;
@@ -462,7 +463,8 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         const controller = new AbortController();
         res.once('close', () => controller.abort());
         let response;
-        try { response = await files.download(machine, target, controller.signal); } catch (failure) {
+        const download = params.get('download') === '1' ? files.downloadOriginal ?? files.download : files.download;
+        try { response = await download.call(files, machine, target, controller.signal); } catch (failure) {
           return error(res, 502, ['project-multiple-plates', 'project-no-gcode', 'project-format'].includes(failure.message) ? failure.message : 'files-unavailable');
         }
         if (!response.ok || !response.body) {
@@ -474,7 +476,10 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
           await response.body.cancel();
           return error(res, 413, 'file-too-large');
         }
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', ...(length > 0 ? { 'Content-Length': String(length) } : {}) });
+        const attachment = params.get('download') === '1';
+        const filename = target.split('/').at(-1);
+        res.writeHead(200, { 'Content-Type': attachment ? 'application/octet-stream' : 'text/plain; charset=utf-8',
+          ...(attachment ? { 'Content-Disposition': "attachment; filename*=UTF-8''" + encodeURIComponent(filename).replace(/['()*]/g, char => '%' + char.charCodeAt(0).toString(16).toUpperCase()), 'Cache-Control': 'no-store' } : {}), ...(length > 0 ? { 'Content-Length': String(length) } : {}) });
         let sent = 0;
         try {
           for await (const chunk of response.body) {
@@ -487,6 +492,37 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       }
       if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
       if (req.headers.origin !== publicUrl.origin) return error(res, 403, 'origin');
+      if (req.method === 'POST' && route === 'transfer') {
+        if (!requireJson(req, res)) return;
+        let data;
+        try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+        const sourcePath = validPath(data.path);
+        const destination = store.state.machines.find(entry => entry.id === data.destination);
+        const definition = destination && connectorDefinition(destination.kind ?? 'klipper');
+        const destinationPath = definition?.projects ? productionPath : filePath;
+        const name = data.name;
+        if (!sourcePath || data.confirm !== true || !destination || destination.id === machine.id || !definition?.files ||
+          !destinationPath(name) || name.includes('/') || /\.3mf$/i.test(sourcePath) !== /\.3mf$/i.test(name)) return error(res, 400, 'invalid');
+        if ([machine.id, destination.id].some(id => pendingUploads.has(id) || pendingCommands.has(id))) return error(res, 409, 'upload-busy');
+        pendingUploads.add(machine.id);
+        pendingUploads.add(destination.id);
+        const controller = new AbortController();
+        res.once('close', () => controller.abort());
+        try {
+          const targetFiles = (await connectors.get(destination.kind ?? 'klipper')).files;
+          if ((await targetFiles.list(destination)).some(entry => entry.path === name)) return error(res, 409, 'file-exists');
+          const stored = await transferMachineFile({ machine, files }, { machine: destination, files: targetFiles }, sourcePath, name, controller.signal);
+          diagnostics.record('files', 'transferred', destination.id);
+          return answer(res, 201, { path: stored, destination: destination.id });
+        } catch (failure) {
+          const known = ['file-too-large', 'missing', 'files-unavailable', 'file-exists', 'file-quota', 'project-format', 'project-multiple-plates', 'project-no-gcode'];
+          return error(res, failure.message === 'file-exists' ? 409 : failure.message === 'file-too-large' ? 413 : failure.message === 'missing' ? 404 : 502,
+            known.includes(failure.message) ? failure.message : 'upload-failed');
+        } finally {
+          pendingUploads.delete(machine.id);
+          pendingUploads.delete(destination.id);
+        }
+      }
       if (req.method === 'POST' && route === 'files') {
         const name = params.get('name');
         const size = Number(req.headers['content-length']);

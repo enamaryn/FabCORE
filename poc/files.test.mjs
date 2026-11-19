@@ -42,6 +42,7 @@ test('parcours HTTP des fichiers Moonraker : liste, lecture, envoi et lancement 
   let startFails = false;
   const stored = new Map([['cube.gcode', gcode]]);
   const calls = [];
+  const uploadHosts = [];
   const fetchFiles = async (url, options) => {
     const { pathname, searchParams } = new URL(url);
     calls.push(options.method + ' ' + pathname);
@@ -52,6 +53,7 @@ test('parcours HTTP des fichiers Moonraker : liste, lecture, envoi et lancement 
       return text ? new Response(text, { headers: { 'Content-Length': String(text.length) } }) : new Response('', { status: 404 });
     }
     if (pathname === '/server/files/upload') {
+      uploadHosts.push(new URL(url).hostname);
       const form = await new Response(options.body, { headers: { 'Content-Type': options.headers['Content-Type'] } }).formData();
       assert.equal(Number(options.headers['Content-Length']) > 0, true);
       assert.equal(form.get('root'), 'gcodes');
@@ -96,6 +98,7 @@ test('parcours HTTP des fichiers Moonraker : liste, lecture, envoi et lancement 
   const prusa = (await call('/api/machines', { body: { kind: 'prusalink', name: 'MK4', origin: 'http://192.168.1.69', apiKey: 'prusa-key' }, cookie })).json.id;
   await call('/api/observers', { body: { username: 'observateur', password: 'observer-demo-password' }, cookie });
   const watcher = (await call('/api/login', { body: { username: 'observateur', password: 'observer-demo-password' } })).headers['set-cookie'][0].split(';')[0];
+  const destination = (await call('/api/machines', { body: { name: 'Voron 2', origin: 'http://192.168.1.41:7125' }, cookie })).json.id;
   const root = '/api/machines/' + id;
 
   assert.equal((await call(root + '/files')).status, 401);
@@ -105,6 +108,32 @@ test('parcours HTTP des fichiers Moonraker : liste, lecture, envoi et lancement 
   assert.deepEqual([read.status, read.text], [200, gcode]);
   assert.equal((await call(root + '/file?path=..%2Fetc%2Fpasswd', { cookie })).status, 400);
   assert.equal((await call(root + '/file?path=absent.gcode', { cookie })).status, 404);
+
+  const attachment = await call(root + '/file?download=1&path=cube.gcode', { cookie: watcher });
+  assert.equal(attachment.status, 200);
+  assert.equal(attachment.text, gcode);
+  assert.equal(attachment.headers['content-type'], 'application/octet-stream');
+  assert.match(attachment.headers['content-disposition'], /attachment; filename\*=UTF-8''cube.gcode/);
+  assert.equal(attachment.headers['cache-control'], 'no-store');
+  assert.equal((await call(root + '/file?download=1&path=cube.gcode')).status, 401);
+  const transfer = (body, options = {}) => call(root + '/transfer', { body: { path: 'cube.gcode', destination, name: 'copie.gcode', confirm: true, ...body }, cookie, ...options });
+  const beforeTransfer = calls.length;
+  assert.equal((await transfer({}, { cookie: watcher })).status, 403);
+  assert.equal((await transfer({}, { cookie: undefined })).status, 401);
+  assert.equal((await transfer({}, { requestOrigin: 'http://evil.test' })).status, 403);
+  assert.equal((await transfer({ confirm: false })).status, 400);
+  assert.equal((await transfer({ destination: id })).status, 400);
+  assert.equal((await transfer({ path: '../cube.gcode' })).status, 400);
+  assert.equal((await transfer({ name: 'copy.3mf' })).status, 400);
+  assert.equal((await transfer({ name: '../copy.gcode' })).status, 400);
+  assert.equal(calls.length, beforeTransfer, 'aucun échange machine après une demande non autorisée');
+  const copied = await transfer({});
+  assert.deepEqual([copied.status, copied.json], [201, { path: 'copie.gcode', destination }]);
+  assert.equal(stored.get('copie.gcode'), gcode);
+  assert.equal(uploadHosts.at(-1), '192.168.1.41');
+  assert.equal(calls.some(call => call.endsWith('/printer/print/start')), false, 'la copie ne lance jamais');
+  assert.equal((await transfer({})).status, 409, 'pas d’écrasement implicite');
+  assert.equal((await transfer({ path: 'absent.gcode', name: 'missing.gcode' })).status, 404);
 
   const upload = (name, options) => call(root + '/files?name=' + encodeURIComponent(name), { body: gcode, type: 'application/octet-stream', ...options });
   assert.equal((await upload('nouveau.gcode', { cookie: watcher })).status, 403);

@@ -168,3 +168,11 @@ Pour Bambu : accès FTPS implicite sur le port 990 avec le code LAN existant ; G
 Pour Elegoo : seules les copies des fichiers envoyés avec succès par FabCore sont listées et visualisables, pas l’intégralité du stockage. Ces copies persistent sous le dossier de données FabCore (`files/`) ; prévoir leur sauvegarde avec les autres données. La limite est de 300 fichiers ou 2 Go par identité machine. Un nom déjà présent est refusé pour éviter un remplacement involontaire. La reprise CC2 reste à effectuer sur l’écran de la machine.
 
 Pour xTool M2 : Lancer agit sur le projet déjà préparé dans la machine ; les confirmations physiques restent nécessaires. Le transfert des projets natifs M2 n’est pas implémenté. Le visualiseur local accepte du G-code laser avec M3/M4, M5 et les puissances S ; il ne lit pas les projets xTool Studio et ne tranche ni ne convertit un modèle.
+
+### Récupérer ou transférer un fichier
+
+Dans la liste, **Télécharger** récupère le fichier original sur votre ordinateur (le `.3mf` reste un `.3mf`). **Transférer**, réservé aux administrateurs, ouvre le choix d’une ou plusieurs destinations proposant ce format et permet de modifier le nom à destination. La progression affiche une ligne par machine, une animation pendant sa copie, puis ✓ ou ✕ avec le résultat.
+
+À la fin, choisissez **Ne pas lancer**, **Tout lancer** sur les destinations disponibles, ou cochez des machines et **Lancer la sélection**. Les copies échouées ne sont jamais proposées. Vérifiez les plateaux, matériaux et le profil machine : FabCore copie le fichier sans le retrancher. Les restrictions AMS/CANVAS et celles des connecteurs restent applicables. Gardez la page ouverte jusqu’au bilan ; un résultat inconnu doit être vérifié sur la machine avant de recommencer.
+
+Les fichiers accessibles dépendent du connecteur : stockage natif sur Bambu, Moonraker, OctoPrint et PrusaLink ; copies des envois FabCore pour Elegoo. Le transfert natif xTool M2, résine et CNC n’est pas ajouté par cette fonction.
