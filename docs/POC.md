@@ -5,6 +5,12 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** dérouler la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Ajustement des pastilles · 19 novembre 2026
+
+**État : ouvert, branche `fix/fleet-filament-layout`, non déployé.** Groupe posé à cheval sur le bord supérieur de la carte, sans libellé pour un module unique. Pastilles rapprochées avec chevauchement de 3 px et liseré séparateur. Au maximum un module représenté : celui contenant le filament actif, sinon le premier. En présence de plusieurs modules, seul un compteur « 2 CANVAS » ou « 3 AMS » est ajouté ; le détail reste sur la fiche. Le compteur reste visible sur mobile.
+
+Vérifications : 68 tests réussis et diff sans erreur. Prochaine action : après fusion et mise à jour, vérifier le rendu desktop/mobile et le débordement supérieur, ainsi que le compteur si plusieurs modules sont connectés. Aucun déploiement effectué.
+
 ## Pastilles de filaments sur les cartes · 19 novembre 2026
 
 **État : ouvert, branche `feat/fleet-filament-dots`, non déployé.** Les cartes de la vue d’ensemble et du parc affichent au-dessus du statut un groupe compact AMS/CANVAS, avec couleurs réelles et numéros des emplacements. Le texte s’adapte au contraste, le vide est pointillé et l’emplacement actif est entouré de vert. Plusieurs modules restent séparés et identifiés ; AMS HT conserve son nombre réel d’emplacements. Sans module déclaré, une pastille non numérotée représente la bobine simple. Si les données d’équipement manquent, l’interface le précise ; aucune couleur n’est inventée. Les connecteurs ne remontant pas la couleur d’une bobine externe affichent donc une pastille hachurée « couleur inconnue ». Pas de pastille sur le laser.
