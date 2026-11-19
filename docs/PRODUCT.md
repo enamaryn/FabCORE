@@ -7,15 +7,15 @@ Règles durables tirées des essais du POC. Elles s’appliquent à toute nouvel
 - N’afficher que des mesures réelles. Aucune donnée de démonstration présentée comme une mesure.
 - Afficher les informations utiles, jamais les identifiants techniques internes à leur place.
 - Montrer honnêtement les interruptions de données (graphique, dernière mise à jour, état « connexion »).
-- N’afficher un bouton que si le connecteur de la machine dispose de la capacité correspondante.
+- N’activer un bouton que si le connecteur de la machine dispose de la capacité correspondante. Un bloc Déplacements indisponible peut rester visible, explicitement désactivé et sans action de commande, conformément à la maquette validée.
 
 ## Vue d’ensemble et fiche machine
 
 - La vue d’ensemble montre l’état du parc : état, fabrication, progression, températures, activité récente et accès à chaque machine.
-- Sur la fiche machine, la caméra et la télémétrie sont côte à côte. La fabrication et le système multimatériau sont en dessous lorsqu’il existe. La disposition s’adapte aux petits écrans et aux capacités réelles.
+- La fiche machine utilise un cockpit : caméra/aperçu et filaments à gauche, fabrication, températures avec leurs consignes, actions rapides et déplacements à droite. Les fichiers et la console sont dans des onglets séparés ; la console n’apparaît que si disponible. La disposition s’adapte aux petits écrans et aux capacités réelles, sans colonne vide pour les machines sans caméra.
 - Un graphique commun affiche les températures de buse et de plateau.
 - Sur les cartes du parc et de la vue d’ensemble, afficher sur le bord supérieur un seul groupe de pastilles colorées, numérotées, rapprochées et légèrement chevauchantes, avec indication de l’emplacement actif. Aucun libellé pour un module unique ; plusieurs modules affichent un compteur (« 2 CANVAS », « 3 AMS ») et les pastilles du module actif, ou du premier à défaut. Une bobine simple a une seule pastille sans numéro ; couleur ou équipement inconnus restent explicitement inconnus. Ne pas afficher de filament sur les machines sans cette fonction.
-- AMS et CANVAS sont représentés de façon compacte : bobines étroites et rapprochées, emplacements vides, matière, couleur et emplacement actif lorsque ces informations sont reçues.
+- Sur la fiche, tous les modules AMS/CANVAS réels restent visibles en grille 2 × 2 pour quatre modules (plus de rangées au besoin), une colonne sur mobile et une carte à sa taille pour un module seul. AMS et CANVAS sont représentés de façon compacte : bobines étroites et rapprochées, emplacements vides, matière, couleur et emplacement actif lorsque ces informations sont reçues.
 - « Ajouter une machine » ouvre d’abord la découverte, avec le choix entre scan du réseau et saisie manuelle. Le scan part du serveur, ou plus tard de l’agent local.
 - Ajout, modification et suppression des machines gèrent aussi leurs connexions et ressources (sessions, flux caméra).
 

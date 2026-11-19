@@ -230,7 +230,7 @@ function liveFabrication(m) {
   const available = machineConnectors[m.kind]?.commandActions ?? [];
   const actions = m.status === 'printing' ? ['pause', 'stop'] : m.status === 'paused' ? ['resume', 'stop'] : ['ready', 'done'].includes(m.status) ? ['start'] : [];
   const labels = { pause: t('Pause','Pause'), resume: t('Reprendre','Resume'), stop: t('Stop','Stop'), start: t('Lancer le projet préparé','Start prepared project') };
-  const controls = canManage ? actions.filter(action => available.includes(action)).map(action => btn('print-command:' + action, labels[action], '', action === 'stop' ? 'danger' : 'primary', pendingPrintCommands.has(m.id) ? 'disabled' : '')).join('') + (machineConnectors[m.kind]?.files && canStart(m) ? btn('files-focus', t('Lancer…','Start…'), '', 'primary') : '') : '';
+  const controls = canManage ? actions.filter(action => available.includes(action)).map(action => btn('print-command:' + action, labels[action], '', action === 'stop' ? 'danger' : 'primary', pendingPrintCommands.has(m.id) ? 'disabled' : '')).join('') + (machineConnectors[m.kind]?.files && canStart(m) ? btn('files-focus', t('Choisir un fichier','Choose a file'), '', 'primary') : '') : '';
   return `<section class="panel stack">
       <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2><div class="row wrap">${badge(m.status)}${controls}</div></div>
       ${m.kind === 'xtool-m2' ? `<p class="muted">${t('Lancer concerne le projet déjà préparé dans la M2. Les confirmations physiques restent nécessaires.', 'Start uses the project already prepared on the M2. Physical confirmations remain required.')}</p>` : ''}
@@ -371,7 +371,7 @@ function liveFilaments(machine) {
   const units = machine.filaments?.map(({ id, variant, slots }) => {
     const unit = variant === 'ht' ? 'AMS HT ' + (id - 3) : system + ' ' + (id + 1);
     return `<div class="filament-module">
-      ${machine.filaments.length > 1 ? `<h3>${unit}</h3>` : ''}
+      <h3>${unit}</h3>
       <ul class="filament-rack" style="--slots:${slots.length}">
         ${slots.map((slot) => {
           const position = system === 'AMS' && !variant ? String.fromCharCode(65 + id) + (slot.id + 1) : String(slot.id + 1);
@@ -379,7 +379,7 @@ function liveFilaments(machine) {
             : slot.occupied ? t('Chargé', 'Loaded') : t('Vide', 'Empty');
           const shade = /^#[A-Fa-f0-9]{6}$/.test(slot.color) ? slot.color : 'var(--dim)';
           const label = slot.name || slot.material || occupation;
-          return `<li class="filament-slot" data-occupied="${slot.occupied}" data-active="${slot.active}" style="--filament:${esc(shade)}">
+          return `<li class="filament-slot" data-occupied="${slot.occupied}" data-active="${slot.active}" title="${esc([unit, position, occupation, slot.material, slot.name, slot.color].filter(Boolean).join(' · '))}" style="--filament:${esc(shade)}">
             <span class="filament-spool" aria-hidden="true"><i></i></span>
             <span class="filament-position" aria-label="${t('Emplacement', 'Slot')} ${position}">${position}</span>
             <small class="filament-material">${esc(label)}</small>
@@ -389,7 +389,7 @@ function liveFilaments(machine) {
       </ul>
     </div>`;
   }).join('');
-  return `<section class="panel stack">
+  return `<section class="panel stack machine-filaments" data-modules="${machine.filaments?.length ?? 0}">
     <style>
       .filament-module{display:grid;gap:.65rem}
       .filament-rack{display:grid;grid-template-columns:repeat(var(--slots),minmax(0,1fr));gap:.35rem;
@@ -415,52 +415,60 @@ function liveFilaments(machine) {
       .filament-active{color:var(--accent);font-weight:700}
       .filament-slot[data-active=true]:after{content:'';position:absolute;height:.65rem;top:100%;border-left:2px solid var(--accent)}
     </style>
-    <h2>${system}</h2>${units || `<p>${missing}</p>`}
+    <h2>${t('Filaments','Filaments')} · ${system}${machine.filaments?.length > 1 ? ' × ' + machine.filaments.length : ''}</h2><div class="filament-modules">${units || `<p>${missing}</p>`}</div>
   </section>`;
 }
 
+const machineTabs = new Map();
+function machineTab(id = state.machine) {
+  const tab = machineTabs.get(id) ?? 'overview';
+  return tab === 'console' && !machineConnectors[machine(id)?.kind]?.terminal ? 'overview' : tab;
+}
+function selectMachineTab(tab) {
+  if (!['overview', 'files', 'console'].includes(tab)) return;
+  if (tab === 'console' && !machineConnectors[machine(state.machine)?.kind]?.terminal) return;
+  machineTabs.set(state.machine, tab);
+  renderLive();
+  app.querySelector('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true });
+}
 function liveDetail() {
   const m = machine(state.machine);
   if (!m) return liveFleet();
+  const tab = machineTab();
   const camera = machineConnectors[m.kind]?.camera
     ? `<section class="panel stack machine-camera" data-camera-panel>
       <style>[data-camera-panel] [hidden]{display:none!important}</style>
-      <h2>${t('Caméra en direct','Live camera')}</h2>
-      ${m.kind === 'xtool-m2' ? `<label>${t('Vue', 'View')}<select data-camera-view>
-        <option value="side">${t('Caméra d’angle', 'Corner camera')}</option>
-        <option value="far">${t('Caméra centrale', 'Central camera')}</option>
-        <option value="near">${t('Caméra de l’outil', 'Tool camera')}</option>
-      </select></label>` : ''}
-      <div data-live-camera></div>
-      <div class="machine-camera-idle" data-camera-placeholder>${icon('camera')}<p>${t('Flux fermé','Stream closed')}</p></div>
+      <div class="row between wrap"><h2>${t('Caméra','Camera')}</h2>${m.kind === 'xtool-m2' ? `<label>${t('Vue', 'View')}<select data-camera-view aria-label="${t('Vue caméra','Camera view')}">
+        <option value="side">${t('Angle', 'Corner')}</option><option value="far">${t('Centrale', 'Central')}</option><option value="near">${t('Outil', 'Tool')}</option>
+      </select></label>` : `<small>${t('Aperçu à l’ouverture','Preview on opening')}</small>`}</div>
+      <div class="camera-stage"><div data-live-camera></div><div class="machine-camera-idle" data-camera-placeholder>${icon('camera')}<p>${t('Aperçu indisponible','Preview unavailable')}</p></div></div>
       <p data-camera-status role="status" hidden></p>
-      <div class="row wrap">${btn('camera-start',t('Voir la caméra','View camera'))}
-      ${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
+      <div class="row wrap camera-toolbar">${btn('camera-start',t('Voir la caméra','View camera'),'camera')}${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
     </section>` : '';
-  const edit = state.role === 'admin' ? btn('edit',t('Modifier la machine','Edit machine')) : '';
-  return title(esc(m.name), esc(m.model + ' · ' + m.origin), `<div class="row wrap">${btn('nav:machines',t('Retour au parc','Back to fleet'),'grid','ghost')}${edit}</div>`) +
-    `<style>
-      .machine-detail{display:grid;gap:1rem}
-      .machine-detail-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
-      .machine-detail-row > *{min-width:0}
-      .machine-detail-row > :only-child,.machine-detail-row > :first-child:has(+ :empty){grid-column:1/-1}
-      .machine-detail-row > div:empty,.machine-detail-row:empty{display:none}
-      .machine-detail-row > div > .panel{height:100%}
-      .machine-temperature,.machine-camera{align-content:start}
-      .machine-readings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
-      .machine-readings strong{display:block;font-size:1.35rem;margin-top:.2rem}
-      .machine-temperature [data-temperature-plot] svg{display:block;max-height:12rem}
-      .machine-camera-idle{min-height:7rem;display:grid;justify-items:center;align-content:center;gap:.45rem;color:var(--dim)}
-      .machine-camera-idle svg{width:2rem;height:2rem}
-      @media(max-width:700px){.machine-detail-row{grid-template-columns:minmax(0,1fr)}}
+  const tabs = [['overview', t('Vue machine','Machine view')], ['files', t('Fichiers','Files')], ...(machineConnectors[m.kind]?.terminal ? [['console', t('Console','Console')]] : [])];
+  return `<div class="machine-cockpit">
+    <style>
+      .machine-workspace{grid-template-columns:76px minmax(0,1fr)}.machine-workspace .sidebar{padding:18px 10px;gap:18px}.machine-workspace .brand{font-size:0;padding:0;justify-content:center}.machine-workspace .brand strong{display:none}.machine-workspace .sidebar nav button{font-size:0;justify-content:center;padding:12px}.machine-workspace .sidebar .sidefoot{font-size:10px;text-align:center}.machine-workspace .top{min-height:48px;padding:6px 20px}.machine-workspace .area{max-width:1600px;padding:16px 20px 24px}
+      .machine-account{position:relative}.machine-account summary{cursor:pointer;list-style:none;border:1px solid var(--line);border-radius:8px;padding:6px 10px}.machine-account summary::-webkit-details-marker{display:none}.machine-account>div{position:absolute;right:0;top:calc(100% + 8px);z-index:10;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;box-shadow:0 6px 24px var(--shadow);width:240px}.machine-account>div button{width:100%;justify-content:flex-start}
+      .machine-cockpit{display:grid;gap:12px}.cockpit-header h1{font-size:26px;letter-spacing:-.04em}.cockpit-header small{font-size:12px}.cockpit-header{gap:12px}.cockpit-header .row:first-child{min-width:0}.cockpit-header h1{overflow-wrap:anywhere}.machine-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}.machine-tabs button{border:0;border-radius:6px 6px 0 0;background:transparent;border-bottom:3px solid transparent;min-height:38px;padding:7px 14px}.machine-tabs [aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent);background:var(--soft)}
+      .cockpit-grid{display:grid;grid-template-columns:minmax(0,1.03fr) minmax(0,1fr);gap:14px;align-items:start}.cockpit-column{display:grid;gap:12px;min-width:0;align-content:start}.machine-cockpit .panel{padding:12px;box-shadow:0 2px 8px var(--shadow)}.machine-cockpit .stack{gap:8px}.machine-cockpit h2{font-size:17px}.machine-cockpit h3{font-size:13px}.machine-cockpit button,.machine-cockpit input,.machine-cockpit select{min-height:34px;padding:5px 9px}.machine-cockpit input[type=checkbox]{min-height:0}.machine-cockpit small{line-height:1.35}
+      .camera-stage{position:relative;aspect-ratio:16/9;max-height:clamp(150px,calc(100dvh - 560px),390px);min-height:150px;background:var(--raised);overflow:hidden;border-radius:8px}.camera-stage [data-live-camera]{height:100%;display:grid;place-items:center}.camera-stage img{width:100%;height:100%;max-width:none!important;object-fit:contain;border-radius:8px!important}.machine-camera-idle{position:absolute;inset:0;display:grid;align-content:center;justify-items:center;gap:6px;color:var(--dim)}.machine-camera-idle svg{width:28px;height:28px}.camera-toolbar{justify-content:flex-end}.machine-camera [role=status]{font-size:12px}
+      .machine-temperature [data-temperature-plot] svg{display:block;max-height:125px;width:100%}.machine-readings{display:flex;justify-content:space-between}.control-heater{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid var(--line)}.control-heater>p{flex:1;min-width:120px;font-size:13px}.control-heater form{gap:5px}.control-heater input{width:65px}.control-heater label{font-size:11px}.control-heater button{font-size:11px}.quick-control{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;font-size:12px}.quick-control form{gap:5px}.quick-control input{width:62px}.quick-control form label{font-size:11px}.control-switch[aria-pressed=true]{color:var(--accent);background:var(--soft)}
+      .filament-modules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.filament-modules>.filament-module:only-child{grid-column:1/-1;justify-self:start}.machine-cockpit .filament-module{gap:5px;padding:8px;background:var(--raised);border:1px solid var(--line);border-radius:8px;min-width:0}.machine-cockpit .filament-rack{width:auto;max-width:100%;padding:2px 0;gap:5px;background:transparent;border:0;grid-template-columns:repeat(var(--slots),minmax(28px,42px))}.machine-cockpit .filament-spool{width:19px;height:31px}.machine-cockpit .filament-slot{gap:3px;grid-template-rows:auto auto auto}.machine-cockpit .filament-position{font-size:10px;padding:1px 4px}.machine-cockpit .filament-material{font-size:10px;max-width:46px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.machine-cockpit .filament-active{display:none}.machine-cockpit .filament-slot[data-active=true]:after{display:none}.machine-cockpit .filament-slot[data-active=true]{outline:1px solid var(--accent);outline-offset:2px;border-radius:4px}
+      .jog-layout{display:flex;gap:16px;align-items:center;justify-content:center}.jog-pad{display:grid;grid-template:repeat(3,32px)/repeat(3,38px);gap:3px}.jog-pad button{padding:3px;min-height:32px}.jog-pad span{display:grid;place-items:center;color:var(--dim);font-size:11px}.jog-z{display:grid;gap:5px;border-left:1px solid var(--line);padding-left:16px}.jog-options{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.jog-options label{font-size:12px}.jog-note{font-size:11px;color:var(--dim)}
+      .machine-cockpit [data-live-filaments]:empty{display:none}.machine-cockpit .machine-filaments[data-modules="1"]{width:fit-content;max-width:100%}.cockpit-grid:not(:has(.machine-camera)):not(:has(.machine-filaments)){grid-template-columns:1fr}.cockpit-grid:not(:has(.machine-camera)):not(:has(.machine-filaments))>.cockpit-column:first-child{display:none}
+      .cockpit-bottom{display:grid;gap:12px;min-width:0}.cockpit-bottom>.panel{min-width:0}.cockpit-column:not(:has(.filament-modules)) .camera-stage{max-height:60vh}
+      @media(min-width:1100px) and (max-height:900px){.cockpit-bottom{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.machine-temperature [data-temperature-plot] svg{max-height:85px}.jog-layout{gap:8px}.jog-z{padding-left:8px}.jog-options{gap:5px}.machine-cockpit [data-live-telemetry] .panel{gap:6px}}
+      @media(max-width:1000px){.cockpit-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.control-heater form{width:100%}.machine-workspace .area{padding:12px}}
+      @media(max-width:760px){.machine-workspace{display:block}.machine-workspace .sidebar{display:none}.cockpit-grid{grid-template-columns:1fr}.machine-workspace .area{padding-bottom:80px}.camera-stage{max-height:none}.cockpit-header{align-items:flex-start}.machine-tabs{overflow:auto}.machine-tabs button{white-space:nowrap}.machine-account summary{max-width:120px;overflow:hidden;text-overflow:ellipsis}.machine-workspace .top{padding:6px 12px}}
+      @media(max-width:380px){.filament-modules{grid-template-columns:1fr}}
     </style>
-    <div class="machine-detail">
-      <div class="machine-detail-row">${camera}${liveTemperatures(m)}</div>
-      <div class="machine-detail-row"><div data-live-telemetry>${liveFabrication(m)}</div><div data-live-filaments>${liveFilaments(m)}</div></div>
-      ${manualControlsPanel(m)}
-      ${filesPanel(m)}
-      ${terminalPanel(m)}
-    </div>`;
+    <header class="cockpit-header row between"><div class="row">${btn('nav:machines', '←', '', 'ghost', `aria-label="${t('Retour au parc','Back to fleet')}"`)}<div><h1>${esc(m.name)}</h1><small>${esc(m.model)}</small></div><span data-machine-status>${badge(m.status)}</span></div>${state.role === 'admin' ? btn('edit', '', 'control', 'ghost', `aria-label="${t('Modifier la machine','Edit machine')}"`) : ''}</header>
+    <div class="machine-tabs" role="tablist" aria-label="${t('Fiche machine','Machine details')}">${tabs.map(([key, label]) => `<button type="button" id="machine-tab-${key}" role="tab" aria-selected="${tab === key}" aria-controls="machine-tab-panel" tabindex="${tab === key ? 0 : -1}" data-action="machine-tab:${key}">${label}</button>`).join('')}</div>
+    <div role="tabpanel" id="machine-tab-panel" aria-labelledby="machine-tab-${tab}">
+      ${tab === 'files' ? filesPanel(m) : tab === 'console' ? terminalPanel(m) : `<div class="cockpit-grid"><div class="cockpit-column">${camera}<div data-live-filaments>${liveFilaments(m)}</div></div><div class="cockpit-column"><div data-live-telemetry>${liveFabrication(m)}</div>${machineConnectors[m.kind]?.controls ? manualControlsPanel(m, 'heat') + `<div class="cockpit-bottom">${manualControlsPanel(m, 'quick')}${manualControlsPanel(m, 'motion')}</div>` : liveTemperatures(m)}</div></div>`}
+    </div>
+  </div>`;
 }
 
 function showPreview() {
@@ -592,23 +600,27 @@ function renderLive() {
   const signedIn = live.phase === 'workshop';
   const screens = { diagnostics: diagnosticsPage, notifications: notificationPage, home: dashboard, machines: liveFleet, detail: liveDetail, viewer: viewerPage, history: () =>
     title(t('Activité récente','Recent activity')) + `<section class="panel">${listEvents()}</section>` };
-  app.innerHTML = `<a class="skip" href="#content">${t('Aller au contenu','Skip to content')}</a><div class="${signedIn?'layout':''}">
-    ${signedIn?`<aside class="sidebar">${brand()}<nav aria-label="${t('Navigation principale','Main navigation')}">${liveNavigation()}</nav><div class="sidefoot"><small class="signal">POC${state.role === 'viewer' ? ' · ' + t('Observateur','Observer') : ''}</small></div></aside>`:''}
-    <div><header class="top"><div class="crumb">${signedIn?`<span>${esc(live.username)}</span>`:brand()}</div><div class="row wrap">
-      ${btn('lang',state.lang==='fr'?'EN':'FR','','ghost',`aria-label="${state.lang==='fr'?'Switch to English':'Passer en français'}"`)}
+  const compact = signedIn && live.page === 'detail';
+  const accountActions = `      ${btn('lang',state.lang==='fr'?'EN':'FR','','ghost',`aria-label="${state.lang==='fr'?'Switch to English':'Passer en français'}"`)}
       ${btn('theme','','sun','ghost',`aria-label="${t('Basculer le thème','Toggle theme')}"`)}
       ${signedIn && state.role === 'admin' ? btn('diagnostics',t('Diagnostics','Diagnostics'),'activity') : ''}
       ${signedIn && state.role === 'admin' ? btn('notifications',t('Notifications','Notifications')) : ''}
       ${signedIn && state.role === 'admin' ? btn('observer',t('Ajouter un observateur','Add observer')) : ''}
       ${signedIn?btn('logout',t('Déconnexion','Sign out'),'','ghost'):''}
-    </div></header><main id="content" class="area" tabindex="-1">
+`;
+  app.innerHTML = `<a class="skip" href="#content">${t('Aller au contenu','Skip to content')}</a><div class="${signedIn ? 'layout' + (compact ? ' machine-workspace' : '') : ''}">
+    ${signedIn?`<aside class="sidebar">${brand()}<nav aria-label="${t('Navigation principale','Main navigation')}">${liveNavigation()}</nav><div class="sidefoot"><small class="signal">POC${state.role === 'viewer' ? ' · ' + t('Observateur','Observer') : ''}</small></div></aside>`:''}
+    <div><header class="top"><div class="crumb">${compact ? `<span>${t('Machines','Machines')} / <strong>${esc(machine(state.machine)?.name ?? '')}</strong></span>` : signedIn ? `<span>${esc(live.username)}</span>` : brand()}</div>
+    ${compact ? `<details class="machine-account"><summary aria-label="${t('Compte et paramètres','Account and settings')}">${esc(live.username)} ▾</summary><div class="stack">${accountActions}</div></details>` : `<div class="row wrap">${accountActions}</div>`}
+    </header><main id="content" class="area" tabindex="-1">
       ${live.refreshError?`<p class="notice" role="status">${t('Actualisation indisponible. Les données affichées datent de la dernière réponse.','Refresh unavailable. Showing the last response.')}</p>`:''}
       ${signedIn?screens[live.page]():credentialsPage()}
     </main></div></div>
     ${signedIn?`<nav class="mobile" style="grid-template-columns:repeat(3,1fr)" aria-label="${t('Navigation mobile','Mobile navigation')}">${liveNavigation()}</nav>`:''}`;
-  if (signedIn && live.page === 'detail') { showPreview(); loadManualControls(state.machine); }
+  if (compact) app.querySelectorAll('.sidebar nav button').forEach(button => { button.title = button.textContent.trim(); });
+  if (signedIn && live.page === 'detail' && machineTab() === 'overview') { showPreview(); loadManualControls(state.machine); }
   if (signedIn && live.page === 'viewer') mountGcode();
-  if (signedIn && live.page === 'detail' && state.machine && machineConnectors[machine(state.machine)?.kind]?.files && filesState(state.machine).files === null) loadFiles(state.machine);
+  if (signedIn && live.page === 'detail' && machineTab() === 'files' && state.machine && machineConnectors[machine(state.machine)?.kind]?.files && filesState(state.machine).files === null) loadFiles(state.machine);
 }
 
 const statusLabels = {
@@ -655,6 +667,12 @@ async function refresh() {
       plot.innerHTML = temperaturePlot(current);
       plot.dataset.sample = newestSample;
     }
+    const headerStatus = app.querySelector('[data-machine-status]');
+    if (headerStatus && current) headerStatus.innerHTML = badge(current.status);
+    if (current) for (const key of ['nozzle', 'bed']) {
+      const reading = app.querySelector('[data-control-current="' + key + '"]');
+      if (reading) reading.textContent = Number.isFinite(current[key]) ? current[key].toLocaleString(state.lang, { maximumFractionDigits: 1 }) + ' °C' : '—';
+    }
     const checkedAt = current?.checkedAt;
     if (timestamp && checkedAt) timestamp.textContent = new Date(checkedAt).toLocaleTimeString(state.lang);
     if ((changed || hadRefreshError) && !dialog.open && !['notifications', 'diagnostics', 'viewer'].includes(live.page)) {
@@ -670,6 +688,10 @@ async function refresh() {
         if (filaments) filaments.innerHTML = liveFilaments(current);
         if (Boolean(app.querySelector('[data-files] [data-action="viewer-live"]')) !== Boolean(liveFile(current)) ||
           app.querySelector('[data-files]')?.dataset.fileStart !== String(canStart(current))) renderFiles(current.id);
+      } else if (live.page === 'detail' && !hadRefreshError) {
+        if (current && app.querySelector('[data-files]')?.dataset.fileStart !== String(canStart(current))) renderFiles(current.id);
+        const target = app.querySelector('[data-terminal-target]');
+        if (target && current) target.innerHTML = terminalTarget(current);
       } else renderLive();
       if (action) [...app.querySelectorAll('[data-action]')].find(button => button.dataset.action === action && button.getClientRects().length)?.focus();
     }
@@ -873,10 +895,12 @@ document.addEventListener('click', async (event) => {
     </form>`;
     dialog.showModal();
   }
+  if (action === 'machine-tab') selectMachineTab(value);
   if (action === 'files-focus') {
+    selectMachineTab('files');
     const panel = app.querySelector('[data-files]');
     panel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    panel?.querySelector('input,button')?.focus({ preventScroll: true });
+    panel?.querySelector('[data-files-search]')?.focus({ preventScroll: true });
   }
   if (action === 'print-command' && state.role === 'admin') {
     const current = machine(state.machine);
@@ -1093,36 +1117,45 @@ function manualState(id) {
   if (!manualStates.has(id)) manualStates.set(id, { data: null, at: 0, loading: false, busy: false, error: '', result: '' });
   return manualStates.get(id);
 }
-function manualControlsPanel(m) {
+function manualControlsPanel(m, part = 'all') {
   if (!machineConnectors[m.kind]?.controls) return '';
   const entry = manualState(m.id), data = entry.data;
   const admin = state.role === 'admin';
   const online = data && !entry.error && ['ready', 'done', 'printing', 'paused'].includes(m.status) && ['ready', 'done', 'printing', 'paused'].includes(data.status);
   const disabled = entry.busy || !online ? 'disabled' : '';
   const value = (n, suffix = '') => Number.isFinite(n) ? n.toLocaleString(state.lang, { maximumFractionDigits: 1 }) + suffix : '—';
-  const labels = { chamber_light: t('Caisson','Chamber'), main: t('Caisson','Chamber'), fan: t('Refroidissement pièce','Part cooling'), aux_fan: t('Auxiliaire','Auxiliary'), box_fan: t('Caisson','Chamber'), heater_fan: t('Refroidissement tête','Hotend cooling'), controller_fan: t('Électronique','Controller'), nozzle: t('Buse','Nozzle'), bed: t('Plateau','Bed'), part: t('Refroidissement pièce','Part cooling'), aux: t('Auxiliaire','Auxiliary'), chamber: t('Caisson','Chamber') };
+  const labels = { chamber_light: t('Caisson','Chamber'), main: t('Caisson','Chamber'), fan: t('Pièce','Part'), part: t('Pièce','Part'), aux: t('Auxiliaire','Auxiliary'), chamber: t('Caisson','Chamber'), aux_fan: t('Auxiliaire','Auxiliary'), box_fan: t('Caisson','Chamber'), heater_fan: t('Tête','Hotend'), controller_fan: t('Électronique','Controller'), nozzle: t('Buse','Nozzle'), bed: t('Plateau','Bed') };
   const label = id => labels[id] || id;
   const setting = (item, action, index) => admin && item.writable ? `<form class="row wrap" data-manual-form="${action}" data-control-id="${esc(item.id)}">
-    <label>${action === 'heat' ? t('Consigne °C','Target °C') : t('Commande %','Set %')} <input name="value" aria-label="${esc(label(item.id))}" type="number" min="0" max="${action === 'heat' ? item.max : 100}" step="1" required style="width:85px" ${disabled}></label>
+    <label>${action === 'heat' ? t('Cible','Target') : '%'} <input name="value" aria-label="${esc(label(item.id))} ${action === 'heat' ? '°C' : '%'}" type="number" min="0" max="${action === 'heat' ? item.max : 100}" step="1" required placeholder="${Number.isFinite(action === 'heat' ? item.target : item.percent) ? (action === 'heat' ? item.target : item.percent) : '—'}" ${disabled}></label>
     <button type="submit" ${disabled}>${t('Appliquer','Apply')}</button>${action === 'heat' ? btn('manual-off:' + index, t('Couper','Off'), '', '', disabled) : ''}</form>` : '';
-  return `<section class="panel stack" data-manual-controls>
-    <div class="row between wrap"><h2>${t('Contrôles','Controls')}</h2>${btn('manual-refresh', t('Actualiser','Refresh'), '', 'ghost', entry.loading ? 'disabled' : '')}</div>
-    ${entry.error ? `<p class="error" role="alert">${esc(entry.error)}</p>` : ''}
-    ${entry.result ? `<p role="status">${esc(entry.result)}</p>` : ''}
-    ${!data ? `<p>${t('Lecture des contrôles disponibles…','Reading available controls…')}</p>` : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px">
-      <div class="stack"><h3>${t('Éclairage','Lighting')}</h3>${data.lights.length ? data.lights.map((item, index) => `<div class="stack"><p>${esc(label(item.id))} · ${item.value === true ? t('Allumé','On') : item.value === false ? t('Éteint','Off') : t('État inconnu','Unknown state')}</p>${admin && item.writable ? `<div class="row">${btn('manual-light:' + index + ':on', t('Allumer','Turn on'), '', '', disabled)}${btn('manual-light:' + index + ':off', t('Éteindre','Turn off'), '', '', disabled)}</div>` : ''}</div>`).join('') : `<small>${t('Aucun éclairage pilotable déclaré.','No controllable lighting reported.')}</small>`}</div>
-      <div class="stack"><h3>${t('Chauffe','Heating')}</h3>${data.heaters.map((item, index) => `<div class="stack"><p><strong>${label(item.id)}</strong> · ${value(item.current, ' °C')} → ${value(item.target, ' °C')}</p>${setting(item, 'heat', index)}${item.writable ? `<small>${t('Plafond FabCore','FabCore ceiling')} : ${item.max} °C</small>` : ''}</div>`).join('') || `<small>${t('Indisponible','Unavailable')}</small>`}</div>
-      <div class="stack"><h3>${t('Ventilateurs','Fans')}</h3>${data.fans.map(item => `<div class="stack"><p><strong>${esc(label(item.id))}</strong> · ${value(item.percent, ' %')}${Number.isFinite(item.rpm) ? ' · ' + value(item.rpm, ' tr/min') : ''}</p>${setting(item, 'fan')}</div>`).join('') || `<small>${t('Aucun ventilateur remonté par le protocole.','No fan reported by the protocol.')}</small>`}</div>
-      ${data.motion && admin ? `<div class="stack"><h3>${t('Déplacements','Movement')}</h3><small>${data.motion.homed === null ? t('Origine et limites vérifiées par le firmware.','Homing and limits checked by firmware.') : t('Axes référencés','Homed axes') + ' : ' + (esc(data.motion.homed) || '—')}</small><label>${t('Pas','Step')} <select data-jog-step ${disabled}><option>0.1</option><option selected>1</option><option>10</option></select> mm</label>
-        <div class="row wrap">${['X', 'Y', 'Z'].map(axis => [-1, 1].map(sign => btn('manual-jog:' + axis + ':' + sign, axis + (sign < 0 ? ' −' : ' +'), '', '', entry.busy || !online || !['ready', 'done'].includes(data.status) || (data.motion.homed !== null && !['x','y','z'].every(a => data.motion.homed.includes(a))) ? 'disabled' : '')).join('')).join('')}</div>
-        ${btn('manual-home', t('Prise d’origine XYZ','Home XYZ'), '', '', entry.busy || !online || !['ready', 'done'].includes(data.status) ? 'disabled' : '')}</div>` : ''}
-    </div>`}
-    ${m.kind === 'elegoo' ? `<p class="notice">${t('CC2 : retours d’état uniquement. Les commandes correspondantes ne sont pas activées dans le SDK constructeur.', 'CC2: state readings only. These commands are not enabled in the manufacturer SDK.')}</p>` : ''}
-    <small>${t('Les valeurs affichées proviennent de la machine ; une commande acceptée ne confirme pas son exécution. Les déplacements sont bloqués pendant une fabrication ou une pause.', 'Displayed values come from the machine; an accepted command does not confirm execution. Movement is blocked during printing or pause.')}</small>
+  const heaters = data?.heaters ?? [{ id: 'nozzle', current: m.nozzle, target: null }, { id: 'bed', current: m.bed, target: null }];
+  const heat = `<div class="stack">${heaters.map((item, index) => `<div class="control-heater"><p><strong>${label(item.id)}</strong> <span data-control-current="${item.id}">${value(item.current, ' °C')}</span> <small>→ ${value(item.target, ' °C')}</small></p>${setting(item, 'heat', index)}</div>`).join('')}</div>`;
+  const quick = `<div class="stack">${data?.lights.map((item, index) => `<div class="quick-control"><span>${t('Éclairage','Lighting')} · ${esc(label(item.id))}</span>${admin && item.writable ? btn('manual-light:' + index + ':' + (item.value === true ? 'off' : 'on'), item.value === true ? t('Allumé','On') : item.value === false ? t('Éteint','Off') : t('Allumer','Turn on'), 'sun', 'control-switch', `${disabled} aria-pressed="${item.value === true}" aria-label="${t('Basculer l’éclairage','Toggle lighting')} ${esc(label(item.id))}"`) : `<span>${item.value === true ? t('Allumé','On') : item.value === false ? t('Éteint','Off') : '—'}</span>`}</div>`).join('') || ''}
+    ${data?.fans.map(item => `<div class="quick-control"><span>${t('Ventilateur','Fan')} ${esc(label(item.id))} · ${value(item.percent, ' %')}${Number.isFinite(item.rpm) ? ' · ' + value(item.rpm, ' tr/min') : ''}</span>${setting(item, 'fan')}</div>`).join('') || ''}
+    ${!data ? `<small>${t('Lecture des équipements…','Reading equipment…')}</small>` : !data.lights.length && !data.fans.length ? `<small>${t('Aucun éclairage ou ventilateur remonté.','No lighting or fan reported.')}</small>` : ''}
+    ${m.kind === 'elegoo' ? `<small>${t('CC2 : retours seuls, commandes non activées dans le SDK.', 'CC2: readings only; commands not enabled in the SDK.')}</small>` : ''}</div>`;
+  const canMove = data?.motion && online && ['ready', 'done'].includes(data.status) && ['ready', 'done'].includes(m.status) && !entry.busy;
+  const canJog = canMove && (data.motion.homed === null || ['x','y','z'].every(a => data.motion.homed.includes(a)));
+  const jog = (axis, sign, text, grid) => data?.motion ? btn('manual-jog:' + axis + ':' + sign, text, '', '', `${canJog ? '' : 'disabled'} aria-label="${axis} ${sign > 0 ? '+' : '−'}" ${grid ? `style="grid-area:${grid}"` : ''}`) : `<button type="button" disabled aria-label="${axis} ${sign > 0 ? '+' : '−'}" ${grid ? `style="grid-area:${grid}"` : ''}>${text}</button>`;
+  const motion = admin ? `<div class="stack"><div class="jog-layout"><div class="jog-pad">${jog('Y', 1, '↑', '1/2')}${jog('X', -1, '←', '2/1')}<span style="grid-area:2/2">XY</span>${jog('X', 1, '→', '2/3')}${jog('Y', -1, '↓', '3/2')}</div><div class="jog-z"><small>${m.kind === 'bambu' ? t('Plateau (Z)','Bed (Z)') : t('Axe Z','Z axis')}</small>${jog('Z', 1, 'Z +')}${jog('Z', -1, 'Z −')}</div></div>
+    <div class="jog-options"><label>${t('Pas','Step')} <select data-jog-step ${canMove ? '' : 'disabled'}><option value="0.1">0,1 mm</option><option value="1" selected>1 mm</option><option value="10">10 mm</option></select></label>${data?.motion ? btn('manual-home', t('Origine XYZ','Home XYZ'), '', '', canMove ? '' : 'disabled') : `<button type="button" disabled>${t('Origine XYZ','Home XYZ')}</button>`}</div>
+    <p class="jog-note">${!data?.motion ? t('Déplacements non disponibles sur ce connecteur.','Movement unavailable on this connector.') : data.motion.homed === null ? t('Origine et limites vérifiées par le firmware.','Homing and limits checked by firmware.') : t('Axes référencés','Homed axes') + ' : ' + (esc(data.motion.homed) || '—')}${data?.motion ? ' · ' + t('Bloqué pendant impression/pause.','Blocked during printing/pause.') : ''}</p></div>` : '';
+  if (part === 'motion' && !admin) return '';
+  const title = part === 'heat' ? t('Températures','Temperatures') : part === 'quick' ? t('Actions rapides','Quick actions') : part === 'motion' ? t('Déplacements','Movement') : t('Contrôles','Controls');
+  return `<section class="panel stack ${part === 'heat' ? 'machine-temperature' : ''}" data-manual-controls="${part}"><div class="row between"><h2>${title}</h2>${part === 'quick' ? btn('manual-refresh', t('Actualiser','Refresh'), '', 'ghost', entry.loading ? 'disabled' : '') : ''}</div>
+    ${part === 'heat' ? heat + `<div data-temperature-plot>${temperaturePlot(m)}</div>` : part === 'quick' ? quick : part === 'motion' ? motion : heat + quick + motion}
+    ${part === 'quick' || part === 'all' ? `${entry.error ? `<p class="error" role="alert">${esc(entry.error)}</p>` : ''}${entry.result ? `<p role="status">${esc(entry.result)}</p>` : ''}` : ''}
   </section>`;
 }
+function renderManualControls(id, force = false) {
+  if (state.machine !== id || live.page !== 'detail') return;
+  for (const panel of app.querySelectorAll('[data-manual-controls]')) {
+    if (force || !panel.contains(document.activeElement)) panel.outerHTML = manualControlsPanel(machine(id), panel.dataset.manualControls || 'all');
+  }
+}
 async function loadManualControls(id, force = false) {
-  if (!machineConnectors[machine(id)?.kind]?.controls || live.page !== 'detail' || state.machine !== id) return;
+  if (!machineConnectors[machine(id)?.kind]?.controls || live.page !== 'detail' || machineTab(id) !== 'overview' || state.machine !== id) return;
   const entry = manualState(id);
   if (entry.loading || entry.busy || (!force && Date.now() - entry.at < 10000)) return;
   entry.loading = true;
@@ -1130,8 +1163,7 @@ async function loadManualControls(id, force = false) {
   catch (error) { entry.error = problem(error.code); }
   finally {
     entry.loading = false; entry.at = Date.now();
-    const panel = app.querySelector('[data-manual-controls]');
-    if (panel && state.machine === id && (force || !panel.contains(document.activeElement))) panel.outerHTML = manualControlsPanel(machine(id));
+    renderManualControls(id, force);
   }
 }
 async function sendManualControl(id, command) {
@@ -1142,8 +1174,7 @@ async function sendManualControl(id, command) {
   if (command.action === 'home' && !window.confirm(t('Effectuer la prise d’origine XYZ ? Vérifiez que les axes sont dégagés.', 'Home XYZ? Check that the axes are clear.'))) return;
   if (printing && ['heat', 'fan'].includes(command.action) && !window.confirm(t('Modifier ce réglage pendant la fabrication ou sa pause ?', 'Change this setting during the print or its pause?'))) return;
   entry.busy = true; entry.error = ''; entry.result = '';
-  const panel = app.querySelector('[data-manual-controls]');
-  panel?.querySelectorAll('button,input,select').forEach(node => { node.disabled = true; });
+  app.querySelectorAll('[data-manual-controls] button,[data-manual-controls] input,[data-manual-controls] select').forEach(node => { node.disabled = true; });
   try {
     const result = await api('machines/' + id + '/controls', { ...command, confirm: true, duringPrint: printing });
     entry.result = result.outcome === 'executed' ? t('Commande exécutée.','Command executed.') : t('Commande acceptée ; vérifiez le retour machine.','Command accepted; check the machine report.');
@@ -1151,8 +1182,7 @@ async function sendManualControl(id, command) {
   finally {
     entry.busy = false;
     if (state.machine === id && live.page === 'detail') {
-      const current = app.querySelector('[data-manual-controls]');
-      if (current) current.outerHTML = manualControlsPanel(machine(id));
+      renderManualControls(id, true);
       loadManualControls(id, true);
     }
   }
@@ -1901,6 +1931,16 @@ app.addEventListener('click', (event) => {
   if (action === 'viewer-live' && m && liveFile(m)) openViewer(m.id, liveFile(m), true);
   if (action === 'files-print' && listed) startPrint(m.id, listed.path);
   if (action === 'viewer-print') startPrint(gcode.machine, gcode.path);
+});
+
+app.addEventListener('keydown', event => {
+  const tab = event.target.closest('[role="tab"][data-action^="machine-tab:"]');
+  if (!tab || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const tabs = [...app.querySelectorAll('[role="tab"][data-action^="machine-tab:"]')];
+  const at = tabs.indexOf(tab);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (at + (event.key === 'ArrowLeft' ? -1 : 1) + tabs.length) % tabs.length;
+  selectMachineTab(tabs[next].dataset.action.split(':')[1]);
 });
 
 window.addEventListener('resize', () => {

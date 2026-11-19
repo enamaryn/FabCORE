@@ -14,7 +14,7 @@ test('panneau contrôles : lecture observateur, actions administrateur et capaci
   const machine = { id: 'one', kind: 'bambu', status: 'ready' };
   sandbox.entry(machine.id).data = { status: 'ready', lights: [{ id: 'chamber_light', value: true, writable: true }], heaters: [{ id: 'nozzle', current: 25, target: 0, max: 260, writable: true }], fans: [{ id: 'part', percent: 40, rpm: null, writable: true }], motion: null };
   let html = sandbox.panel(machine);
-  assert.match(html, /manual-light:0:on/); assert.match(html, /data-manual-form="heat"/); assert.match(html, /data-manual-form="fan"/);
+  assert.match(html, /manual-light:0:off/); assert.match(html, /data-manual-form="heat"/); assert.match(html, /data-manual-form="fan"/);
   assert.doesNotMatch(html, /manual-home/);
   sandbox.state.role = 'viewer'; html = sandbox.panel(machine);
   assert.match(html, /25 °C/); assert.match(html, /40 %/);
@@ -22,5 +22,5 @@ test('panneau contrôles : lecture observateur, actions administrateur et capaci
   assert.equal(sandbox.panel({ kind: 'xtool-m2' }), '');
   sandbox.state.role = 'admin';
   html = sandbox.panel({ ...machine, status: 'offline' });
-  assert.match(html, /data-action="manual-light:0:on" disabled/);
+  assert.match(html, /data-action="manual-light:0:off" disabled/);
 });

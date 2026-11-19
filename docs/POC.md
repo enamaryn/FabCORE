@@ -5,6 +5,16 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** dérouler la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Fiche machine : cockpit compact · 19 novembre 2026
+
+**État : ouvert, branche `feat/machine-cockpit`, non déployé.** Intégration de la maquette validée par Valentin : caméra/aperçu et filaments à gauche, fabrication, températures/consignes, actions rapides et déplacements à droite. Onglets « Vue machine », « Fichiers » et « Console » (si terminal disponible), mémorisés par machine durant la session. Fichiers chargés uniquement dans leur onglet ; aperçu uniquement en vue machine ; quitter cette vue ferme l’abonnement caméra du navigateur. « Choisir un fichier » ouvre l’onglet Fichiers. Navigation clavier des onglets et menu compte compact conservent les accès aux réglages, diagnostics, langue, thème et déconnexion.
+
+Tous les modules AMS/CANVAS réels sont affichés en grille de deux colonnes, avec bobines fines et rapprochées ; un seul module occupe une carte à sa taille. Rien n’est limité artificiellement à quatre modules. L’affichage des cartes du parc reste inchangé. Sur mobile, les colonnes s’empilent ; sur les bureaux de faible hauteur, actions rapides et déplacements se placent côte à côte pour préserver la lisibilité. Une machine sans caméra ne réserve pas de colonne vide.
+
+Commandes et droits inchangés : lumière en bascule, consigne à côté de la mesure avec Appliquer/Couper, croix X/Y et boutons Z avec pas 0,1/1/10 mm et origine. Les contrôles P2S/CC2 de déplacement restent désactivés et explicitement indisponibles ; aucune intégration de protocole supplémentaire. Les cibles ne sont pas remplacées pendant la saisie par les actualisations de télémétrie. Aucun fichier fictif ni image de maquette dans le produit.
+
+Vérifications : 78 tests réussis (dont onglets isolés, quatre modules et saisie préservée), syntaxe JS et diff vérifiés. Chromium ne démarre pas dans l’environnement (socket interdit) : dimensions/rendu réels et interactions caméra/formulaires à vérifier après fusion sur desktop (1366 × 768 et 1920 × 1080), mobile, thèmes clair/sombre, avec 1 et 4 modules. Aucun déploiement ni commande réelle. Prochaine action : recette visuelle puis reprise de POC-10, sans nouvelle fonctionnalité de protocole.
+
 ## Contrôles manuels · 19 novembre 2026
 
 **État : ouvert, branche `feat/machine-controls`, non déployé.** Panneau « Contrôles » sur la fiche, après caméra/télémétrie et fabrication/filaments. Éclairage et chauffe, puis déplacements et ventilateurs, selon les capacités réellement intégrées :
