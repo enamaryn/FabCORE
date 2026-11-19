@@ -190,3 +190,7 @@ La [matrice du POC](../docs/POC.md#contrôles-manuels--19-novembre-2026) précis
 **Vue machine** regroupe la caméra, les filaments, la fabrication, les températures et les contrôles disponibles. Les consignes sont à côté des températures ; les actions rapides regroupent lumière et ventilateurs, puis la croix X/Y et les commandes Z si le connecteur les permet. Un contrôle grisé est explicitement indisponible. Tous les modules AMS/CANVAS remontés sont visibles, avec une représentation compacte.
 
 **Fichiers** conserve recherche, tri, pagination, téléchargement, transfert et lancement. **Choisir un fichier** ouvre cet onglet. **Console** est disponible sur les connecteurs avec terminal. La caméra ne démarre pas automatiquement en quittant/revenant aux onglets : la vue machine charge un aperçu, puis **Voir la caméra** ouvre le flux. Sur la fiche, les réglages du compte, langue, thème, diagnostics et déconnexion sont regroupés dans le menu utilisateur en haut à droite.
+
+## Comptes cloud constructeur
+
+Consulter le [guide des comptes cloud et journaux](../docs/CLOUD-ACCOUNTS.md) pour le pilote Bambu, les comptes créés via Google, les logs par compte et les sauvegardes de la clé de chiffrement. Ce pilote lit la liste des machines ; il ne commande pas les imprimantes.

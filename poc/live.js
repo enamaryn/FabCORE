@@ -95,7 +95,7 @@ function liveIssue(issue) {
 }
 
 async function api(path, data, cancel) {
-  const timeout = AbortSignal.timeout(path.endsWith('/controls') ? 30000 : path.endsWith('/transfer') ? 900_000 : path.endsWith('/gcode') ? 65_000 : path === 'machines/pair' ? 50_000
+  const timeout = AbortSignal.timeout(path.startsWith('cloud-accounts') ? 45000 : path.endsWith('/controls') ? 30000 : path.endsWith('/transfer') ? 900_000 : path.endsWith('/gcode') ? 65_000 : path === 'machines/pair' ? 50_000
     : path === 'discovery' || path.startsWith('machines') || path.startsWith('notifications') ? 18000 : 5000);
   const signal = cancel ? AbortSignal.any([timeout, cancel]) : timeout;
   const response = await fetch('/api/' + path, data === undefined ? { signal } : {
@@ -604,13 +604,14 @@ function renderLive() {
   document.documentElement.lang = state.lang;
   document.documentElement.dataset.theme = state.theme === 'system' ? (media.matches ? 'light' : 'dark') : state.theme;
   const signedIn = live.phase === 'workshop';
-  const screens = { diagnostics: diagnosticsPage, notifications: notificationPage, home: dashboard, machines: liveFleet, detail: liveDetail, viewer: viewerPage, history: () =>
+  const screens = { cloud: cloudPage, diagnostics: diagnosticsPage, notifications: notificationPage, home: dashboard, machines: liveFleet, detail: liveDetail, viewer: viewerPage, history: () =>
     title(t('Activité récente','Recent activity')) + `<section class="panel">${listEvents()}</section>` };
   const compact = signedIn && live.page === 'detail';
   const accountActions = `      ${btn('lang',state.lang==='fr'?'EN':'FR','','ghost',`aria-label="${state.lang==='fr'?'Switch to English':'Passer en français'}"`)}
       ${btn('theme','','sun','ghost',`aria-label="${t('Basculer le thème','Toggle theme')}"`)}
       ${signedIn && state.role === 'admin' ? btn('diagnostics',t('Diagnostics','Diagnostics'),'activity') : ''}
       ${signedIn && state.role === 'admin' ? btn('notifications',t('Notifications','Notifications')) : ''}
+      ${signedIn && state.role === 'admin' ? btn('cloud-open',t('Comptes cloud','Cloud accounts')) : ''}
       ${signedIn && state.role === 'admin' ? btn('observer',t('Ajouter un observateur','Add observer')) : ''}
       ${signedIn?btn('logout',t('Déconnexion','Sign out'),'','ghost'):''}
 `;
@@ -681,7 +682,7 @@ async function refresh() {
     }
     const checkedAt = current?.checkedAt;
     if (timestamp && checkedAt) timestamp.textContent = new Date(checkedAt).toLocaleTimeString(state.lang);
-    if ((changed || hadRefreshError) && !dialog.open && !['notifications', 'diagnostics', 'viewer'].includes(live.page)) {
+    if ((changed || hadRefreshError) && !dialog.open && !['notifications', 'diagnostics', 'viewer', 'cloud'].includes(live.page)) {
       const action = document.activeElement?.dataset.action;
       const telemetry = app.querySelector('[data-live-telemetry]');
       if (!hadRefreshError && telemetry && current) {
@@ -707,11 +708,12 @@ async function refresh() {
       if (dialog.open) dialog.close();
       clearInterval(telemetryTimer);
       live.phase = 'login';
+      cloudUI.data = null;
       live.error = 'sign-in';
       renderLive();
     } else if (!live.refreshError) {
       live.refreshError = true;
-      if (!dialog.open && live.page !== 'notifications') renderLive();
+      if (!dialog.open && live.page !== 'notifications' && live.page !== 'cloud') renderLive();
     }
   } finally {
     live.pending = false;
@@ -721,6 +723,7 @@ async function refresh() {
 function openWorkshop(username, role) {
   state.role = role === 'admin' ? 'admin' : 'viewer';
   live.username = username;
+  cloudUI.data = null; cloudUI.error = '';
   temperatureHistory.clear();
   Object.assign(gcode, { machine: null, path: '', size: 0, result: null, layer: 0, loading: null, error: '', view: null });
   machineFiles.clear();
@@ -974,6 +977,7 @@ document.addEventListener('click', async (event) => {
       await api('logout', {});
       clearInterval(telemetryTimer);
       live.phase = 'login';
+      cloudUI.data = null;
       live.refreshError = false;
       state.machines = [];
       state.events = [];

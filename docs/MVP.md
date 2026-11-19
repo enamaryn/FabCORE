@@ -251,3 +251,5 @@ Préparer le modèle de données dès MVP-01 et les droits en MVP-04 ; l’accè
 - [ ] MVP-14.1 Bêta sur un atelier auto-hébergé, un parcours cloud direct sans agent et un parc multisite mixte (machines LAN via agent et autres machines cloud). Deux comptes du même constructeur doivent fonctionner simultanément, sans mélange de machines ni de droits.
 - [ ] MVP-14.2 Critères de sortie : parcours du [résultat recherché](../MASTER_PROMPT_ORIGIN.md#21-résultat-recherché) réalisable de bout en bout.
 - [ ] MVP-14.3 Bilan et cadrage du [développement complet](FULL-DEVELOPPEMENT.md).
+
+Pilote de compte constructeur Bambu : [gestion et journaux](CLOUD-ACCOUNTS.md), proposé sur `feat/cloud-accounts`. Les comptes du POC restent globaux à l’administrateur ; organisations/sites et permissions déléguées restent à implémenter au MVP.

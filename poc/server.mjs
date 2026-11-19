@@ -14,6 +14,7 @@ import { cameraPreview } from './camera-preview.mjs';
 import { createOidc } from './oidc.mjs';
 import { internalNtfy, notificationSettings, publicNotifications, sendNotification } from './notifications.mjs';
 import { openStore } from './store.mjs';
+import { createCloudAccounts, CloudError } from './cloud-accounts.mjs';
 import { validateControl } from './manual-controls.mjs';
 import { filePath } from './connector-http.mjs';
 import { productionPath } from './production-files.mjs';
@@ -30,11 +31,12 @@ const sharedScript = shared.match(/<script>([\s\S]+)<\/script>/)[1];
 const liveHtml = shared
   .replace('<html lang="fr">', '<html lang="fr" data-live>')
   .replace('href="brand/favicon.svg"', 'href="/favicon.svg"')
-  .replace(/<script>[\s\S]+<\/script>/, '<script src="/shared.js"></script><script src="/live.js"></script>');
+  .replace(/<script>[\s\S]+<\/script>/, '<script src="/shared.js"></script><script src="/cloud.js"></script><script src="/live.js"></script>');
 const assets = new Map([
   ['/', ['text/html; charset=utf-8', liveHtml]],
   ['/shared.js', ['text/javascript; charset=utf-8', sharedScript]],
   ['/live.js', ['text/javascript; charset=utf-8', `const machineConnectors = ${JSON.stringify(connectorCatalog)};\n` + readFileSync(new URL('./live.js', import.meta.url), 'utf8')]],
+  ['/cloud.js', ['text/javascript; charset=utf-8', readFileSync(new URL('./cloud.js', import.meta.url), 'utf8')]],
   ['/gcode.mjs', ['text/javascript; charset=utf-8', readFileSync(new URL('./gcode.mjs', import.meta.url), 'utf8')]],
   ['/favicon.svg', ['image/svg+xml', readFileSync(new URL('../design/brand/favicon.svg', import.meta.url))]]
 ]);
@@ -96,7 +98,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -104,6 +106,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const secure = publicUrl.protocol === 'https:';
   const allowedHost = publicUrl.host;
   const store = openStore(directory);
+  const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch });
   const token = store.state.admin ? null : (activationToken ?? randomBytes(24).toString('base64url'));
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
   const sessions = new Map();
@@ -150,6 +153,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const oldest = sessions.keys().next().value;
       sessions.delete(oldest);
       stopCameraStreams(oldest);
+      cloud.forgetOwner(oldest);
     }
     sessions.set(digest(id).toString('hex'), { expires: Date.now() + sessionAge, username, role });
     return cookie(id, sessionAge / 1000);
@@ -210,6 +214,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
           if (activeSession) {
             sessions.delete(activeSession);
             stopCameraStreams(activeSession);
+            cloud.forgetOwner(activeSession);
           }
           return redirect('/', [oidc.clearCookie, newSession(account.username, account.role)]);
         }
@@ -222,6 +227,38 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         username: viewer?.username ?? null, ...(viewer ? { role: viewer.role } : {}),
         ...(secure && oidc && store.state.admin ? { oidcEnabled: true } : {})
       });
+    }
+    const cloudRoute = path.match(/^\/api\/cloud-accounts(?:\/([a-f0-9-]{36})\/(login|verify|devices|disconnect|delete|logs|logs-download))?$/);
+    if (cloudRoute) {
+      if (!viewer) return error(res, 401, 'sign-in');
+      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+      const [, id, action] = cloudRoute;
+      try {
+        if (req.method === 'GET' && !id) return answer(res, 200, cloud.list());
+        if (req.method === 'GET' && ['logs', 'logs-download'].includes(action)) {
+          const content = cloud.logs(id);
+          if (action === 'logs') return answer(res, 200, { lines: content.trim().split('\n').filter(Boolean).slice(-300).map(line => JSON.parse(line)) });
+          res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': `attachment; filename="fabcore-cloud-${id}.log"` });
+          return res.end(content);
+        }
+        if (req.method !== 'POST') return error(res, 405, 'missing');
+        if (!requireJson(req, res)) return;
+        if (!withinLimit('/cloud/' + (id ?? 'new'))) return error(res, 429, 'rate');
+        let data;
+        try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+        const abort = new AbortController();
+        res.once('close', () => { if (!res.writableEnded) abort.abort(); });
+        let result;
+        if (!id) result = cloud.add(data);
+        else if (action === 'login') result = await cloud.login(id, data, activeSession, abort.signal);
+        else if (action === 'verify') result = await cloud.verify(id, data, activeSession, abort.signal);
+        else if (action === 'devices') result = await cloud.refresh(id, abort.signal);
+        else if (action === 'disconnect' || action === 'delete') result = cloud.disconnect(id, action === 'delete');
+        else return error(res, 405, 'missing');
+        return answer(res, 200, result);
+      } catch (failure) {
+        return error(res, failure instanceof CloudError ? failure.status : 500, failure instanceof CloudError ? failure.message : 'cloud-storage');
+      }
     }
     if (req.method === 'GET' && path === '/api/diagnostics') {
       if (!viewer) return error(res, 401, 'sign-in');
@@ -625,6 +662,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (activeSession) {
         sessions.delete(activeSession);
         stopCameraStreams(activeSession);
+        cloud.forgetOwner(activeSession);
       }
       return answer(res, 200, { authenticated: false }, { 'Set-Cookie': cookie('', 0) });
     }
@@ -774,7 +812,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       else res.end();
     });
   });
-  server.on('close', () => connectors.close());
+  server.on('close', () => { connectors.close(); cloud.close(); });
   return { server, token };
 }
 
