@@ -12,7 +12,17 @@ Code : [Moonraker](../../poc/moonraker.mjs), [OctoPrint](../../poc/octoprint.mjs
 
 ## État matériel et urgence
 
-L’instance OctoPrint de test est détectée sans imprimante raccordée : cela valide la détection du service, pas la fabrication ni un arrêt physique. Les tests HTTP simulés couvrent le contrat ; recette réelle par imprimante à poursuivre. Pas de recette matérielle Prusa ou Moonraker établie dans le retour utilisateur actuel.
+L’instance OctoPrint de test est détectée sans imprimante raccordée : cela valide la détection du service, pas la fabrication ni un arrêt physique. Les tests HTTP simulés couvrent le contrat ; recette réelle par imprimante à poursuivre. Pas de recette matérielle Prusa établie dans le retour utilisateur actuel. Moonraker : lecture partiellement validée le 20 novembre 2026, voir ci-dessous.
+
+### Lecture Moonraker validée le 20 novembre 2026
+
+Depuis le LXC FabCore, exécution des fonctions du connecteur déployé sur deux instances du même Raspberry (7125 et 7126) :
+
+- `/printer/objects/query?webhooks&print_stats&virtual_sdcard&extruder&heater_bed` : états `ready`, températures buse et plateau indépendantes et plausibles ; Klipper v0.14.0, version Moonraker non relevée (`?`).
+- `/server/files/list?root=gcodes` : liste indépendante par instance.
+- `/server/files/gcodes/<chemin>` : téléchargement HTTP 200, contenu vérifié pour un fichier temporaire contenant exclusivement des commentaires. Aucun G-code exécuté ; fichier de contrôle supprimé sur chaque instance après lecture. Dossiers actuellement vides.
+
+Le connecteur permet déjà liste, lecture/téléchargement, envoi et lancement ; cet essai valide uniquement la lecture et le téléchargement depuis le connecteur, pas le parcours complet du navigateur ni la production. Les fichiers sont dans la racine `gcodes` de l’instance Moonraker ; aucune déduction sur le contenu d’une SD/USB embarquée de l’imprimante. Mise au point des sondes/axes/extrudeurs des machines de test hors périmètre FabCore. Aucune validation de chauffe, déplacement ou arrêt d’urgence par cette recette.
 
 Moonraker documente `POST /printer/emergency_stop` : candidat natif pour #78, distinct de cancel. Pour OctoPrint, M112 est une commande d’urgence connue mais son acheminement et son effet dépendent du firmware, du parseur d’urgence et de la liaison série ; ne pas promettre une coupure instantanée universelle. PrusaLink : aucune primitive d’urgence qualifiée dans FabCore ; ne pas assimiler DELETE job à celle-ci.
 
