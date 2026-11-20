@@ -44,6 +44,16 @@ async function elegooCamera(machine, output, signal, onFrame, openCamera, identi
 }
 
 const definitions = {
+  'longer-ray5': localConnector('Longer · Ray5 Wi-Fi (lecture seule)', 'longer-ray5', (host, data) => {
+    const transport = data.transport ?? 'tcp';
+    const portText = String(data.port ?? (transport === 'tcp' ? 8080 : 8848));
+    const wsText = String(data.wsPort ?? 8849);
+    if (!['tcp', 'esp3d'].includes(transport) || !/^\d{1,5}$/.test(portText) || !/^\d{1,5}$/.test(wsText)) return null;
+    const port = Number(portText), wsPort = Number(wsText);
+    if (port < 1 || port > 65535 || wsPort < 1 || wsPort > 65535) return null;
+    return { origin: transport === 'tcp' ? `tcp://${host}:${port}` : new URL(`http://${host}:${port}`).origin, transport, wsPort };
+  }, async ({ diagnostics }) => (await import('./longer-ray5.mjs')).createRay5Monitor({ diagnostics }),
+  { live: true, verify: true, temperatures: false }),
   'bambu-cloud': { model: 'Bambu Lab · Cloud', form: 'cloud', filaments: 'AMS', configure() { return null; },
     async load({ cloud }) { return { read: machine => cloud.readMachine(machine) }; } },
   klipper: httpConnector('Klipper · Moonraker', 7125, false, async ({ readPrinter, sendCommand, sendGcode, fetchFiles }) => {
