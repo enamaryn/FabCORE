@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { discoverXTool } from './xtool-discovery.mjs';
 import { test } from 'node:test';
-import { detectOctoPrint, discoveryNetworks, reconcileDiscovery, scanNetwork } from './discovery.mjs';
+import { detectMoonraker, detectOctoPrint, discoveryNetworks, reconcileDiscovery, scanNetwork } from './discovery.mjs';
 
 test('les réseaux sont locaux, privés, et plafonnés à une tranche /24', () => {
   const ipv4 = (address, cidr, internal = false) => ({ address, cidr, internal, family: 'IPv4' });
@@ -97,4 +97,40 @@ test('la découverte xTool valide le modèle, le sous-réseau et la requête', a
   assert.deepEqual(await discoverXTool([host], '192.168.1.1', abort.signal, () => socket),
     [{ host, kind: 'xtool-m2', serial: 'M2TEST01' }]);
   assert.equal(closes, 1);
+});
+
+test('Moonraker : après détection initiale, découvre chaque instance de la même IP avec son nom', async () => {
+  const calls = []; const signal = new AbortController().signal;
+  const devices = await detectMoonraker('192.168.1.176', signal, async (url, options) => {
+    calls.push(url); assert.equal(options.redirect, 'error');
+    const port = Number(new URL(url).port);
+    if (url.includes('/server/database/')) return Response.json({ result: { value: port === 7125 ? 'Ender 3 V2 MGN' : 'Tevo Tarantula Pro' } });
+    return [7125, 7126].includes(port) ? Response.json({ result: { moonraker_version: '0.9', klippy_state: 'error' } }) : Response.json({ result: {} });
+  });
+  assert.deepEqual(devices, [
+    { kind: 'klipper', host: '192.168.1.176', origin: 'http://192.168.1.176:7125', name: 'Ender 3 V2 MGN' },
+    { kind: 'klipper', host: '192.168.1.176', origin: 'http://192.168.1.176:7126', name: 'Tevo Tarantula Pro' }
+  ]);
+  assert.equal(calls[0], 'http://192.168.1.176:7125/server/info');
+  assert.equal(calls.filter(url => url.endsWith('/server/info')).length, 10);
+});
+test('Moonraker : aucun balayage supplémentaire sur un hôte non reconnu, ni hôte public', async () => {
+  let calls = 0; const fetcher = async () => { calls++; return Response.json({ result: { version: 'unrelated' } }); };
+  assert.deepEqual(await detectMoonraker('192.168.1.1', new AbortController().signal, fetcher), []); assert.equal(calls, 1);
+  assert.deepEqual(await detectMoonraker('8.8.8.8', new AbortController().signal, assert.fail), []);
+});
+test('Moonraker : port personnalisé déjà enregistré et nom absent ne bloquent pas la découverte', async () => {
+  const devices = await detectMoonraker('192.168.1.176', new AbortController().signal, async url => {
+    if (url === 'http://192.168.1.176:9000/server/info') return Response.json({ result: { moonraker_version: '0.9' } });
+    return new Response('', { status: 404 });
+  }, ['http://192.168.1.176:9000', 'http://8.8.8.8:9000', 'http://secret:password@192.168.1.176:7127']);
+  assert.deepEqual(devices, [{ kind: 'klipper', host: '192.168.1.176', origin: 'http://192.168.1.176:9000' }]);
+});
+test('Moonraker : rapprochement par origine complète, pas seulement par IP', () => {
+  const network = { start: 3232235776, end: 3232236031 };
+  const found = [7125,7126].map(port => ({ kind: 'klipper', host: '192.168.1.176', origin: `http://192.168.1.176:${port}` }));
+  const registered = [{ id: 'ender', kind: 'klipper', name: 'Ender', origin: found[0].origin }];
+  const devices = reconcileDiscovery(network, found, registered);
+  assert.equal(devices.length, 2); assert.equal(devices[0].registered, true); assert.equal(devices[1].registered, false);
+  assert.equal(devices[0].name, 'Ender');
 });
