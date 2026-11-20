@@ -206,3 +206,7 @@ La [matrice du POC](../docs/POC.md#contrôles-manuels--19-novembre-2026) précis
 ## Comptes cloud constructeur
 
 Consulter le [guide des comptes cloud et journaux](../docs/CLOUD-ACCOUNTS.md) pour le pilote Bambu, les comptes créés via Google, les logs par compte et les sauvegardes de la clé de chiffrement. Ce pilote lit la liste des machines ; il ne commande pas les imprimantes.
+
+## Longer Ray5 en Wi-Fi · essai en lecture seule
+
+Ajouter manuellement le type **Longer · Ray5 Wi-Fi (lecture seule)** avec l’IPv4 privée de la machine. Choisir GRBL TCP (8080 par défaut) ou ESP3D (HTTP 8848 et WebSocket 8849) selon son firmware, puis tester et ajouter. Le scan automatique n’est pas étendu à cette famille. La fiche présente les rapports GRBL réellement reçus et les journaux ; aucune commande laser, déplacement ou gestion SD n’est disponible dans ce premier pilote. Voir la [recherche et la recette matérielle](../docs/protocols/LONGER-RAY5-LAN.md).

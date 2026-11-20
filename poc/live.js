@@ -57,6 +57,16 @@ const problem = (code) => ({
 
 function liveIssue(issue) {
   return ({
+    'ray5-address': t('Adresse Ray5 invalide. Utilisez une IPv4 privée et des ports valides.', 'Invalid Ray5 address. Use a private IPv4 address and valid ports.'),
+    'ray5-connection': t('Ray5 injoignable ou connexion interrompue. Vérifiez son adresse, son Wi-Fi et le mode TCP/ESP3D.', 'Ray5 unreachable or disconnected. Check its address, Wi-Fi and TCP/ESP3D mode.'),
+    'ray5-report': t('Aucun état GRBL exploitable reçu. Un port ouvert ou une réponse HTTP ne suffit pas ; vérifiez le mode et les ports du firmware.', 'No usable GRBL status received. An open port or HTTP response is insufficient; check the firmware mode and ports.'),
+    'ray5-stale': t('La Ray5 ne transmet plus d’état récent. Dernières mesures écartées.', 'Ray5 stopped reporting fresh status. Previous readings discarded.'),
+    'ray5-response': t('Réponse Ray5 invalide ou trop volumineuse.', 'Invalid or oversized Ray5 response.'),
+    'ray5-access': t('Accès ESP3D refusé. Ce pilote ne gère pas encore son authentification.', 'ESP3D access denied. This pilot does not support its authentication yet.'),
+    'ray5-alarm': t('Alarme GRBL signalée par la Ray5. Aucun déverrouillage automatique.', 'Ray5 reports a GRBL alarm. No automatic unlock.'),
+    'ray5-door': t('Interverrouillage/capot signalé par le contrôleur.', 'The controller reports a door/interlock condition.'),
+    'ray5-sleep': t('Le contrôleur GRBL est en veille.', 'The GRBL controller is sleeping.'),
+    'ray5-busy': t('Le contrôleur signale un déplacement, une origine ou un mode de vérification.', 'The controller reports jogging, homing or check mode.'),
     'prusalink-access': t('Accès refusé. Vérifiez la clé API PrusaLink.', 'Access denied. Check the PrusaLink API key.'),
     'prusalink-response': t('PrusaLink ne renvoie pas un état exploitable.', 'PrusaLink did not return usable status.'),
     'prusalink-connection': t('FabCore ne parvient pas à joindre PrusaLink.', 'FabCore cannot reach PrusaLink.'),
@@ -242,7 +252,10 @@ function liveFabrication(m) {
       ${m.kind === 'xtool-m2' ? `<p class="muted">${t('Lancer concerne le projet déjà préparé dans la M2. Les confirmations physiques restent nécessaires.', 'Start uses the project already prepared on the M2. Physical confirmations remain required.')}</p>` : ''}
       ${m.kind === 'elegoo' && m.status === 'paused' ? `<p class="notice">${t('Reprise CC2 : utilisez l’écran de la machine ; le SDK ne documente pas encore une reprise exploitable.', 'CC2 resume: use the machine screen; the SDK does not yet document a usable resume command.')}</p>` : ''}
       ${m.issue?`<p class="notice">${liveIssue(m.issue)}</p>`:''}
-      ${machineConnectors[m.kind]?.printJob === false ? '' : `<div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
+      ${m.kind === 'longer-ray5' ? `<p class="notice">${t('Supervision en lecture seule · aucune commande laser disponible dans ce pilote.', 'Read-only monitoring · no laser commands available in this pilot.')}</p><small>GRBL · ${esc(m.nativeState || '—')}${m.firmware ? ' · ' + esc(m.firmware) : ''}</small>
+      <p>${t('Position machine (unités du contrôleur)','Machine position (controller units)')} : ${['x','y','z'].map(axis => axis.toUpperCase() + ' ' + (Number.isFinite(m.machinePosition?.[axis]) ? m.machinePosition[axis] : '—')).join(' · ')}</p>
+      <small>${t('Vitesse reçue','Reported feed')} : ${Number.isFinite(m.feedRate) ? m.feedRate : '—'} · ${t('Consigne laser S (pas une mesure en watts)','Laser S setpoint (not a watts measurement)')} : ${Number.isFinite(m.spindle) ? m.spindle : '—'}</small>` : ''}
+      ${machineConnectors[m.kind]?.printJob === false ? '' : m.progressKnown === false ? `<p>${esc(m.file || '')}</p><small>${t('Progression non communiquée par la machine.', 'Progress not reported by the machine.')}</small>` : `<div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
       <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>`}
       <small>${t('Dernière vérification','Last check')} · <span id="last-check">${esc(translatableTime)}</span></small>
     </section>`;
@@ -805,6 +818,8 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
   const isBambu = form === 'bambu';
   const isCC1 = form === 'elegoo-cc1';
   const isM2 = form === 'xtool-m2';
+  const isRay5 = form === 'longer-ray5';
+  const ray5Transport = existing?.transport ?? 'tcp';
   const serial = existing?.serial ?? detected?.serial ?? '';
   const manualSerial = isBambu || (isCC1 && !existing && !serial);
   const serialField = manualSerial
@@ -821,14 +836,18 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
       <label>${t('Nom de la machine','Machine name')}<input name="name" required maxlength="80" value="${esc(name)}"></label>
       ${form !== 'http' ? `
       <label>${t('Adresse IPv4 locale','Local IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : esc(detected?.host ?? '')}"></label>
-      ${isCC1 || isM2 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
+      ${isRay5 ? `<label>${t('Interface Wi-Fi du firmware','Firmware Wi-Fi interface')}<select name="transport"><option value="tcp" ${ray5Transport === 'tcp' ? 'selected' : ''}>GRBL TCP · 8080</option><option value="esp3d" ${ray5Transport === 'esp3d' ? 'selected' : ''}>ESP3D · HTTP 8848 / WebSocket 8849</option></select></label>
+      <label>${t('Port TCP ou HTTP','TCP or HTTP port')}<input name="port" type="number" min="1" max="65535" required value="${existing ? Number(new URL(existing.origin).port || 80) : 8080}"></label>
+      <label data-ray5-ws ${ray5Transport === 'esp3d' ? '' : 'hidden'}>${t('Port WebSocket ESP3D','ESP3D WebSocket port')}<input name="wsPort" type="number" min="1" max="65535" value="${existing?.wsPort ?? 8849}"></label>
+      <small>${t('Lecture seule : état et positions. Choisissez le mode réellement fourni par le firmware ; aucun changement du Wi-Fi ou du firmware n’est effectué.', 'Read only: status and positions. Select the interface actually provided by the firmware; no Wi-Fi or firmware changes are made.')}</small>` : ''}
+      ${isCC1 || isM2 || isRay5 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
       ` : `
       <label>${t('Adresse ', 'Address for ')}${esc(addressLabel)}<input name="origin" type="url" placeholder="http://192.168.1.50${port === 80 ? '' : ':' + port}" required maxlength="200" value="${esc(existing?.origin ?? detected?.origin ?? '')}"></label>
       <label>${t('Clé API', 'API key')}${required ? '' : ' ' + t('(facultative)', '(optional)')}<input name="apiKey" type="password" ${required && !existing ? 'required' : ''} maxlength="256" autocomplete="new-password"></label>
       `}
       <label>${isCC1 ? t('MainboardID (facultatif)', 'MainboardID (optional)') : t('Numéro de série', 'Serial number')}<input ${serialField} value="${esc(serial)}"></label>
     </div>
-    ${existing && !isCC1 && !isM2 ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
+    ${existing && !isCC1 && !isM2 && !isRay5 ? `<small>${t('Laissez le secret vide pour conserver la valeur enregistrée.', 'Leave the secret blank to keep the saved value.')}</small>` : ''}
     <p class="error" role="alert"></p>
     <p role="status" hidden></p>
     <div class="row wrap">${existing ? `<button class="danger" type="button" data-action="delete-machine:${esc(existing.id)}">${t('Supprimer la machine', 'Delete machine')}</button>` : ''}${btn('close',t('Annuler','Cancel'))}<button type="submit" value="test">${t('Tester la connexion','Test connection')}</button>${isM2 ? `<button type="submit" value="pair">${t('Appairer la M2', 'Pair M2')}</button>` : ''}<button class="primary" type="submit" value="save">${existing ? t('Enregistrer','Save') : t('Ajouter','Add')}</button></div>
@@ -1049,6 +1068,15 @@ dialog.addEventListener('change', (event) => {
   if (!event.target.matches('#add-machine select[name="kind"]')) return;
   openMachineForm(event.target.value, event.target.form.elements.name.value);
   dialog.querySelector('select[name="kind"]').focus();
+});
+
+dialog.addEventListener('change', (event) => {
+  if (event.target.form?.id === 'add-machine' && event.target.name === 'transport') {
+    const form = event.target.form;
+    form.elements.port.value = event.target.value === 'tcp' ? '8080' : '8848';
+    form.querySelector('[data-ray5-ws]').hidden = event.target.value !== 'esp3d';
+    return;
+  }
 });
 
 document.addEventListener('input', (event) => {
@@ -2154,6 +2182,11 @@ function logEventLabel(event) {
     'mqtt-command-response': ['Réponse constructeur à la commande', 'Manufacturer command response'],
     'mqtt-command-timeout': ['Aucune réponse corrélée dans le délai', 'No correlated response within deadline'],
     'mqtt-error': ['Erreur de connexion MQTT', 'MQTT connection error'], 'mqtt-subscribe': ['Abonnement MQTT', 'MQTT subscription'],
+    'ray5-connecting': ['Connexion Wi-Fi Ray5', 'Ray5 Wi-Fi connection'],
+    'ray5-connected': ['Transport Ray5 connecté', 'Ray5 transport connected'],
+    'ray5-disconnected': ['Liaison Ray5 interrompue', 'Ray5 connection interrupted'],
+    'ray5-report': ['État GRBL reçu', 'GRBL status received'],
+    'ray5-status-request': ['Interrogation ESP3D', 'ESP3D status request'],
     'heater-confirmation': ['Vérification de la consigne de chauffe', 'Heating setpoint verification']
   };
   return names[event] ? t(...names[event]) : event;
