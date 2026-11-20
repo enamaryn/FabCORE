@@ -356,3 +356,7 @@ Proposé sur `fix/cloud-email-challenge` : libellé « Adresse email cloud », s
 ## Extension de recette · Longer Ray5 Wi-Fi (20 novembre 2026)
 
 Connecteur expérimental en lecture seule préparé sur `feat/longer-ray5-wifi` : TCP GRBL 8080 ou ESP3D HTTP 8848 / WebSocket 8849, ajout manuel, états/positions et rapports dans les logs. Documentation : [Longer Ray5 LAN](protocols/LONGER-RAY5-LAN.md). Non fusionné, non déployé et non validé sur matériel à ce stade. Les commandes laser, déplacements et fichiers machine restent indisponibles. Première action après fusion/déploiement : relever l’IP et le firmware sur l’écran, tester le mode approprié, comparer les états puis vérifier la déconnexion. Cette extension ne valide pas la recette POC-10 restante.
+
+## Confort de saisie · visibilité des secrets (20 novembre 2026)
+
+Bouton œil afficher/masquer sur les champs masqués, y compris connexion locale, codes LAN, clés API, compte cloud et code de vérification. Champs masqués par défaut ; remasquage à l’envoi, à la fermeture du dialogue et quand l’onglet est caché. Même valeur et validation conservées, bouton accessible au clavier et libellés FR/EN. Branche `feat/secret-visibility`, non fusionnée et non déployée à la préparation. Recette visuelle navigateur à effectuer après déploiement.
