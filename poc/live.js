@@ -2227,3 +2227,51 @@ app.addEventListener('input', event => {
   const text = event.target.value.toLocaleLowerCase();
   app.querySelectorAll('[data-log-entry]').forEach(item => { item.hidden = !item.textContent.toLocaleLowerCase().includes(text); });
 });
+
+// Covers both the main page and dynamically rendered account/setup dialogs.
+function secretVisibilityLabel(shown) {
+  return shown ? t('Masquer la saisie', 'Hide input') : t('Afficher la saisie', 'Show input');
+}
+function updateSecretVisibility(input, button, shown) {
+  input.type = shown ? 'text' : 'password';
+  const label = secretVisibilityLabel(shown);
+  button.setAttribute('aria-label', label);
+  button.setAttribute('aria-pressed', String(shown));
+  button.title = label;
+  button.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>${shown ? '<path d="m3 3 18 18"/>' : ''}</svg>`;
+}
+function enhanceSecretInputs(root) {
+  const inputs = [...(root.matches?.('input[type="password"]') ? [root] : []), ...root.querySelectorAll('input[type="password"]')];
+  for (const input of inputs) {
+    if (input.closest('.secret-field')) continue;
+    const wrapper = document.createElement('span');
+    wrapper.className = 'secret-field';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secret-toggle';
+    input.before(wrapper);
+    wrapper.append(input, button);
+    updateSecretVisibility(input, button, false);
+    button.addEventListener('click', () => {
+      const start = input.selectionStart, end = input.selectionEnd;
+      updateSecretVisibility(input, button, input.type === 'password');
+      input.focus({ preventScroll: true });
+      if (start !== null && end !== null) input.setSelectionRange(start, end);
+    });
+  }
+}
+function concealSecretInputs(root = document) {
+  root.querySelectorAll('.secret-field').forEach(wrapper => {
+    const input = wrapper.querySelector('input');
+    updateSecretVisibility(input, wrapper.querySelector('button'), false);
+  });
+}
+enhanceSecretInputs(document);
+new MutationObserver(records => {
+  for (const record of records) for (const node of record.addedNodes) {
+    if (node.nodeType === 1) enhanceSecretInputs(node);
+  }
+}).observe(document.body, { childList: true, subtree: true });
+document.addEventListener('submit', event => concealSecretInputs(event.target), true);
+document.addEventListener('visibilitychange', () => { if (document.hidden) concealSecretInputs(); });
+dialog.addEventListener('close', () => concealSecretInputs(dialog));
