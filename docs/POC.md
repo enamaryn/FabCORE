@@ -13,7 +13,11 @@ Liste et téléchargement vérifiés sur les deux instances : fichier temporaire
 
 **Périmètre projet :** la mise au point matérielle des imprimantes personnelles (sonde, axes, extrusion, montage) reste hors de FabCore et ne bloque pas la validation du connecteur en lecture. Ces observations ne signifient pas que les machines sont prêtes à imprimer. Aucun `printer.cfg` personnel n’est publié dans le dépôt.
 
-**Prochaine étape POC-10 :** vérifier le rendu des températures sur les deux fiches, puis le parcours Fichiers (envoi volontaire d’un vrai fichier compatible, liste, téléchargement et visualisation). Le lancement, le suivi de fabrication et Pause/Reprendre/Stop restent une recette distincte, sur une machine déjà mise au point par son propriétaire. La clôture POC-11 n’est pas acquise.
+**Retour utilisateur :** affichage des températures et parcours interface envoi, liste, téléchargement et visualiseur confirmés le 20 novembre. **Prochaine étape POC-10 :** recette de production et vérification des droits. Le lancement, le suivi de fabrication et Pause/Reprendre/Stop restent une recette distincte, sur une machine déjà mise au point par son propriétaire. La clôture POC-11 n’est pas acquise.
+
+## Toutes les machines dans la vue d’ensemble · 20 novembre 2026
+
+Fusionné dans [PR #88](https://github.com/enamaryn/FabCORE/pull/88), déploiement non revérifié ici : suppression de la limite de six cartes dans la vue d’ensemble. Toutes les machines du parc reçu sont rendues dans la grille existante, y compris la septième et les suivantes. Compteurs, activité récente et page Machines inchangés. Validation : suite de tests et diff ; recette visuelle après fusion/mise à jour avec les sept machines du parc.
 
 ## Découverte Moonraker multi-instance · 20 novembre 2026
 
