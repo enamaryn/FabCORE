@@ -97,3 +97,15 @@ test('transfert multiple : sélection compatible, échec partiel et un seul essa
   assert.deepEqual(changes, [[true, 1, 3], [false, 2, 3], [true, 3, 3]]);
   assert.deepEqual(Array.from(results.filter(r => r.ok), r => r.value), ['one.gcode', 'three.gcode']);
 });
+
+test('envoi : HTTP 413 HTML du proxy indique la limite, sans nouvel essai automatique', () => {
+  const source=readFileSync(new URL('./live.js',import.meta.url),'utf8');
+  const entry={error:'',upload:null};let request,sends=0;
+  const sandbox={filesState:()=>entry,machine:()=>({kind:'klipper'}),machineConnectors:connectorCatalog,gcodeLimit:512*1024*1024,
+    t:fr=>fr,problem:code=>code,renderFiles:()=>{},toast:()=>{},loadFiles:()=>{throw Error('unexpected success');},
+    XMLHttpRequest:class{constructor(){request=this;this.upload={};}open(){}setRequestHeader(){}send(){sends++;}}};
+  runInNewContext(source.slice(source.indexOf('function uploadFile('),source.indexOf('function fileTransferCandidates('))+';this.upload=uploadFile;',sandbox);
+  sandbox.upload('one',{name:'cube.gcode',size:6000000});
+  request.status=413;request.responseText='<html>Request Entity Too Large</html>';request.onloadend();
+  assert.equal(entry.error,'upload-proxy-limit');assert.equal(sends,1);assert.equal(entry.upload,null);
+});

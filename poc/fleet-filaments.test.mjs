@@ -54,3 +54,13 @@ test('plusieurs modules : pastilles du module actif seulement et compteur visibl
   const single = dots({ kind: 'bambu', filaments: [{ id: 0, slots: [] }] });
   assert.doesNotMatch(single, /<small>/, 'pas de libellé pour un seul module');
 });
+
+test('bobine manuelle : une pastille sans numéro, provenance, priorité aux modules réels', () => {
+  const manualSpool={material:'PETG',name:'Marque',color:'#123456'};
+  const html=dots({kind:'klipper',manualSpool});
+  assert.match(html,/--spool:#123456/); assert.match(html,/Saisie manuelle/);
+  assert.doesNotMatch(html,/>[1-4]<\/span>/);
+  const real=dots({kind:'bambu',manualSpool,filaments:[{id:0,slots:[{id:0,color:'#FF0000',occupied:true}]}]});
+  assert.match(real,/--spool:#FF0000/);assert.doesNotMatch(real,/#123456|Saisie manuelle/);
+  assert.match(dots({kind:'klipper',manualSpool:{material:'PLA',color:null}}),/Couleur inconnue/);
+});

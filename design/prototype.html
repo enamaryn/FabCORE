@@ -12,6 +12,12 @@
 @media(max-width:365px){.cards{grid-template-columns:1fr}.crumb span{display:none}}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s,color .15s}}
 .review-area{max-width:1750px}.review-grid{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px;align-items:start}.review-nav{max-height:78vh;overflow:auto}.review-nav section{display:grid;margin-bottom:12px}.review-nav h2{font-size:15px;padding:7px 6px}.review-preview{position:sticky;top:10px}.review-frame{width:100%;height:75vh;min-height:520px;display:block;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg)}.review-frame.mobile{width:min(100%,390px);position:static;margin:auto;padding:0}.feed{position:relative}.fixture-progress{margin-top:6px}@media(max-width:720px){.review-grid{grid-template-columns:1fr}.review-nav{max-height:245px}.review-preview{position:static}.review-frame{height:67vh;min-height:450px}}
+
+/* Farm layout: base each breakpoint on the space actually available to the cards. */
+.fleet-workspace .area{max-width:none}.fleet-grid-scope{container-type:inline-size;min-width:0}.machine-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.machine-grid .machine{align-content:start;gap:9px}.machine-grid .machine>.row:first-child{flex-wrap:wrap;align-items:flex-start}.machine-grid .machine>.row:first-child>.row:first-child{flex:1;min-width:0}.machine-grid .machine .card-indicators{max-width:100%}.machine-grid .machine h3{font-size:15px}.machine-grid .machine small{font-size:11px}.machine-grid .machine button{min-width:0;white-space:normal;overflow-wrap:anywhere}.machine-grid .machine>.row:first-child{padding-right:0}
+@container (min-width:840px){.machine-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@container (min-width:1140px){.machine-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@container (max-width:559px){.machine-grid{grid-template-columns:minmax(0,1fr)}}
 </style>
 </head>
 <body><div id="app"></div><dialog id="dialog"></dialog><div id="status" role="status" aria-live="polite"></div>
@@ -99,7 +105,7 @@ function dashboard(){
  const captions=[[t('Machines','Machines'),'machine'],[t('En fabrication','Printing'),'activity'],[t('Disponibles','Ready'),'check'],[t('À vérifier','Needs attention'),'alert']];
  return `${title(t('Vue d’ensemble','Workshop overview'),t('État du parc et activité récente de votre atelier.','Fleet status and recent workshop activity.'),state.role==='viewer'?'':btn('add',t('Ajouter une machine','Add machine'),'plus','primary'))}
  <div class="stats">${captions.map(([text,glyph],i)=>`<div class="stat"><div class="row">${icon(glyph)}<small>${text}</small></div><strong>${totals[i]}</strong></div>`).join('')}</div>
- <div class="main-grid"><section><div class="row between section-head"><h2>${t('Machines','Machines')}</h2>${btn('nav:machines',t('Tout le parc','View fleet'),'arrow','ghost')}</div><div class="cards">${state.machines.map(card).join('')||`<p class="muted">${t('Ajoutez une machine pour commencer.','Add a machine to get started.')}</p>`}</div></section>
+ <div class="main-grid"><section class="fleet-grid-scope"><div class="row between section-head"><h2>${t('Machines','Machines')}</h2>${btn('nav:machines',t('Tout le parc','View fleet'),'arrow','ghost')}</div><div class="cards machine-grid">${state.machines.map(card).join('')||`<p class="muted">${t('Ajoutez une machine pour commencer.','Add a machine to get started.')}</p>`}</div></section>
  <section class="panel"><div class="row between section-head"><h2>${t('Activité récente','Recent activity')}</h2>${icon('activity')}</div>${listEvents(state.events.slice(0,4))}<div style="margin-top:12px">${btn('nav:history',t('Voir l’historique','View history'),'arrow','ghost')}</div></section></div>`;
 }
 function fleetList(items){

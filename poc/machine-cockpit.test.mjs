@@ -105,3 +105,13 @@ test('cockpit commun : six blocs stables, fonctions absentes inertes, aucune cam
   assert.match(sandbox.render(), /Camera|Temperatures/);
   assert.match(sandbox.materials({kind:'xtool-m2'}), /Not applicable/);
 });
+
+test('fiche : bobine manuelle informative, bouton administrateur et modules prioritaires', () => {
+  const sandbox={state:{role:'admin'},machineConnectors:connectorCatalog,t:fr=>fr,esc:s=>String(s).replaceAll('<','&lt;'),btn:(action,label)=>`<button data-action="${action}">${label}</button>`,liveFilaments:m=>m.filaments?.length?'<section>AMS réel</section>':''};
+  runInNewContext(source.slice(source.indexOf('// Keep a shared layout'),source.indexOf('const machineTabs ='))+';this.materials=liveMaterials;',sandbox);
+  const m={kind:'klipper',manualSpool:{material:'PETG',name:'<exemple>',color:'#123456'}};
+  let html=sandbox.materials(m);
+  assert.match(html,/background:#123456/);assert.match(html,/Saisie manuelle/);assert.match(html,/&lt;exemple>/);assert.match(html,/spool-edit/);
+  sandbox.state.role='viewer';assert.doesNotMatch(sandbox.materials(m),/spool-edit/);
+  assert.equal(sandbox.materials({...m,kind:'bambu',filaments:[{id:0}]}),'<section>AMS réel</section>');
+});
