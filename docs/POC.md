@@ -5,6 +5,12 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** traiter l’incident urgent [#78](https://github.com/enamaryn/FabCORE/issues/78), puis le pilote cloud [#79](https://github.com/enamaryn/FabCORE/issues/79), avant de reprendre la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Découverte Moonraker multi-instance · 20 novembre 2026
+
+En revue sur `fix/moonraker-multi-discovery` : après reconnaissance de Moonraker sur une IP (7125 ou une origine déjà enregistrée), vérification ciblée de 7125–7134 sur cette IP uniquement. Une réponse Moonraker réelle crée une ligne par origine ; port visible et conservé à l’ajout. Noms existants prioritaires, métadonnée optionnelle `fabcore/display_name` sinon. La seconde instance n’est pas confondue avec la première. Aucun balayage des 65 535 ports ni changement des commandes matérielles.
+
+Essai réel depuis le LXC FabCore avec la nouvelle fonction : Ender 3 V2 MGN sur 192.168.1.176:7125 et Tevo Tarantula Pro sur :7126 reconnues séparément. Les deux serveurs Moonraker et les deux services Klipper ont été installés sur le Raspberry ; les configurations physiques d’origine restent absentes, donc Klipper est en erreur de configuration et aucune commande de mouvement/chauffe n’est validée. Les noms descriptifs sont enregistrés dans la base de chaque instance Moonraker. Le correctif d’interface reste à fusionner/déployer puis à vérifier par un scan réel dans le navigateur.
+
 ## Navigation et essai caméra cloud · 19 novembre 2026
 
 En revue sur `feat/cloud-camera-probe` : la fiche machine garde le menu latéral standard et ses libellés sur desktop (suppression de la réduction à 76 px). Le comportement mobile reste inchangé. Essai vidéo P2S réel : POST `ttcode` renvoie HTTP 403/code 8, sans identifiants vidéo ; aucun flux établi. Recherche récente : authentification signée et transport TUTK à qualifier, voir [le compte rendu](CLOUD-ACCOUNTS.md#essai-caméra-cloud-p2s--19-novembre-2026). La télémétrie et l’AMS restent distincts de ce refus. Aucun bouton de caméra cloud annoncé fonctionnel.

@@ -842,7 +842,7 @@ async function scanFromForm(form) {
     discoveredDevices = devices;
     status.textContent = devices.some(device => !device.registered) ? t('Choisissez une machine à ajouter.', 'Choose a machine to add.')
       : devices.length ? '' : t('Aucune machine identifiée. L’ajout manuel reste disponible.', 'No printer identified. You can still add it manually.');
-    results.innerHTML = devices.map((device, index) => `<div class="row between wrap"><span>${esc(device.name ?? machineConnectors[device.kind]?.model ?? device.kind)} · ${esc(device.host)}</span>
+    results.innerHTML = devices.map((device, index) => `<div class="row between wrap"><span>${esc(device.name ?? machineConnectors[device.kind]?.model ?? device.kind)} · ${esc(device.kind === 'klipper' && device.origin ? new URL(device.origin).host : device.host)}</span>
       ${device.registered ? `<small>${t('Déjà ajoutée','Already added')}${device.detected === false ? ' · ' + t('Aucune réponse reconnue', 'No recognized response') : device.candidate ? ' · ' + t('Identité à confirmer', 'Identity unconfirmed') : ''}</small>`
         : btn('detected:' + index, device.candidate ? t('Vérifier et configurer','Verify and configure') : t('Configurer','Configure'))}</div>`).join('');
   } catch (error) {

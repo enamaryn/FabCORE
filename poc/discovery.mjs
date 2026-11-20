@@ -30,9 +30,9 @@ export function discoveryNetworks(interfaces = networkInterfaces()) {
   return [...available.values()];
 }
 
-async function httpJSON(url, signal, inspect = () => null) {
+async function httpJSON(url, signal, inspect = () => null, fetcher = fetch) {
   try {
-    const response = await fetch(url, {
+    const response = await fetcher(url, {
       redirect: 'error',
       signal: AbortSignal.any([signal, AbortSignal.timeout(550)])
     });
@@ -194,18 +194,44 @@ async function detectXTool(host, signal) {
   return result.candidate ? { kind: 'xtool-m2', host, candidate: true } : null;
 }
 
-async function detectHost(host, signal, cc2) {
+// Probe additional instance ports only after this host is recognized as Moonraker.
+export async function detectMoonraker(host, signal, fetcher = fetch, knownOrigins = []) {
+  if (!privateIPv4(host) || signal.aborted) return [];
+  const primary = `http://${host}:7125`;
+  const known = knownOrigins.filter(origin => {
+    try { const url = new URL(origin); return url.hostname === host && ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && url.href === url.origin + '/'; } catch { return false; }
+  });
+  const checked = new Map();
+  async function inspect(origin) {
+    const info = await httpJSON(origin + '/server/info', signal, undefined, fetcher);
+    const device = typeof info?.result?.moonraker_version === 'string' ? { kind: 'klipper', host, origin } : null;
+    checked.set(origin, device);
+    return device;
+  }
+  const initial = await Promise.all([...new Set([primary, ...known])].map(inspect));
+  if (!initial.some(Boolean) || signal.aborted) return initial.filter(Boolean);
+  const others = Array.from({ length: 10 }, (_, i) => `http://${host}:${7125 + i}`).filter(origin => !checked.has(origin));
+  await Promise.all(others.map(inspect));
+  const devices = [...checked.values()].filter(Boolean);
+  await Promise.all(devices.map(async device => {
+    if (signal.aborted) return;
+    const metadata = await httpJSON(device.origin + '/server/database/item?namespace=fabcore&key=display_name', signal, undefined, fetcher);
+    const name = metadata?.result?.value;
+    if (typeof name === 'string' && name.trim() && name.length <= 80 && !/[\x00-\x1f\x7f]/.test(name)) device.name = name.trim();
+  }));
+  return devices.sort((a, b) => Number(new URL(a.origin).port) - Number(new URL(b.origin).port));
+}
+
+async function detectHost(host, signal, cc2, knownMoonraker) {
   const [moonraker, elegoo, bambu, octoprint, xtool] = await Promise.all([
-    httpJSON(`http://${host}:7125/server/info`, signal),
+    detectMoonraker(host, signal, undefined, knownMoonraker),
     detectCC2(host, signal, cc2),
     detectBambu(host, signal),
     detectOctoPrint(host, signal),
     detectXTool(host, signal)
   ]);
   const found = [];
-  if (typeof moonraker?.result?.moonraker_version === 'string') {
-    found.push({ kind: 'klipper', host, origin: `http://${host}:7125` });
-  }
+  found.push(...moonraker);
   if (elegoo) found.push(elegoo);
   if (bambu) found.push(bambu);
   if (xtool) found.push(xtool);
@@ -216,6 +242,14 @@ export async function scanNetwork(network, signal, { inspectHost = detectHost, b
   setMaxListeners(128, signal);
   const cc2 = new Map(machines.filter(machine => machine.kind === 'elegoo' && machine.accessCode)
     .map(machine => [URL.parse(machine.origin)?.hostname, machine]));
+  const knownMoonraker = new Map();
+  for (const machine of machines) {
+    if ((machine.kind ?? 'klipper') !== 'klipper') continue;
+    const host = URL.parse(machine.origin)?.hostname;
+    if (!privateIPv4(host)) continue;
+    if (!knownMoonraker.has(host)) knownMoonraker.set(host, []);
+    knownMoonraker.get(host).push(machine.origin);
+  }
   const found = [];
   const discovery = broadcast(network, signal);
   const hosts = [];
@@ -228,7 +262,7 @@ export async function scanNetwork(network, signal, { inspectHost = detectHost, b
   async function worker() {
     while (!signal.aborted && cursor < hosts.length) {
       const host = hosts[cursor++];
-      found.push(...await inspectHost(host, signal, cc2.get(host)));
+      found.push(...await inspectHost(host, signal, cc2.get(host), knownMoonraker.get(host)));
     }
   }
   await Promise.all(Array.from({ length: 20 }, worker));
@@ -258,7 +292,7 @@ export function reconcileDiscovery(network, found, machines) {
   for (const { machine, host } of registered) {
     const address = toNumber(host);
     if (matched.has(machine.id) || !(address > network.start && address < network.end)) continue;
-    devices.push({ kind: machine.kind ?? 'klipper', host, name: machine.name, registered: true, detected: false });
+    devices.push({ kind: machine.kind ?? 'klipper', host, ...((machine.kind ?? 'klipper') === 'klipper' ? { origin: machine.origin } : {}), name: machine.name, registered: true, detected: false });
   }
   return devices.sort((a, b) => toNumber(a.host) - toNumber(b.host) || a.kind.localeCompare(b.kind));
 }
