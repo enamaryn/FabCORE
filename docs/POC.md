@@ -15,11 +15,25 @@ Vérifications : 112 tests réussis, syntaxe JS et diff vérifiés ; cas Klipper
 
 Retour utilisateur du 20 novembre : affichage des températures et parcours interface envoi/liste/téléchargement/visualiseur confirmés pour Moonraker ; recette de production et vérification des droits encore à faire. Voir également la PR #89 pour le détail des lectures réalisées depuis le LXC. La mise au point de la Tarantula reste hors périmètre projet.
 
+## Klipper/Moonraker : lecture partiellement validée · 20 novembre 2026
+
+**Testé sur matériel depuis le LXC FabCore**, via les fonctions réelles `readMoonraker` et `createMoonrakerFiles` du connecteur déployé : deux instances sur la même IP, ports 7125 et 7126, états `ready` et températures buse/plateau reçues séparément. Relevé ponctuel : première instance 20,5/20,7 °C, seconde 22,2/19,3 °C. Klipper v0.14.0 ; version Moonraker non déterminée par cette installation. La découverte multi-instance est fusionnée dans la PR #87 et constatée dans l’interface par Valentin.
+
+Liste et téléchargement vérifiés sur les deux instances : fichier temporaire `.gcode` ne contenant que des commentaires, visible via `/server/files/list?root=gcodes`, puis lu via `/server/files/gcodes/<chemin>` avec HTTP 200 et contenu correspondant. Les fichiers temporaires ont été retirés ; les deux dossiers sont actuellement vides. Le stockage est celui de chaque instance Moonraker sur le Raspberry, pas l’inventaire d’une éventuelle carte SD interne de l’imprimante. Aucun envoi par l’interface, lancement, mouvement, chauffe, pause/reprise ou arrêt de production validé par cet essai.
+
+**Périmètre projet :** la mise au point matérielle des imprimantes personnelles (sonde, axes, extrusion, montage) reste hors de FabCore et ne bloque pas la validation du connecteur en lecture. Ces observations ne signifient pas que les machines sont prêtes à imprimer. Aucun `printer.cfg` personnel n’est publié dans le dépôt.
+
+**Retour utilisateur :** affichage des températures et parcours interface envoi, liste, téléchargement et visualiseur confirmés le 20 novembre. **Prochaine étape POC-10 :** recette de production et vérification des droits. Le lancement, le suivi de fabrication et Pause/Reprendre/Stop restent une recette distincte, sur une machine déjà mise au point par son propriétaire. La clôture POC-11 n’est pas acquise.
+
+## Toutes les machines dans la vue d’ensemble · 20 novembre 2026
+
+Fusionné dans [PR #88](https://github.com/enamaryn/FabCORE/pull/88), déploiement non revérifié ici : suppression de la limite de six cartes dans la vue d’ensemble. Toutes les machines du parc reçu sont rendues dans la grille existante, y compris la septième et les suivantes. Compteurs, activité récente et page Machines inchangés. Validation : suite de tests et diff ; recette visuelle après fusion/mise à jour avec les sept machines du parc.
+
 ## Découverte Moonraker multi-instance · 20 novembre 2026
 
-En revue sur `fix/moonraker-multi-discovery` : après reconnaissance de Moonraker sur une IP (7125 ou une origine déjà enregistrée), vérification ciblée de 7125–7134 sur cette IP uniquement. Une réponse Moonraker réelle crée une ligne par origine ; port visible et conservé à l’ajout. Noms existants prioritaires, métadonnée optionnelle `fabcore/display_name` sinon. La seconde instance n’est pas confondue avec la première. Aucun balayage des 65 535 ports ni changement des commandes matérielles.
+Fusionné dans [PR #87](https://github.com/enamaryn/FabCORE/pull/87), constaté dans l’interface : après reconnaissance de Moonraker sur une IP (7125 ou une origine déjà enregistrée), vérification ciblée de 7125–7134 sur cette IP uniquement. Une réponse Moonraker réelle crée une ligne par origine ; port visible et conservé à l’ajout. Noms existants prioritaires, métadonnée optionnelle `fabcore/display_name` sinon. La seconde instance n’est pas confondue avec la première. Aucun balayage des 65 535 ports ni changement des commandes matérielles.
 
-Essai réel depuis le LXC FabCore avec la nouvelle fonction : Ender 3 V2 MGN sur 192.168.1.176:7125 et Tevo Tarantula Pro sur :7126 reconnues séparément. Les deux serveurs Moonraker et les deux services Klipper ont été installés sur le Raspberry ; les configurations physiques d’origine restent absentes, donc Klipper est en erreur de configuration et aucune commande de mouvement/chauffe n’est validée. Les noms descriptifs sont enregistrés dans la base de chaque instance Moonraker. Le correctif d’interface reste à fusionner/déployer puis à vérifier par un scan réel dans le navigateur.
+Essai réel depuis le LXC FabCore avec la nouvelle fonction : Ender 3 V2 MGN sur 192.168.1.176:7125 et Tevo Tarantula Pro sur :7126 reconnues séparément. Les deux serveurs Moonraker et les deux services Klipper ont été installés sur le Raspberry ; lors du premier essai les configurations physiques d’origine étaient absentes et Klipper signalait une erreur de configuration. Aucune commande de mouvement/chauffe n’a été validée. Les noms descriptifs sont enregistrés dans la base de chaque instance Moonraker. État actualisé : PR #87 fusionnée, détection des deux lignes constatée par Valentin ; le relevé de lecture du 20 novembre ci-dessus remplace l’ancien blocage de configuration pour la télémétrie.
 
 ## Navigation et essai caméra cloud · 19 novembre 2026
 
@@ -282,7 +296,8 @@ En cours. Chaque sous-étape passe à `Testé matériel` une fois vérifiée sur
   - [ ] Ender 3 (Moonraker) : `M105` affiche la réponse, `G28` est « Exécutée », une commande inconnue est « Refusée ».
   - [ ] OctoPrint : `M105` est « Acceptée ».
 - [ ] POC-10.2 Fichiers et visualiseur (POC-09.1 à 09.3) :
-  - [ ] Envoi, visualisation, lancement et suivi en direct sur l’Ender 3.
+  - [x] Lecture Moonraker depuis le connecteur déployé : liste et téléchargement sur deux instances séparées, fichier temporaire sans commande, retiré après vérification (20 novembre 2026).
+  - [ ] Envoi par l’interface, visualisation, lancement et suivi en direct sur une machine Klipper prête à produire. La mise au point de la machine personnelle est hors périmètre du projet.
   - [ ] Même parcours sur OctoPrint. Vérifier que `/downloads/files/local/…` accepte la clé API.
   - [ ] Fichiers réels PrusaSlicer, Cura, Orca et Bambu Studio.
 - [ ] POC-10.3 Découverte : CC2 avec et sans code LAN enregistré, P2S et deux Elegoo signalées comme déjà ajoutées.
@@ -297,7 +312,7 @@ En cours. Chaque sous-étape passe à `Testé matériel` une fois vérifiée sur
 
 - [x] POC-11.1 Une Bambu P2S connectée · **Testé matériel** : impression de 9 heures suivie dans FabCore, confirmation utilisateur du 18 novembre 2026.
 - [ ] POC-11.2 Deux Elegoo CC2 distinctes, sans confusion entre machines.
-- [ ] POC-11.3 Une machine Klipper.
+- [ ] POC-11.3 Une machine Klipper : **lecture partiellement testée sur matériel le 20 novembre 2026** (deux instances, températures, liste et téléchargement). Parcours navigateur et production à terminer ; ne pas assimiler à une validation complète.
 - [ ] POC-11.4 Permissions vérifiées (administrateur, observateur, routes et flux). Séparation de l’interface constatée fonctionnelle à priori par Valentin le 18 novembre 2026 ; contrôles directs des autorisations serveur et des flux encore à vérifier.
 - [ ] POC-11.5 Commandes fiables : pause, reprise, terminal, lancement, sans renvoi automatique.
 - [ ] POC-11.6 Erreurs détectables : état hors ligne **testé sur matériel** en éteignant les deux CC2 (confirmation utilisateur du 18 novembre 2026). Restent l’accès refusé et le firmware en erreur.

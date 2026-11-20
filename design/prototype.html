@@ -99,7 +99,7 @@ function dashboard(){
  const captions=[[t('Machines','Machines'),'machine'],[t('En fabrication','Printing'),'activity'],[t('Disponibles','Ready'),'check'],[t('À vérifier','Needs attention'),'alert']];
  return `${title(t('Vue d’ensemble','Workshop overview'),t('État du parc et activité récente de votre atelier.','Fleet status and recent workshop activity.'),state.role==='viewer'?'':btn('add',t('Ajouter une machine','Add machine'),'plus','primary'))}
  <div class="stats">${captions.map(([text,glyph],i)=>`<div class="stat"><div class="row">${icon(glyph)}<small>${text}</small></div><strong>${totals[i]}</strong></div>`).join('')}</div>
- <div class="main-grid"><section><div class="row between section-head"><h2>${t('Machines','Machines')}</h2>${btn('nav:machines',t('Tout le parc','View fleet'),'arrow','ghost')}</div><div class="cards">${state.machines.slice(0,6).map(card).join('')||`<p class="muted">${t('Ajoutez une machine pour commencer.','Add a machine to get started.')}</p>`}</div></section>
+ <div class="main-grid"><section><div class="row between section-head"><h2>${t('Machines','Machines')}</h2>${btn('nav:machines',t('Tout le parc','View fleet'),'arrow','ghost')}</div><div class="cards">${state.machines.map(card).join('')||`<p class="muted">${t('Ajoutez une machine pour commencer.','Add a machine to get started.')}</p>`}</div></section>
  <section class="panel"><div class="row between section-head"><h2>${t('Activité récente','Recent activity')}</h2>${icon('activity')}</div>${listEvents(state.events.slice(0,4))}<div style="margin-top:12px">${btn('nav:history',t('Voir l’historique','View history'),'arrow','ghost')}</div></section></div>`;
 }
 function fleetList(items){
