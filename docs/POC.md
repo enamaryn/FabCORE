@@ -5,6 +5,18 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** traiter l’incident urgent [#78](https://github.com/enamaryn/FabCORE/issues/78), puis le pilote cloud [#79](https://github.com/enamaryn/FabCORE/issues/79), avant de reprendre la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Grille de parc orientée ferme · 20 novembre 2026
+
+Même branche `fix/moonraker-upload-manual-spool` : grille de cartes responsive dans le parc et la vue d’ensemble, une à quatre colonnes selon la place réellement disponible via requêtes de conteneur (3 dès 840 px, 4 dès 1140 px). Le parc utilise la largeur disponible ; la vue d’ensemble tient compte de la colonne d’activité. Noms longs et badges peuvent revenir à la ligne ; aucune caméra démarrée pour afficher les cartes. Cela modifie la présentation, pas les limites de charge ou le périmètre multiferme du MVP. Recette visuelle bureau/mobile à confirmer après fusion/mise à jour.
+
+## Bobine simple informative et limite des envois · 20 novembre 2026
+
+En revue sur `fix/moonraker-upload-manual-spool`, non déployé pour le code : saisie administrateur d’une bobine simple, matière/nom/couleur facultative, modification et retrait ; conservation dans les données de la machine, affichage explicite manuel sur la fiche et pastille sans numéro sur parc/vue d’ensemble. Les modules réels gardent la priorité. Aucun chargement/déchargement, sélection AMS/CANVAS ou changement du G-code ; observateurs en lecture seule.
+
+Cause de l’envoi Ender identifiée dans Nginx : HTTP 413 sur un fichier de 6,7 Mo, avant FabCore. Configuration LXC sauvegardée, `client_max_body_size 512m` ajouté, `nginx -t` et reload réussis. Vérification : requête de plus de 2 Mo sans session atteint FabCore (401), aucune machine ciblée ; transfert direct Moonraker d’un fichier de commentaires réussi (201, `print_started:false`), fichier retiré ensuite. Code navigateur : message spécifique pour un 413 HTML. Refaire l’envoi du fichier initial dans l’interface après correction du proxy.
+
+Vérifications : **117 tests réussis**, syntaxe JavaScript et diff vérifiés. Tests de validation des champs/couleurs, droits et origine HTTP, persistance et édition de la machine, retrait, absence de commande, pastille unique et priorité aux modules, affichage admin/observateur, 413 sans rejeu. Recette visuelle de saisie de bobine à faire après fusion/mise à jour ; production et vérifications générales des droits restent au POC-10/11.
+
 ## Fiches machine : structure commune et indisponibilités · 20 novembre 2026
 
 En revue sur `fix/common-machine-cockpit`, non déployé : six blocs conservés pour chaque famille et connexion, avec ou sans caméra/AMS/contrôles. Caméra et matières/filaments à gauche ; fabrication, températures, actions rapides et déplacements à droite. Les colonnes ne disparaissent plus selon les capacités ; une colonne sur mobile. Tous les modules réels restent visibles. Les panneaux indisponibles sont compacts, avec une illustration légèrement floutée et un message net, éléments `disabled`/`inert` sans cible de commande ni requête caméra pour un connecteur sans caméra.

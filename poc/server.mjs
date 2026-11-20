@@ -1,3 +1,4 @@
+import { manualSpool, supportsManualSpool } from './manual-spool.mjs';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { randomBytes, randomUUID, createHash, scrypt, timingSafeEqual } from 'node:crypto';
@@ -423,10 +424,28 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
           id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial,
           model: machine.kind === 'bambu-cloud' ? machine.model : definition?.model ?? connectorCatalog.klipper.model,
           cameraOpen: [...cameraStreams.values()].some(stream => stream.machineId === machine.id && [...stream.viewers.values()].some(({ owner }) => owner === activeSession)),
-          ...telemetry
+          ...telemetry,
+          manualSpool: supportsManualSpool(machine.kind ?? 'klipper') ? manualSpool(machine.manualSpool) : null
         };
       }));
       return answer(res, 200, { machines: machines.filter(Boolean) });
+    }
+    const spoolRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/spool$/);
+    if (req.method === 'POST' && spoolRoute) {
+      if (!viewer) return error(res, 401, 'sign-in');
+      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+      if (!requireJson(req, res)) return;
+      let data;
+      try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+      const machine = store.state.machines.find(item => item.id === spoolRoute[1]);
+      if (!machine) return error(res, 404, 'missing');
+      if (!supportsManualSpool(machine.kind ?? 'klipper')) return error(res, 400, 'spool-unsupported');
+      const spool = data.spool === null ? null : manualSpool(data.spool);
+      if (data.spool !== null && !spool) return error(res, 400, 'spool-invalid');
+      // Notes can be edited offline. Reported modules retain display priority.
+      const machines = store.state.machines.map(item => item === machine ? { ...item, manualSpool: spool } : item);
+      store.save({ ...store.state, machines });
+      return answer(res, 200, { manualSpool: spool });
     }
     const command = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/command$/);
     if (req.method === 'POST' && command) {
@@ -720,7 +739,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const definition = connectorDefinition(kind);
       const connection = definition?.configure(data, existing);
       if (!name || !connection) return error(res, 400, 'machine-invalid');
-      const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection };
+      const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection, ...(existing?.manualSpool ? { manualSpool: existing.manualSpool } : {}) };
       if (kind === 'bambu' && store.state.machines.some(item => item.id !== machine.id && ['bambu', 'bambu-cloud'].includes(item.kind) && item.serial === machine.serial)) return error(res, 409, 'cloud-machine-exists');
       const testing = path === '/api/machines/test';
       const pairing = path === '/api/machines/pair';

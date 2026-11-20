@@ -155,6 +155,18 @@ FabCore lit le numéro de série et l’état de la M2. À l’ajout, il mémori
 | `FABCORE_ORIGIN` | `http://127.0.0.1:3000` si port par défaut | Origine exacte utilisée par le navigateur |
 | `FABCORE_DATA` | `.fabcore` | Répertoire de stockage |
 
+### Limite des envois derrière un reverse proxy
+
+FabCore accepte jusqu’à 512 Mo par fichier ; tous les proxys traversés doivent accepter au moins cette taille. Pour Nginx, ajouter `client_max_body_size 512m;` dans le bloc `server` FabCore existant, vérifier avec `nginx -t`, puis recharger Nginx. Conserver les restrictions d’accès, certificats et en-têtes existants. Ne pas recréer le bloc du site à l’aveugle. Une erreur HTTP 413 signifie que le serveur/proxy a refusé la taille ; vérifier aussi le proxy public s’il y en a plusieurs.
+
+Incident du 20 novembre 2026 : un fichier de 6,7 Mo était refusé par Nginx avant d’atteindre FabCore/Moonraker. La configuration du LXC a été sauvegardée puis sa limite alignée sur 512 Mo. Un envoi non authentifié de plus de 2 Mo atteint désormais le contrôle d’accès FabCore (HTTP 401), sans toucher une machine. Un petit fichier de commentaires a aussi été transféré directement par le connecteur Moonraker (HTTP 201), puis supprimé sans exécution. L’essai utilisateur du fichier initial reste à confirmer.
+
+### Bobine simple renseignée manuellement
+
+Sur la fiche d’une imprimante FDM sans module AMS/CANVAS remonté, un administrateur peut choisir **Renseigner une bobine** : matière, nom/marque facultatif et couleur facultative. La fiche et la pastille sans numéro dans le parc/la vue d’ensemble portent la provenance manuelle. Une couleur non renseignée reste inconnue. Modification et retrait de l’information sont possibles ; elle est conservée dans les données FabCore, y compris après redémarrage ou édition de la machine.
+
+Cette saisie ne charge/décharge pas de filament, ne sélectionne aucun emplacement, ne modifie pas le G-code et ne valide pas la compatibilité du matériau. Les modules signalés par le connecteur gardent la priorité ; l’information manuelle reste conservée mais masquée si un module apparaît. Les observateurs peuvent lire ces informations et ne peuvent pas les modifier.
+
 Une écoute hors boucle locale impose une origine HTTPS et un reverse proxy qui préserve l’en-tête `Host` et termine TLS. Pour la recette POC, le tunnel SSH garde l’écoute en local. La maquette de revue s’ouvre toujours directement avec `design/prototype.html`.
 
 Références Moonraker pour le [suivi d’impression](https://moonraker.readthedocs.io/en/latest/external_api/introduction/#basic-print-status), les [objets Klipper](https://moonraker.readthedocs.io/en/latest/printer_objects/) et [l’autorisation API](https://moonraker.readthedocs.io/en/latest/external_api/authorization/).

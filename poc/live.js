@@ -38,6 +38,9 @@ const problem = (code) => ({
   'control-confirm': t('Confirmez la modification pendant la fabrication.', 'Confirm changing a setting during the print.'),
   'controls-unavailable': t('Lecture des contrôles indisponible.', 'Controls are unavailable.'),
   'filament-confirm': t('Confirmez l’utilisation de la bobine externe.', 'Confirm the use of the external spool.'),
+  'upload-proxy-limit': t('Le serveur ou proxy refuse la taille du fichier. Vérifiez sa limite d’envoi (512 Mo dans FabCore).', 'The server or proxy rejected the file size. Check its upload limit (512 MB in FabCore).'),
+  'spool-invalid': t('Vérifiez la matière, le nom et la couleur de la bobine.', 'Check spool material, name and color.'),
+  'spool-unsupported': t('La bobine manuelle est réservée aux imprimantes à filament.', 'Manual spools are only available for filament printers.'),
   'file-too-large': t('Fichier vide ou trop volumineux (512 Mo au maximum).', 'File empty or too large (512 MB maximum).'),
   missing: t('Élément introuvable.', 'Item not found.'),
   'terminal-offline': t('La machine est hors ligne. Commande non envoyée.', 'The machine is offline. Command not sent.'),
@@ -223,7 +226,7 @@ function credentialsPage() {
 function liveFleet() {
   const list = state.machines;
   return title(t('Machines','Machines'), t('Parc de machines.','Machine fleet.'), state.role === 'viewer' ? '' : btn('add',t('Ajouter une machine','Add machine'),'plus','primary')) +
-    (list.length ? `<div class="cards">${list.map(card).join('')}</div>` :
+    (list.length ? `<div class="fleet-grid-scope"><div class="cards machine-grid">${list.map(card).join('')}</div></div>` :
       `<p class="notice">${t('Ajoute une adresse Moonraker pour commencer.','Add a Moonraker address to get started.')}</p>`);
 }
 
@@ -350,9 +353,10 @@ function fleetFilamentDots(machine) {
   const shown = units?.find(unit => unit.slots.some(slot => slot.active && slot.occupied !== false)) ?? units?.[0];
   const label = shown ? (shown.variant === 'ht' ? 'AMS HT' : system) + ' ' + (shown.variant === 'ht' ? shown.id - 3 : shown.id + 1) : '';
   const count = units?.length > 1 ? `<small>${units.length} ${esc(system)}</small>` : '';
+  const manual = !shown && machine.manualSpool;
   const content = system && shown
     ? `<span class="fleet-filament-unit" role="group" aria-label="${esc(label)}">${count}<span class="fleet-filament-dots">${shown.slots.map(slot => dot(slot, slot.id + 1, label)).join('')}</span></span>`
-    : `<span class="fleet-filament-unit">${dot({ occupied: null }, '', system && units === null ? t('Équipement non communiqué','Equipment not reported') : '')}</span>`;
+    : `<span class="fleet-filament-unit">${dot(manual ? { ...manual, occupied: true } : { occupied: null }, '', manual ? t('Saisie manuelle · informatif','Manual entry · informational') : system && units === null ? t('Équipement non communiqué','Equipment not reported') : '')}</span>`;
   return `<style>
     .machine:has(.fleet-filaments){position:relative;padding-top:26px}
     .cards:has(.fleet-filaments){padding-top:16px;row-gap:28px}
@@ -437,13 +441,26 @@ function unavailablePanel(title, message, extraClass = '') {
 }
 function liveMaterials(m) {
   const reported = liveFilaments(m);
-  if (reported) return reported;
+  if (reported && m.filaments?.length) return reported;
   const fdm = ['klipper', 'octoprint', 'prusalink', 'elegoo', 'elegoo-cc1', 'bambu', 'bambu-cloud'].includes(m.kind);
-  const message = !fdm ? t('Non applicable à cette machine.', 'Not applicable to this machine.')
-    : m.status === 'offline' ? t('Informations temporairement inaccessibles : machine hors ligne.', 'Information temporarily unavailable: machine offline.')
-    : machineConnectors[m.kind]?.filaments && m.filaments?.length === 0 ? t('Aucun module multibobine signalé. Bobine simple : informations non communiquées.', 'No multi-spool module reported. Single spool: information not reported.')
-    : t('Informations sur la bobine ou les modules non communiquées.', 'Spool or module information not reported.');
-  return unavailablePanel(fdm ? t('Filaments', 'Filaments') : t('Matières / accessoires', 'Materials / accessories'), message, 'machine-filaments');
+  if (!fdm) return unavailablePanel(t('Matières / accessoires', 'Materials / accessories'), t('Non applicable à cette machine.', 'Not applicable to this machine.'), 'machine-filaments');
+  const spool = m.manualSpool;
+  const color = /^#[a-f0-9]{6}$/i.test(spool?.color) ? spool.color : 'var(--raised)';
+  const content = spool ? `<div class="row wrap"><span style="display:inline-block;width:26px;height:26px;border:1px solid var(--line);border-radius:50%;background:${color}" role="img" aria-label="${esc(spool.color || t('Couleur inconnue','Unknown color'))}"></span><strong>${esc(spool.material)}</strong><span>${esc(spool.name || '')}</span></div><small>${t('Saisie manuelle · information uniquement, non vérifiée par la machine.', 'Manual entry · information only, not verified by the machine.')}</small>`
+    : unavailableContent(m.status === 'offline' ? t('Informations temporairement inaccessibles : machine hors ligne.', 'Information temporarily unavailable: machine offline.') : machineConnectors[m.kind]?.filaments && m.filaments?.length === 0 ? t('Aucun module multibobine signalé. Bobine simple : informations non communiquées.', 'No multi-spool module reported. Single spool: information not reported.') : t('Informations sur la bobine non communiquées.', 'Spool information not reported.'));
+  return `<section class="panel stack machine-filaments"><div class="row between wrap"><h2>${t('Filaments','Filaments')}</h2>${state.role === 'admin' ? btn('spool-edit', spool ? t('Modifier la bobine','Edit spool') : t('Renseigner une bobine','Set spool'), '', 'ghost') : ''}</div>${content}</section>`;
+}
+function openManualSpool() {
+  const m = machine(state.machine);
+  if (state.role !== 'admin' || !m || m.filaments?.length || !['klipper', 'octoprint', 'prusalink', 'elegoo', 'elegoo-cc1', 'bambu', 'bambu-cloud'].includes(m.kind)) return;
+  const spool = m.manualSpool;
+  dialog.innerHTML = `<form id="manual-spool" class="stack" data-machine-id="${esc(m.id)}"><h2>${t('Bobine simple','Single spool')}</h2>
+    <p class="notice">${t('Information enregistrée dans FabCore uniquement. Aucune commande ni sélection de filament n’est envoyée à la machine.', 'Information saved in FabCore only. No command or filament selection is sent to the machine.')}</p>
+    <label>${t('Matière','Material')}<input name="material" maxlength="40" required placeholder="PLA, PETG, ABS…" value="${esc(spool?.material || '')}"></label>
+    <label>${t('Nom / marque (facultatif)','Name / brand (optional)')}<input name="name" maxlength="80" value="${esc(spool?.name || '')}"></label>
+    <label class="row"><input type="checkbox" name="knownColor" ${spool?.color ? 'checked' : ''}>${t('Couleur renseignée','Color specified')}<input type="color" name="color" aria-label="${t('Couleur de la bobine','Spool color')}" value="${spool?.color || '#808080'}"></label>
+    <p class="error" role="alert"></p><div class="row wrap">${btn('close', t('Annuler','Cancel'))}<button type="submit" class="primary">${t('Enregistrer','Save')}</button>${spool ? '<button type="submit" name="remove" value="true" formnovalidate class="danger">' + t('Retirer l’information','Remove information') + '</button>' : ''}</div></form>`;
+  dialog.showModal();
 }
 
 const machineTabs = new Map();
@@ -630,6 +647,7 @@ function renderLive() {
   const screens = { cloud: cloudPage, diagnostics: diagnosticsPage, notifications: notificationPage, home: dashboard, machines: liveFleet, detail: liveDetail, viewer: viewerPage, history: () =>
     title(t('Activité récente','Recent activity')) + `<section class="panel">${listEvents()}</section>` };
   const compact = signedIn && live.page === 'detail';
+  const fleet = signedIn && ['home', 'machines'].includes(live.page);
   const accountActions = `      ${btn('lang',state.lang==='fr'?'EN':'FR','','ghost',`aria-label="${state.lang==='fr'?'Switch to English':'Passer en français'}"`)}
       ${btn('theme','','sun','ghost',`aria-label="${t('Basculer le thème','Toggle theme')}"`)}
       ${signedIn && state.role === 'admin' ? btn('diagnostics',t('Diagnostics','Diagnostics'),'activity') : ''}
@@ -638,7 +656,7 @@ function renderLive() {
       ${signedIn && state.role === 'admin' ? btn('observer',t('Ajouter un observateur','Add observer')) : ''}
       ${signedIn?btn('logout',t('Déconnexion','Sign out'),'','ghost'):''}
 `;
-  app.innerHTML = `<a class="skip" href="#content">${t('Aller au contenu','Skip to content')}</a><div class="${signedIn ? 'layout' + (compact ? ' machine-workspace' : '') : ''}">
+  app.innerHTML = `<a class="skip" href="#content">${t('Aller au contenu','Skip to content')}</a><div class="${signedIn ? 'layout' + (compact ? ' machine-workspace' : fleet ? ' fleet-workspace' : '') : ''}">
     ${signedIn?`<aside class="sidebar">${brand()}<nav aria-label="${t('Navigation principale','Main navigation')}">${liveNavigation()}</nav><div class="sidefoot"><small class="signal">POC${state.role === 'viewer' ? ' · ' + t('Observateur','Observer') : ''}</small></div></aside>`:''}
     <div><header class="top"><div class="crumb">${compact ? `<span>${t('Machines','Machines')} / <strong>${esc(machine(state.machine)?.name ?? '')}</strong></span>` : signedIn ? `<span>${esc(live.username)}</span>` : brand()}</div>
     ${compact ? `<details class="machine-account"><summary aria-label="${t('Compte et paramètres','Account and settings')}">${esc(live.username)} ▾</summary><div class="stack">${accountActions}</div></details>` : `<div class="row wrap">${accountActions}</div>`}
@@ -929,6 +947,7 @@ document.addEventListener('click', async (event) => {
     </form>`;
     dialog.showModal();
   }
+  if (action === 'spool-edit') openManualSpool();
   if (action === 'machine-tab') selectMachineTab(value);
   if (action === 'files-focus') {
     selectMachineTab('files');
@@ -1026,6 +1045,7 @@ app.addEventListener('change', event => {
 });
 
 dialog.addEventListener('change', (event) => {
+  if (event.target.form?.id === 'manual-spool' && event.target.name === 'color') event.target.form.elements.knownColor.checked = true;
   if (!event.target.matches('#add-machine select[name="kind"]')) return;
   openMachineForm(event.target.value, event.target.form.elements.name.value);
   dialog.querySelector('select[name="kind"]').focus();
@@ -1047,6 +1067,23 @@ document.addEventListener('input', (event) => {
 
 document.addEventListener('submit', async (event) => {
   const form = event.target;
+  if (form.id === 'manual-spool') {
+    event.preventDefault();
+    const submit = event.submitter;
+    if (state.role !== 'admin' || submit?.disabled) return;
+    const data = Object.fromEntries(new FormData(form));
+    const controls = [...form.querySelectorAll('button')];
+    controls.forEach(button => { button.disabled = true; });
+    try {
+      await api('machines/' + form.dataset.machineId + '/spool', { spool: submit?.name === 'remove' ? null : { material: data.material, name: data.name, color: data.knownColor ? data.color : null } });
+      dialog.close();
+      await refresh();
+      renderLive();
+      toast(t('Information de bobine enregistrée.', 'Spool information saved.'));
+    } catch (error) { form.querySelector('.error').textContent = problem(error.code); }
+    finally { controls.forEach(button => { button.disabled = false; }); }
+    return;
+  }
   if (form.id === 'notifications-settings') {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
@@ -1387,7 +1424,7 @@ function uploadFile(id, file) {
       toast(t('Fichier envoyé sur la machine.', 'File uploaded to the machine.'));
       loadFiles(id);
     } else {
-      entry.error = request.status === 0 ? t('Envoi interrompu. Vérifiez la liste avant de recommencer.', 'Upload interrupted. Check the list before trying again.') : problem(code);
+      entry.error = request.status === 0 ? t('Envoi interrompu. Vérifiez la liste avant de recommencer.', 'Upload interrupted. Check the list before trying again.') : problem(code || (request.status === 413 ? 'upload-proxy-limit' : ''));
       renderFiles(id);
     }
   };
