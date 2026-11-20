@@ -5,6 +5,10 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** traiter l’incident urgent [#78](https://github.com/enamaryn/FabCORE/issues/78), puis le pilote cloud [#79](https://github.com/enamaryn/FabCORE/issues/79), avant de reprendre la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Toutes les machines dans la vue d’ensemble · 20 novembre 2026
+
+En revue sur `fix/overview-all-machines`, non déployé : suppression de la limite de six cartes dans la vue d’ensemble. Toutes les machines du parc reçu sont rendues dans la grille existante, y compris la septième et les suivantes. Compteurs, activité récente et page Machines inchangés. Validation : suite de tests et diff ; recette visuelle après fusion/mise à jour avec les sept machines du parc.
+
 ## Découverte Moonraker multi-instance · 20 novembre 2026
 
 En revue sur `fix/moonraker-multi-discovery` : après reconnaissance de Moonraker sur une IP (7125 ou une origine déjà enregistrée), vérification ciblée de 7125–7134 sur cette IP uniquement. Une réponse Moonraker réelle crée une ligne par origine ; port visible et conservé à l’ajout. Noms existants prioritaires, métadonnée optionnelle `fabcore/display_name` sinon. La seconde instance n’est pas confondue avec la première. Aucun balayage des 65 535 ports ni changement des commandes matérielles.

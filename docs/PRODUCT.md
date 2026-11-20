@@ -11,7 +11,7 @@ Règles durables tirées des essais du POC. Elles s’appliquent à toute nouvel
 
 ## Vue d’ensemble et fiche machine
 
-- La vue d’ensemble montre l’état du parc : état, fabrication, progression, températures, activité récente et accès à chaque machine.
+- La vue d’ensemble affiche toutes les machines autorisées, sans limite de six cartes, et montre l’état du parc : état, fabrication, progression, températures, activité récente et accès à chaque machine.
 - La fiche machine utilise un cockpit : caméra/aperçu et filaments à gauche, fabrication, températures avec leurs consignes, actions rapides et déplacements à droite. Les fichiers et la console sont dans des onglets séparés ; la console n’apparaît que si disponible. La disposition s’adapte aux petits écrans et aux capacités réelles, sans colonne vide pour les machines sans caméra.
 - Un graphique commun affiche les températures de buse et de plateau.
 - Sur les cartes du parc et de la vue d’ensemble, afficher sur le bord supérieur un seul groupe de pastilles colorées, numérotées, rapprochées et légèrement chevauchantes, avec indication de l’emplacement actif. Aucun libellé pour un module unique ; plusieurs modules affichent un compteur (« 2 CANVAS », « 3 AMS ») et les pastilles du module actif, ou du premier à défaut. Une bobine simple a une seule pastille sans numéro ; couleur ou équipement inconnus restent explicitement inconnus. Ne pas afficher de filament sur les machines sans cette fonction.
