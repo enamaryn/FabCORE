@@ -320,11 +320,12 @@ function temperatureReadings(machine) {
 }
 
 function liveTemperatures(machine) {
-  if (machineConnectors[machine.kind]?.temperatures === false) return '';
+  if (machineConnectors[machine.kind]?.temperatures === false) return unavailablePanel(t('Températures','Temperatures'), t('Non applicable à cette machine.', 'Not applicable to this machine.'), 'machine-temperature');
   return `<section class="panel stack machine-temperature">
-    <h2>${t('Télémétrie','Telemetry')}</h2>
+    <h2>${t('Températures','Temperatures')}</h2>
     <div class="machine-readings" data-temperature-readings>${temperatureReadings(machine)}</div>
     <div class="stack" data-temperature-plot>${temperaturePlot(machine)}</div>
+    ${unavailableContent(t('Réglage de chauffe non pris en charge par cette connexion.', 'Heating controls not supported by this connection.'))}
   </section>`;
 }
 
@@ -425,6 +426,26 @@ function liveFilaments(machine) {
   </section>`;
 }
 
+// Keep a shared layout without suggesting an unavailable command can be used.
+function unavailableContent(message, camera = false) {
+  return `<div class="unavailable-control${camera ? ' camera-stage' : ''}"><div class="unavailable-skeleton" aria-hidden="true" inert>
+    ${camera ? icon('camera') : `<input type="text" value="—" disabled tabindex="-1"><button type="button" disabled tabindex="-1">−</button><button type="button" disabled tabindex="-1">+</button>`}
+  </div><p class="unavailable-message">${esc(message)}</p></div>`;
+}
+function unavailablePanel(title, message, extraClass = '') {
+  return `<section class="panel stack machine-unavailable ${extraClass}"><h2>${title}</h2>${unavailableContent(message, extraClass === 'machine-camera')}</section>`;
+}
+function liveMaterials(m) {
+  const reported = liveFilaments(m);
+  if (reported) return reported;
+  const fdm = ['klipper', 'octoprint', 'prusalink', 'elegoo', 'elegoo-cc1', 'bambu', 'bambu-cloud'].includes(m.kind);
+  const message = !fdm ? t('Non applicable à cette machine.', 'Not applicable to this machine.')
+    : m.status === 'offline' ? t('Informations temporairement inaccessibles : machine hors ligne.', 'Information temporarily unavailable: machine offline.')
+    : machineConnectors[m.kind]?.filaments && m.filaments?.length === 0 ? t('Aucun module multibobine signalé. Bobine simple : informations non communiquées.', 'No multi-spool module reported. Single spool: information not reported.')
+    : t('Informations sur la bobine ou les modules non communiquées.', 'Spool or module information not reported.');
+  return unavailablePanel(fdm ? t('Filaments', 'Filaments') : t('Matières / accessoires', 'Materials / accessories'), message, 'machine-filaments');
+}
+
 const machineTabs = new Map();
 function machineTab(id = state.machine) {
   const tab = machineTabs.get(id) ?? 'overview';
@@ -452,7 +473,7 @@ function liveDetail() {
       <div class="camera-stage"><div data-live-camera></div><div class="machine-camera-idle" data-camera-placeholder>${icon('camera')}<p>${t('Aperçu indisponible','Preview unavailable')}</p></div></div>
       <p data-camera-status role="status" hidden></p>
       <div class="row wrap camera-toolbar">${btn('camera-start',t('Voir la caméra','View camera'),'camera')}${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
-    </section>` : '';
+    </section>` : unavailablePanel(t('Caméra','Camera'), t('Caméra non prise en charge par cette connexion.', 'Camera not supported by this connection.'), 'machine-camera');
   const tabs = [['overview', t('Vue machine','Machine view')], ['files', t('Fichiers','Files')], ...(state.role === 'admin' ? [['logs', t('Logs','Logs')]] : []), ...(machineConnectors[m.kind]?.terminal ? [['console', t('Console','Console')]] : [])];
   return `<div class="machine-cockpit">
     <style>
@@ -464,8 +485,8 @@ function liveDetail() {
       .machine-temperature [data-temperature-plot] svg{display:block;max-height:125px;width:100%}.machine-readings{display:flex;justify-content:space-between}.control-heater{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid var(--line)}.control-heater>p{flex:1;min-width:120px;font-size:13px}.control-heater form{gap:5px}.control-heater input{width:65px}.control-heater label{font-size:11px}.control-heater button{font-size:11px}.quick-control{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;font-size:12px}.quick-control form{gap:5px}.quick-control input{width:62px}.quick-control form label{font-size:11px}.control-switch[aria-pressed=true]{color:var(--accent);background:var(--soft)}
       .filament-modules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.filament-modules>.filament-module:only-child{grid-column:1/-1;justify-self:start}.machine-cockpit .filament-module{gap:5px;padding:8px;background:var(--raised);border:1px solid var(--line);border-radius:8px;min-width:0}.machine-cockpit .filament-rack{width:auto;max-width:100%;padding:2px 0;gap:5px;background:transparent;border:0;grid-template-columns:repeat(var(--slots),minmax(28px,42px))}.machine-cockpit .filament-spool{width:19px;height:31px}.machine-cockpit .filament-slot{gap:3px;grid-template-rows:auto auto auto}.machine-cockpit .filament-position{font-size:10px;padding:1px 4px}.machine-cockpit .filament-material{font-size:10px;max-width:46px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.machine-cockpit .filament-active{display:none}.machine-cockpit .filament-slot[data-active=true]:after{display:none}.machine-cockpit .filament-slot[data-active=true]{outline:1px solid var(--accent);outline-offset:2px;border-radius:4px}
       .jog-layout{display:flex;gap:16px;align-items:center;justify-content:center}.jog-pad{display:grid;grid-template:repeat(3,32px)/repeat(3,38px);gap:3px}.jog-pad button{padding:3px;min-height:32px}.jog-pad span{display:grid;place-items:center;color:var(--dim);font-size:11px}.jog-z{display:grid;gap:5px;border-left:1px solid var(--line);padding-left:16px}.jog-options{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.jog-options label{font-size:12px}.jog-note{font-size:11px;color:var(--dim)}
-      .machine-cockpit [data-live-filaments]:empty{display:none}.machine-cockpit .machine-filaments[data-modules="1"]{width:fit-content;max-width:100%}.cockpit-grid:not(:has(.machine-camera)):not(:has(.machine-filaments)){grid-template-columns:1fr}.cockpit-grid:not(:has(.machine-camera)):not(:has(.machine-filaments))>.cockpit-column:first-child{display:none}
-      .cockpit-bottom{display:grid;gap:12px;min-width:0}.cockpit-bottom>.panel{min-width:0}.cockpit-column:not(:has(.filament-modules)) .camera-stage{max-height:60vh}
+      .machine-cockpit .machine-filaments{width:100%;min-width:0}.unavailable-control{position:relative;min-height:66px;display:grid;place-items:center;border-radius:8px;background:var(--raised);overflow:hidden}.unavailable-skeleton{display:flex;gap:8px;justify-content:center;align-items:center;padding:12px;filter:blur(2px);opacity:.25;pointer-events:none;user-select:none}.unavailable-skeleton input{width:70px}.unavailable-message{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:10px;color:var(--dim);font-size:12px;line-height:1.4;background:color-mix(in srgb,var(--card) 65%,transparent)}.machine-camera.machine-unavailable .unavailable-control{min-height:150px}.machine-cockpit .machine-unavailable{min-width:0}
+      .cockpit-bottom{display:grid;gap:12px;min-width:0}.cockpit-bottom>.panel{min-width:0}
       @media(min-width:1100px) and (max-height:900px){.cockpit-bottom{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.machine-temperature [data-temperature-plot] svg{max-height:85px}.jog-layout{gap:8px}.jog-z{padding-left:8px}.jog-options{gap:5px}.machine-cockpit [data-live-telemetry] .panel{gap:6px}}
       @media(max-width:1000px){.cockpit-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.control-heater form{width:100%}.machine-workspace .area{padding:12px}}
       @media(max-width:760px){.machine-workspace{display:block}.machine-workspace .sidebar{display:none}.cockpit-grid{grid-template-columns:1fr}.machine-workspace .area{padding-bottom:80px}.camera-stage{max-height:none}.cockpit-header{align-items:flex-start}.machine-tabs{overflow:auto}.machine-tabs button{white-space:nowrap}.machine-account summary{max-width:120px;overflow:hidden;text-overflow:ellipsis}.machine-workspace .top{padding:6px 12px}}
@@ -474,7 +495,7 @@ function liveDetail() {
     <header class="cockpit-header row between"><div class="row">${btn('nav:machines', '←', '', 'ghost', `aria-label="${t('Retour au parc','Back to fleet')}"`)}<div><h1>${esc(m.name)}</h1><small>${esc(m.model)}</small></div><span data-machine-status>${badge(m.status)}</span></div>${state.role === 'admin' ? btn(m.kind === 'bambu-cloud' ? 'cloud-open' : 'edit', '', 'control', 'ghost', `aria-label="${t('Modifier la machine','Edit machine')}"`) : ''}</header>
     <div class="machine-tabs" role="tablist" aria-label="${t('Fiche machine','Machine details')}">${tabs.map(([key, label]) => `<button type="button" id="machine-tab-${key}" role="tab" aria-selected="${tab === key}" aria-controls="machine-tab-panel" tabindex="${tab === key ? 0 : -1}" data-action="machine-tab:${key}">${label}</button>`).join('')}</div>
     <div role="tabpanel" id="machine-tab-panel" aria-labelledby="machine-tab-${tab}">
-      ${tab === 'logs' ? machineLogPanel(m) : tab === 'files' ? filesPanel(m) : tab === 'console' ? terminalPanel(m) : `<div class="cockpit-grid"><div class="cockpit-column">${camera}<div data-live-filaments>${liveFilaments(m)}</div></div><div class="cockpit-column"><div data-live-telemetry>${liveFabrication(m)}</div>${machineConnectors[m.kind]?.controls ? manualControlsPanel(m, 'heat') + `<div class="cockpit-bottom">${manualControlsPanel(m, 'quick')}${manualControlsPanel(m, 'motion')}</div>` : liveTemperatures(m)}</div></div>`}
+      ${tab === 'logs' ? machineLogPanel(m) : tab === 'files' ? filesPanel(m) : tab === 'console' ? terminalPanel(m) : `<div class="cockpit-grid"><div class="cockpit-column">${camera}<div data-live-filaments>${liveMaterials(m)}</div></div><div class="cockpit-column"><div data-live-telemetry>${liveFabrication(m)}</div>${machineConnectors[m.kind]?.controls ? manualControlsPanel(m, 'heat') : liveTemperatures(m)}<div class="cockpit-bottom">${manualControlsPanel(m, 'quick')}${manualControlsPanel(m, 'motion')}</div></div></div>`}
     </div>
   </div>`;
 }
@@ -695,7 +716,7 @@ async function refresh() {
         const readings = app.querySelector('[data-temperature-readings]');
         if (readings) readings.innerHTML = temperatureReadings(current);
         const filaments = app.querySelector('[data-live-filaments]');
-        if (filaments) filaments.innerHTML = liveFilaments(current);
+        if (filaments) filaments.innerHTML = liveMaterials(current);
         if (Boolean(app.querySelector('[data-files] [data-action="viewer-live"]')) !== Boolean(liveFile(current)) ||
           app.querySelector('[data-files]')?.dataset.fileStart !== String(canStart(current))) renderFiles(current.id);
       } else if (live.page === 'detail' && !hadRefreshError) {
@@ -1132,7 +1153,12 @@ function manualState(id) {
   return manualStates.get(id);
 }
 function manualControlsPanel(m, part = 'all') {
-  if (!machineConnectors[m.kind]?.controls) return '';
+  if (!machineConnectors[m.kind]?.controls) {
+    const title = part === 'heat' ? t('Températures','Temperatures') : part === 'quick' ? t('Actions rapides','Quick actions') : part === 'motion' ? t('Déplacements','Movement') : t('Contrôles','Controls');
+    const message = t('Commandes non prises en charge par cette connexion.', 'Controls not supported by this connection.');
+    if (part === 'quick') return `<section class="panel stack machine-unavailable"><h2>${title}</h2><h3>${t('Éclairage','Lighting')}</h3>${unavailableContent(message)}<h3>${t('Ventilateurs','Fans')}</h3>${unavailableContent(message)}</section>`;
+    return unavailablePanel(title, message);
+  }
   const entry = manualState(m.id), data = entry.data;
   const admin = state.role === 'admin';
   const online = data && !entry.error && ['ready', 'done', 'printing', 'paused'].includes(m.status) && ['ready', 'done', 'printing', 'paused'].includes(data.status);
@@ -1145,20 +1171,20 @@ function manualControlsPanel(m, part = 'all') {
     <button type="submit" ${disabled}>${t('Appliquer','Apply')}</button>${action === 'heat' ? btn('manual-off:' + index, t('Couper','Off'), '', '', disabled) : ''}</form>` : '';
   const heaters = data?.heaters ?? [{ id: 'nozzle', current: m.nozzle, target: null }, { id: 'bed', current: m.bed, target: null }];
   const heat = `<div class="stack">${heaters.map((item, index) => `<div class="control-heater"><p><strong>${label(item.id)}</strong> <span data-control-current="${item.id}">${value(item.current, ' °C')}</span> <small>→ ${value(item.target, ' °C')}</small></p>${setting(item, 'heat', index)}</div>`).join('')}</div>`;
-  const quick = `<div class="stack">${data?.lights.map((item, index) => `<div class="quick-control"><span>${t('Éclairage','Lighting')} · ${esc(label(item.id))}</span>${admin && item.writable ? btn('manual-light:' + index + ':' + (item.value === true ? 'off' : 'on'), item.value === true ? t('Allumé','On') : item.value === false ? t('Éteint','Off') : t('Allumer','Turn on'), 'sun', 'control-switch', `${disabled} aria-pressed="${item.value === true}" aria-label="${t('Basculer l’éclairage','Toggle lighting')} ${esc(label(item.id))}"`) : `<span>${item.value === true ? t('Allumé','On') : item.value === false ? t('Éteint','Off') : '—'}</span>`}</div>`).join('') || ''}
-    ${data?.fans.map(item => `<div class="quick-control"><span>${t('Ventilateur','Fan')} ${esc(label(item.id))} · ${value(item.percent, ' %')}${Number.isFinite(item.rpm) ? ' · ' + value(item.rpm, ' tr/min') : ''}</span>${setting(item, 'fan')}</div>`).join('') || ''}
-    ${!data ? `<small>${t('Lecture des équipements…','Reading equipment…')}</small>` : !data.lights.length && !data.fans.length ? `<small>${t('Aucun éclairage ou ventilateur remonté.','No lighting or fan reported.')}</small>` : ''}
+  const missingEquipment = entry.error || (m.status === 'offline' ? t('Machine hors ligne.', 'Machine offline.') : !data ? t('Lecture des équipements…', 'Reading equipment…') : t('Équipement absent ou non communiqué.', 'Equipment absent or not reported.'));
+  const quick = `<div class="stack"><div class="stack"><h3>${t('Éclairage','Lighting')}</h3>${data?.lights.map((item, index) => `<div class="quick-control"><span>${esc(label(item.id))}</span>${admin && item.writable ? btn('manual-light:' + index + ':' + (item.value === true ? 'off' : 'on'), item.value === true ? t('Allumé','On') : item.value === false ? t('Éteint','Off') : t('Allumer','Turn on'), 'sun', 'control-switch', `${disabled} aria-pressed="${item.value === true}" aria-label="${t('Basculer l’éclairage','Toggle lighting')} ${esc(label(item.id))}"`) : `<span>${item.value === true ? t('Allumé','On') : item.value === false ? t('Éteint','Off') : '—'}</span>`}</div>`).join('') || unavailableContent(missingEquipment)}</div>
+    <div class="stack"><h3>${t('Ventilateurs','Fans')}</h3>${data?.fans.map(item => `<div class="quick-control"><span>${esc(label(item.id))} · ${value(item.percent, ' %')}${Number.isFinite(item.rpm) ? ' · ' + value(item.rpm, ' tr/min') : ''}</span>${setting(item, 'fan')}</div>`).join('') || unavailableContent(missingEquipment)}</div>
     ${m.kind === 'elegoo' ? `<small>${t('CC2 : retours seuls, commandes non activées dans le SDK.', 'CC2: readings only; commands not enabled in the SDK.')}</small>` : ''}</div>`;
   const canMove = data?.motion && online && ['ready', 'done'].includes(data.status) && ['ready', 'done'].includes(m.status) && !entry.busy;
   const canJog = canMove && (data.motion.homed === null || ['x','y','z'].every(a => data.motion.homed.includes(a)));
   const jog = (axis, sign, text, grid) => data?.motion ? btn('manual-jog:' + axis + ':' + sign, text, '', '', `${canJog ? '' : 'disabled'} aria-label="${axis} ${sign > 0 ? '+' : '−'}" ${grid ? `style="grid-area:${grid}"` : ''}`) : `<button type="button" disabled aria-label="${axis} ${sign > 0 ? '+' : '−'}" ${grid ? `style="grid-area:${grid}"` : ''}>${text}</button>`;
   const motion = admin ? `<div class="stack"><div class="jog-layout"><div class="jog-pad">${jog('Y', 1, '↑', '1/2')}${jog('X', -1, '←', '2/1')}<span style="grid-area:2/2">XY</span>${jog('X', 1, '→', '2/3')}${jog('Y', -1, '↓', '3/2')}</div><div class="jog-z"><small>${m.kind === 'bambu' ? t('Plateau (Z)','Bed (Z)') : t('Axe Z','Z axis')}</small>${jog('Z', 1, 'Z +')}${jog('Z', -1, 'Z −')}</div></div>
     <div class="jog-options"><label>${t('Pas','Step')} <select data-jog-step ${canMove ? '' : 'disabled'}><option value="0.1">0,1 mm</option><option value="1" selected>1 mm</option><option value="10">10 mm</option></select></label>${data?.motion ? btn('manual-home', t('Origine XYZ','Home XYZ'), '', '', canMove ? '' : 'disabled') : `<button type="button" disabled>${t('Origine XYZ','Home XYZ')}</button>`}</div>
-    <p class="jog-note">${!data?.motion ? t('Déplacements non disponibles sur ce connecteur.','Movement unavailable on this connector.') : data.motion.homed === null ? t('Origine et limites vérifiées par le firmware.','Homing and limits checked by firmware.') : t('Axes référencés','Homed axes') + ' : ' + (esc(data.motion.homed) || '—')}${data?.motion ? ' · ' + t('Bloqué pendant impression/pause.','Blocked during printing/pause.') : ''}</p></div>` : '';
-  if (part === 'motion' && !admin) return '';
+    <p class="jog-note">${!data?.motion ? t('Déplacements non disponibles sur ce connecteur.','Movement unavailable on this connector.') : data.motion.homed === null ? t('Origine et limites vérifiées par le firmware.','Homing and limits checked by firmware.') : t('Axes référencés','Homed axes') + ' : ' + (esc(data.motion.homed) || '—')}${data?.motion ? ' · ' + t('Bloqué pendant impression/pause.','Blocked during printing/pause.') : ''}</p></div>` : unavailableContent(t('Lecture seule : commandes réservées à un administrateur.', 'Read only: controls are restricted to an administrator.'));
+
   const title = part === 'heat' ? t('Températures','Temperatures') : part === 'quick' ? t('Actions rapides','Quick actions') : part === 'motion' ? t('Déplacements','Movement') : t('Contrôles','Controls');
   return `<section class="panel stack ${part === 'heat' ? 'machine-temperature' : ''}" data-manual-controls="${part}"><div class="row between"><h2>${title}</h2>${part === 'quick' ? btn('manual-refresh', t('Actualiser','Refresh'), '', 'ghost', entry.loading ? 'disabled' : '') : ''}</div>
-    ${part === 'heat' ? heat + `<div data-temperature-plot>${temperaturePlot(m)}</div>` : part === 'quick' ? quick : part === 'motion' ? motion : heat + quick + motion}
+    ${part === 'heat' ? heat + `<div data-temperature-plot>${temperaturePlot(m)}</div>` : part === 'quick' ? quick : part === 'motion' ? (!data?.motion && admin ? unavailableContent(t('Déplacements non disponibles sur ce connecteur.', 'Movement unavailable on this connector.')) : motion) : heat + quick + motion}
     ${part === 'quick' || part === 'all' ? `${entry.error ? `<p class="error" role="alert">${esc(entry.error)}</p>` : ''}${entry.result ? `<p role="status">${esc(entry.result)}</p>` : ''}` : ''}
   </section>`;
 }

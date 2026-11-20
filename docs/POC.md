@@ -5,6 +5,16 @@ Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-c
 
 **Prochaine action :** traiter l’incident urgent [#78](https://github.com/enamaryn/FabCORE/issues/78), puis le pilote cloud [#79](https://github.com/enamaryn/FabCORE/issues/79), avant de reprendre la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
 
+## Fiches machine : structure commune et indisponibilités · 20 novembre 2026
+
+En revue sur `fix/common-machine-cockpit`, non déployé : six blocs conservés pour chaque famille et connexion, avec ou sans caméra/AMS/contrôles. Caméra et matières/filaments à gauche ; fabrication, températures, actions rapides et déplacements à droite. Les colonnes ne disparaissent plus selon les capacités ; une colonne sur mobile. Tous les modules réels restent visibles. Les panneaux indisponibles sont compacts, avec une illustration légèrement floutée et un message net, éléments `disabled`/`inert` sans cible de commande ni requête caméra pour un connecteur sans caméra.
+
+Libellés FR/EN : non pris en charge par cette connexion, information non communiquée/équipement absent ou non communiqué, non applicable à cette famille, machine hors ligne ; aucune absence physique déduite d’une simple capacité manquante. Un observateur garde le bloc Déplacements en lecture seule sans action. Protocoles, droits serveur et commandes réelles inchangés.
+
+Vérifications : 112 tests réussis, syntaxe JS et diff vérifiés ; cas Klipper sans caméra, Bambu LAN/cloud, laser, administrateur/observateur, informations filament absentes/hors ligne, quatre modules réels et saisie conservée. Chromium local refuse le démarrage (`socket() failed: Operation not permitted`) ; rendu visuel à vérifier après fusion/mise à jour à 1366 × 768, mobile et thèmes clair/sombre. Aucun test physique ni déploiement.
+
+Retour utilisateur du 20 novembre : affichage des températures et parcours interface envoi/liste/téléchargement/visualiseur confirmés pour Moonraker ; recette de production et vérification des droits encore à faire. Voir également la PR #89 pour le détail des lectures réalisées depuis le LXC. La mise au point de la Tarantula reste hors périmètre projet.
+
 ## Découverte Moonraker multi-instance · 20 novembre 2026
 
 En revue sur `fix/moonraker-multi-discovery` : après reconnaissance de Moonraker sur une IP (7125 ou une origine déjà enregistrée), vérification ciblée de 7125–7134 sur cette IP uniquement. Une réponse Moonraker réelle crée une ligne par origine ; port visible et conservé à l’ajout. Noms existants prioritaires, métadonnée optionnelle `fabcore/display_name` sinon. La seconde instance n’est pas confondue avec la première. Aucun balayage des 65 535 ports ni changement des commandes matérielles.
