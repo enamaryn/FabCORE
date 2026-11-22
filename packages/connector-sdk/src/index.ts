@@ -17,3 +17,15 @@ export interface MachineFile {
   size: number | null;
   modified: number | null;
 }
+
+/** Utilitaires HTTP/fichiers encore partagés, injectés par les adaptateurs de composition. */
+export interface HttpFilePorts {
+  readResponse(response: Response): Promise<unknown>;
+  validOrigin(origin: string): string | null;
+  filePath(path: unknown): string | null;
+  encodePath(path: string): string;
+  multipart(field: string, name: string, source: AsyncIterable<Uint8Array>, size: number, extra?: Record<string, string>): {
+    body: ReadableStream<Uint8Array>;
+    headers: Record<string, string>;
+  };
+}

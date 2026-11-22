@@ -1,6 +1,6 @@
 # Migration du POC vers le socle MVP
 
-**État : migration engagée. MIG-01 et MIG-02.1 fusionnés ; migration CC2 en revue.** Référence : [bilan POC v0](POC-BILAN.md). Ce plan détaille MVP-00/01/02/03/12/13 ; il ne remplace pas le périmètre produit du [MVP](MVP.md).
+**État : migration engagée. MIG-01, MIG-02.1 et migrations CC2/P2S LAN fusionnés ; Moonraker en revue.** Référence : [bilan POC v0](POC-BILAN.md). Ce plan détaille MVP-00/01/02/03/12/13 ; il ne remplace pas le périmètre produit du [MVP](MVP.md).
 
 ## Règles de passage
 
@@ -12,7 +12,7 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 | --- | --- | --- | --- |
 | MIG-00 | Référence et recette de non-régression | Clôture POC | POC v0 publié ; bilan accepté |
 | MIG-01 | Architecture, contrats et outillage | MIG-00 | Fusionné : PR #100 et #101 ([ADR](adr/README.md)) |
-| MIG-02 | Domaine et connecteurs TypeScript | MIG-01 | MIG-02.1 en revue |
+| MIG-02 | Domaine et connecteurs TypeScript | MIG-01 | #102/#103/#104 fusionnés ; Moonraker en revue |
 | MIG-03 | Services backend et API | MIG-02 | À faire |
 | MIG-04 | PostgreSQL et reprise des données | MIG-03 | À faire |
 | MIG-05 | Événements et SSE | MIG-03/04 | À faire |
@@ -62,7 +62,7 @@ Fusionné dans la PR #101 : TypeScript sans build (`npm run typecheck`), ESLint 
 
 Fusionné dans la PR #102 : contrats de cycle de vie, registre typé et normalisation. Le serveur HTTP reste celui du POC jusqu’à MIG-03.
 
-En revue : contrat `ConnectorManifest` et `ConnectorLifecycle` (`src/domain/connector.ts`) ; adaptateur `createTypedConnectorRegistry` (`src/application/connectors.ts`) autour du registre du POC, sans changer protocoles, sessions ni temporisations. Le serveur POC n'utilise pas encore l'adaptateur : branchement progressif à partir de MIG-02.2/MIG-03.
+Fusionné (#102) : contrat `ConnectorManifest` et `ConnectorLifecycle` (`src/domain/connector.ts`) ; adaptateur `createTypedConnectorRegistry` (`src/application/connectors.ts`) autour du registre du POC, sans changer protocoles, sessions ni temporisations. Le serveur POC n'utilise pas encore l'adaptateur : branchement progressif à partir de MIG-02.2/MIG-03.
 
 - MIG-02.1.1 Extraire types, validations et contrats de cycle de vie : ouvrir, lire, commander, fermer.
 - MIG-02.1.2 Adapter le registre existant ; conserver identifiants, capacités, temporisations et corrélations.
@@ -70,9 +70,11 @@ En revue : contrat `ConnectorManifest` et `ConnectorLifecycle` (`src/domain/conn
 
 ### MIG-02.2 · Migration fabricant par fabricant
 
-**CC2 en revue** sur `mig/02-2-cc2` : session MQTT, identité et sondes dans `connectors/elegoo/src/monitor.ts`, inventaire/téléchargement/lancement dans `files.ts`. Les points d’entrée POC sont des adaptateurs de composition ; le serveur existant passe déjà par ces modules typés, une seule implémentation du protocole. Helpers communs de projection (chauffe/CANVAS), décodage HTTP et transfert segmenté CC1/CC2 injectés, sans copie ni migration de CC1. Ports internes initiaux dans `packages/connector-sdk`, workspaces privés ; SDK public, manifestes/fiches autonomes et chaîne complète de conformité restent à compléter aux jalons dédiés, pas déclarés livrés par cette extraction.
+**CC2 fusionnée (#103)** : session MQTT, identité et sondes dans `connectors/elegoo/src/monitor.ts`, inventaire/téléchargement/lancement dans `files.ts`. Les points d’entrée POC sont des adaptateurs de composition ; le serveur existant passe déjà par ces modules typés, une seule implémentation du protocole. Helpers communs de projection (chauffe/CANVAS), décodage HTTP et transfert segmenté CC1/CC2 injectés, sans copie ni migration de CC1. Ports internes initiaux dans `packages/connector-sdk`, workspaces privés ; SDK public, manifestes/fiches autonomes et chaîne complète de conformité restent à compléter aux jalons dédiés, pas déclarés livrés par cette extraction.
 
-Validation locale Node 24 : types, lint, **154 tests**, licences et navigation. Pas de commande matérielle, de déploiement ni de nouvelle validation firmware. Recette courte après mise à jour : températures/CANVAS, liste interne, téléchargement et pause/stop sur une fabrication supervisée. **P2S LAN en revue** (PR séparée) : session MQTT/TLS, corrélation `sequence_id`, refus `bambu-authorization` et sondes dans `connectors/bambu/src/monitor.ts` ; inventaire FTPS, téléchargement, envoi et lancement dans `files.ts`. `poc/bambu.mjs` et `poc/bambu-files.mjs` deviennent des adaptateurs ; certificat, projection des contrôles et AMS injectés. Caméra P2S, découverte et pilote cloud inchangés. 157 tests. Recette courte après mise à jour : télémétrie/AMS, liste FTPS, téléchargement, pause/reprise/arrêt supervisés et refus d'autorisation en mode non développeur.
+Validation locale Node 24 : types, lint, **154 tests**, licences et navigation. Pas de commande matérielle, de déploiement ni de nouvelle validation firmware. Recette courte après mise à jour : températures/CANVAS, liste interne, téléchargement et pause/stop sur une fabrication supervisée. **P2S LAN fusionnée (#104)** : session MQTT/TLS, corrélation `sequence_id`, refus `bambu-authorization` et sondes dans `connectors/bambu/src/monitor.ts` ; inventaire FTPS, téléchargement, envoi et lancement dans `files.ts`. `poc/bambu.mjs` et `poc/bambu-files.mjs` deviennent des adaptateurs ; certificat, projection des contrôles et AMS injectés. Caméra P2S, découverte et pilote cloud inchangés. 157 tests. Recette courte après mise à jour : télémétrie/AMS, liste FTPS, téléchargement, pause/reprise/arrêt supervisés et refus d'autorisation en mode non développeur.
+
+**Moonraker en revue** sur `mig/02-2-moonraker` (première partie de MIG-02.2.2) : supervision HTTP, Pause/Reprise/Cancel, fichiers natifs et terminal dans `connectors/moonraker/src/index.ts`. `poc/moonraker.mjs` compose le module avec les helpers HTTP/fichiers communs, sans implémentation parallèle ; exports utilitaires conservés pour les autres appelants. Aucun changement du registre, de la découverte ou des contrôles partagés. Ports HTTP internes ajoutés au SDK, workspace privé sans nouvelle dépendance externe. **164 tests** locaux Node 24, typage/lint/licences/navigation vérifiés. Pas de déploiement ni de commande matérielle. Recette physique après mise à jour demandée ; OctoPrint puis PrusaLink seront deux PR suivantes.
 
 - MIG-02.2.1 Migrer d'abord CC2 et P2S LAN dans deux étapes séparées, avec les tests des fichiers internes et refus d'autorisation.
 - MIG-02.2.2 Migrer Moonraker, OctoPrint/PrusaLink, puis les autres connecteurs et le pilote cloud sans élargir leurs capacités.
