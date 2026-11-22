@@ -2,6 +2,23 @@
 
 **Phase active : MVP — cadrage et migration.** POC clôturé. [Bilan](docs/POC-BILAN.md) · [Plan de migration](docs/MIGRATION-MVP.md) · [Périmètre MVP](docs/MVP.md).
 
+## Accès direct — lire ceci avant d'explorer le dépôt
+
+Ce fichier est la référence commune pour les assistants. Choisir le sujet ci-dessous, ouvrir le symbole et son test ; ne pas parcourir tout le code pour retrouver ces points d'entrée. La carte détaillée et les guides se chargent seulement si nécessaire.
+
+| Sujet | Point d'entrée | Test de départ |
+| --- | --- | --- |
+| Fichiers internes CC2 | `poc/elegoo-files.mjs` → `createElegooFiles` ; session dans `poc/elegoo.mjs` | `poc/cc2-native-files.test.mjs` |
+| P2S LAN / autorisations | `poc/bambu.mjs` → `createBambuMonitor` ; `poc/manual-controls.mjs` | `poc/bambu-auth-http.test.mjs` |
+| Envoi de fichier Moonraker | `poc/server.mjs` → `createFabCore` ; `poc/moonraker.mjs` → `createMoonrakerFiles` | `poc/files.test.mjs` |
+| Droits et authentification | `poc/server.mjs` → `createFabCore` ; `poc/oidc.mjs` | `poc/oidc.test.mjs` |
+| Parc / fiche machine | `poc/live.js` → `liveFleet`, `liveDetail`, `filesPanel` | `poc/machine-cockpit.test.mjs` |
+| Commandes et chauffe | `poc/manual-controls.mjs` → `createManualControls` | `poc/manual-controls-http.test.mjs` |
+| Découverte / multi-instance | `poc/discovery.mjs` → `scanNetwork`, `detectMoonraker` | `poc/discovery.test.mjs` |
+| Comptes cloud / logs | `poc/cloud-accounts.mjs` → `createCloudAccounts` ; `poc/machine-logs.mjs` | `poc/cloud-accounts.test.mjs` |
+
+Autre sujet ou références actuelles avec lignes/empreintes : `node scripts/ai-context.mjs --list`, puis `node scripts/ai-context.mjs <sujet>`. Pas de numéro de ligne figé dans ce fichier. Lors d'un déplacement ou renommage, actualiser cette table et la carte détaillée.
+
 ## Reprendre une tâche
 
 1. Vérifier dépôt, branche, état local et référence distante : `git status --short --branch`. Vérifier sur GitHub si la copie est ancienne. Préserver tout travail local ; utiliser une branche/worktree dédié pour un nouveau jalon.
