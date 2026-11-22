@@ -14,11 +14,11 @@ Gardez un œil sur vos fabrications, ouvrez les caméras en direct et voyez quel
 
 ![Tableau de bord FabCore avec le parc et l’activité récente](docs/screenshots/vue-ensemble.webp)
 
-**POC clôturé le 22 novembre 2026 sur P2S et deux CC2.** [Bilan et limites](docs/POC-BILAN.md) · [Migration vers le MVP](docs/MIGRATION-MVP.md). Release « POC v0 » préparée pour validation, sans migration de l’installation.
+**POC clôturé le 22 novembre 2026 sur P2S et deux CC2.** [Bilan et limites](docs/POC-BILAN.md) · [Migration vers le MVP](docs/MIGRATION-MVP.md). [Release « POC v0 » publiée](https://github.com/enamaryn/FabCORE/releases/tag/poc-v0). Le cadrage du MVP est engagé ; la migration technique n’a pas encore commencé.
 
 ## Ce que vous pouvez faire
 
-- **Suivre vos fabrications.** Retrouvez l’état des machines, les températures et l’avancement sur une même page. Mettez en pause ou reprenez une impression Klipper depuis la fiche de la machine.
+- **Suivre vos fabrications.** Retrouvez l’état des machines, les températures et l’avancement sur une même page. Pilotez les machines selon les capacités de leur connecteur ; le pilotage P2S LAN et les commandes Pause/Stop CC2 ont été confirmés sur matériel.
 - **Voir la pièce en cours.** Ouvrez la caméra d’une Bambu Lab P2S ou d’une Elegoo Centauri Carbon compatible depuis sa fiche.
 - **Repérer la bonne bobine.** Consultez les emplacements AMS et CANVAS, leur occupation, la matière, la couleur et l’emplacement actif selon les données fournies par l’imprimante.
 - **Gérer les accès.** Créez des comptes Observateur en lecture seule ou connectez votre fournisseur OIDC, comme [Pocket ID](poc/README.md#connexion-oidc-avec-pocket-id).
@@ -34,10 +34,10 @@ Gardez un œil sur vos fabrications, ouvrez les caméras en direct et voyez quel
 | PrusaLink (API v1 avec clé) | Oui | — | — | Oui | Pause, reprise, stop |
 | Bambu Lab P2S | Oui | Oui | AMS | G-code / 3MF tranché à un plateau | Pause, reprise, stop |
 | Elegoo Centauri Carbon (CC1) | Oui | Oui | — | Fichiers envoyés via FabCore | Pause, reprise, stop |
-| Elegoo Centauri Carbon 2 (CC2) | Oui | Oui | CANVAS | Fichiers envoyés via FabCore | Pause, stop ; reprise sur la machine |
+| Elegoo Centauri Carbon 2 (CC2) | Oui | Oui | CANVAS | Fichiers internes, envoi et lancement | Pause, stop ; reprise sur la machine |
 | xTool M2 | Oui | Trois vues | — | Aperçu G-code local ; projet préparé sur la M2 | Lancer le projet préparé, pause, reprise, stop |
 
-*L’extension des fichiers et commandes au-delà de Moonraker/OctoPrint est **expérimentale et reste à tester sur matériel réel**. Le visualiseur G-code local est disponible sur toutes les fiches. Les lancements Bambu/Elegoo sont limités à la bobine externe avec confirmation ; le transfert natif des projets xTool M2 reste à implémenter. [Formats, limites et recette](poc/README.md#fichiers-et-pilotage--extension-expérimentale).
+*Le POC a été validé sur **P2S LAN et deux CC2**, dont le pilotage et le lancement depuis les fichiers internes CC2. Les autres connecteurs conservent leurs niveaux de recette et limites propres ; leur présence dans ce tableau ne vaut pas validation complète sur matériel. Le visualiseur G-code local est disponible sur toutes les fiches. Les lancements Bambu/Elegoo sont limités à la bobine externe avec confirmation ; le transfert natif des projets xTool M2 reste à implémenter. [Formats, limites et recette](poc/README.md#fichiers-et-pilotage--extension-expérimentale).
 
 La connexion et les fonctions locales dépendent du modèle, du micrologiciel et des réglages réseau de la machine.
 
@@ -68,3 +68,21 @@ Lancez la **découverte réseau** depuis **Ajouter une machine**. FabCore prére
 ![Ajout d’une Bambu Lab P2S après découverte réseau avec des données d’exemple](docs/screenshots/ajout-machine.webp)
 
 La bibliothèque centralisée et les alertes automatiques de fabrication sont prévues. Le transfert depuis les fiches compatibles est décrit dans le guide. [Consulter la licence](LICENSE).
+
+## Contribuer avec une IA
+
+**Commencer par [AGENTS.md](AGENTS.md), à la racine.** Il regroupe la phase active, les points d’entrée directs par sujet, les commandes de vérification et les règles de contribution. Pour Claude Code, [CLAUDE.md](CLAUDE.md) importe cette même référence ; les consignes ne sont pas dupliquées.
+
+Pour trouver une fonctionnalité sans charger tout le dépôt :
+
+```bash
+node scripts/ai-context.mjs --list
+node scripts/ai-context.mjs cc2-files
+node scripts/ai-context.mjs --check
+```
+
+La [carte du code](docs/ai/CODEMAP.md) relie 11 sujets aux sources, symboles, tests et guides. Les recherches retournent les lignes et empreintes actuelles ; ouvrir ensuite uniquement les extraits utiles. La CI vérifie les chemins et déclarations référencés ; elle ne prouve pas à elle seule les relations fonctionnelles.
+
+Cinq [profils spécialisés](.codex/agents/) sont disponibles pour les clients Codex locaux compatibles : navigation, connecteurs, backend, frontend et revue qualité. Leur chargement dans un autre client doit être vérifié. Un seul agent pour une tâche simple ; délégation ciblée pour les tâches indépendantes, avec retour court. [Méthode et relais](docs/ai/WORKFLOW.md).
+
+**Serena reste facultatif et désactivé par défaut.** L’installation et le handshake MCP ont été testés, mais le serveur de langage TypeScript n’a pas pu s’initialiser dans l’environnement d’essai. La carte et la recherche locale fonctionnent sans lui. [Résultat du pilote](docs/ai/SERENA.md) · [Vérifications et mesures](docs/ai/EVALUATION.md).
