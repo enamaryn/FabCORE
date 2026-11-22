@@ -75,3 +75,17 @@ Code : [elegoo.mjs](../../poc/elegoo.mjs), [elegoo-files.mjs](../../poc/elegoo-f
 Proposée sur `mig/02-2-cc2`, non déployée : logique MQTT/identité/lecture ponctuelle et sessions dans `connectors/elegoo/src/monitor.ts` ; inventaire natif, téléchargement et lancement dans `files.ts`. Adaptateurs de compatibilité `poc/elegoo.mjs` et `poc/elegoo-files.mjs`, sans duplication du protocole. Chauffe/CANVAS et transfert segmenté restent des helpers communs injectés. CC1 et P2S non migrées par ce changement. Les commandes, paramètres, sources et acquis matériels ci-dessus restent la référence ; aucune nouvelle commande ou capacité firmware n’est déduite du typage.
 
 154 tests automatisés passent, dont tests du module typé (identité, sessions isolées, corrélation 1044, refus et fermeture de RPC en attente) et recette simulée existante des fichiers internes/chauffes. Aucun ordre physique ni déploiement pendant le développement. Après mise à jour demandée : vérifier une session par CC2, températures/CANVAS, lecture des fichiers et téléchargement, puis Pause/Stop sur un essai supervisé.
+
+## Migration CC1 et transfert commun · MIG-02.2.2
+
+Proposée en revue le 22 novembre 2026, sans déploiement : `connectors/elegoo/src/cc1.ts` contient les requêtes SDCP et la découverte UDP M99999 ; `upload.ts` contient l’unique staging et transfert segmenté CC1/CC2. Les adaptateurs `poc/elegoo-cc1.mjs` et `poc/elegoo-files.mjs` conservent leurs exports. Ce déplacement termine la branche CC1 laissée en JavaScript par #103 ; les paramètres ci-dessus et les sources existantes restent inchangés.
+
+| Échange CC1 | Valeur conservée | Résultat |
+| --- | --- | --- |
+| Découverte | UDP 3000, `M99999`, 2 s, réponse ≤ 8 Kio provenant de l’IP ciblée | Numéro MainboardID validé ; aucune identité inventée |
+| Statut | WebSocket `/websocket`, Cmd 0, 4 s, trame ≤ 64 Kio | Topic lié au numéro de série ; fermeture et annulation de lecture |
+| Pause / annulation / reprise | Cmd 129 / 130 / 131, 6 s | Topic + RequestID + Cmd ; Ack 0 accepté, autre entier refusé, absence/mauvais ACK inconnus sans renvoi |
+| Transfert | POST HTTP 3030 `/uploadFile/upload`, tranches 1 Mio, 30 s par tranche | Multipart `Check`, `S-File-MD5`, `Offset`, `Uuid`, `TotalSize`, `File` ; `code="000000"` exigé |
+| Lancement séparé | Cmd 128, `Filename`, `StartLayer=0`, `Calibration_switch=1`, `PrintPlatformType=0`, `Tlp_Switch=0`, `slot_map=[]` | Aucun démarrage lors de l’upload ; inventaire natif CC1 non ajouté |
+
+Le staging commun reste borné à 512 Mio, vérifie taille et MD5 et supprime le temporaire même après erreur réseau ; CC2 garde son PUT avec jeton et Content-Range. Tests : `connectors/elegoo/test/cc1.test.ts`, tests POC SDCP/fichiers et inventaire CC2 inchangés. Recette CC1 après déploiement demandé : connexion/lecture, envoi sans démarrage puis lancement/pause/reprise/annulation sur essai supervisé ; aucune nouvelle validation physique revendiquée ici.

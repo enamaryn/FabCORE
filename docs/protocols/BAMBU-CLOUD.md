@@ -69,3 +69,19 @@ Son [API publique](https://simplyprint.io/fr/features/api) est celle de sa plate
 6. Upload cloud puis lancement avec plateau et paramètres réels, distincts du transfert LAN. Vidéo distante comme chantier séparé ; maintenir l’agent quand une fonction nécessite le réseau local.
 
 Les tests automatisés de protocole devront simuler les refus et réponses partielles ; ils ne seront pas décrits comme une validation des serveurs Bambu ou du matériel.
+
+## Migration du pilote TypeScript · MIG-02.2.2
+
+En revue le 22 novembre 2026 : `connectors/bambu/src/cloud-http.ts` (`createCloudHttp`) porte les véritables requêtes d’authentification/inventaire, l’erreur typée commune et le masquage `safeCloudPayload` ; `cloud-monitor.ts` porte la supervision MQTT. `poc/cloud-accounts.mjs` garde le chiffrement, les comptes, la persistance, les journaux, l’appartenance des challenges, les verrous et limitations d’essais. `poc/bambu-cloud-monitor.mjs` injecte les projections des températures et AMS. Aucune commande, vidéo cloud, bascule LAN ou nouvelle méthode d’authentification ajoutée.
+
+| Échange conservé | Endpoint / message | Bornes et portée |
+| --- | --- | --- |
+| Login et vérification email | POST `/v1/user-service/user/login` | Hôte régional api.bambulab.com/cn ; code envoyé une seule fois par la demande de login, aucun second email explicite |
+| Vérification TOTP | GET portail `/api/csrf` puis POST `/api/sign-in/tfa` | Cookie CSRF + en-tête ; challenge rattaché au demandeur par l’application |
+| Inventaire | GET `/v1/iot-service/api/user/bind` | 200 entrées maximum, séries filtrées et dédoublonnées ; statut d’impression distinct de l’authentification |
+| Identité MQTT | JWT ou GET `/v1/design-user-service/my/preference` | Nom `u_…`, jeton jamais publié dans les logs |
+| Suivi | MQTT TLS 8883 sur us.mqtt.bambulab.com ou cn.mqtt.bambulab.com | Abonnements aux seules séries inventoriées ; seuls `pushall` et `get_version` publiés, QoS 0 sans rétention, au plus une demande par 5 min |
+
+HTTPS conserve `redirect:error`, délai 8 s, réponse bornée à 1 Mio, gestion 400/401/403/429 et annulation. MQTT conserve fusion incrémentale des rapports/plateaux AMS, modules et séries, fraîcheur 60 s, vidage à la coupure et arrêt des reconnexions après refus d’authentification. Mots de passe, codes, cookies, jetons et clés restent masqués ; les réponses inconnues utiles au diagnostic restent bornées.
+
+Tests existants `poc/cloud-accounts.test.mjs` et `poc/bambu-cloud-monitor.test.mjs` inchangés ; tests directs `connectors/bambu/test/cloud-{http,monitor}.test.ts`. Aucun compte cloud réel sollicité ni nouveau résultat matériel revendiqué. Recette après déploiement demandé : login unique, saisie du code, inventaire, températures/AMS, journal expurgé et déconnexion.

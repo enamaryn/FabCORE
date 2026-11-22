@@ -91,3 +91,11 @@ Aucune caméra native n’a été observée : la fonction caméra de Ray5-Pilot 
 6. Lister, télécharger et visualiser un G-code laser existant ; envoyer un fichier de test sous un nom inédit et vérifier qu’il ne démarre pas.
 7. Sur un travail court supervisé : lancer, Pause, attendre Hold:0, Reprendre, Stop/Reset. Vérifier arrêt physique, S/avance, état final et absence de reprise automatique. Requalifier après changement de firmware.
 8. Tester perte de liaison en lecture seule et reconnexion ; relever les logs, le firmware et les résultats. Aucun test logiciel ne remplace cette recette.
+
+## Migration TypeScript · MIG-02.2.2
+
+En revue le 22 novembre 2026 : `connectors/longer/src/monitor.ts` (`createRay5Services`) porte les transports GRBL TCP/ESP3D, parsing et contrôles ; `files.ts` (`createRay5FileServices`) porte l’inventaire et les échanges SD. `poc/longer-ray5*.mjs` ne contient plus de protocole et compose ces services avec la validation IPv4, le transport WS et le lecteur JSON partagé. Sources, commandes, plafonds, bornes et recette détaillés plus haut sont conservés.
+
+Même clé de session par origine + port WS, mêmes ACK séquentiels, fraîcheur 10 s et reconnexion différée sans rejeu ; fermeture d’une commande en attente = résultat inconnu. Les contrôles restent TCP seulement, l’impulsion bornée exige toujours présence opérateur et paramètres lus ; `M5` précède le jog. Carte SD : état Idle exigé, `/upload` et `/SD`, limite 16 Mio, comparaison exacte après envoi, jamais de lancement implicite. Aucun changement de scan ou de capacités matériel par cette extraction.
+
+Tests POC conservés ; `connectors/longer/test/connector.test.ts` vérifie notamment perte de session pendant M5, reconnexion sans anciennes consignes/rejeu et échec de vérification d’upload sans lancement. Aucun essai laser, mouvement ou déploiement ici. La recette physique ci-dessus reste distincte des tests automatiques.

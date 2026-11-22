@@ -5,6 +5,7 @@
     "files": [
       "connectors/elegoo/src/monitor.ts",
       "connectors/elegoo/src/files.ts",
+      "connectors/elegoo/src/upload.ts",
       "poc/elegoo.mjs",
       "poc/elegoo-files.mjs",
       "poc/connectors.mjs"
@@ -13,7 +14,8 @@
       "createCC2Services",
       "createCC2Files",
       "createElegooMonitor",
-      "createElegooFiles"
+      "createElegooFiles",
+      "createElegooFileServices"
     ],
     "tests": [
       "connectors/elegoo/test/monitor.test.ts",
@@ -108,6 +110,80 @@
     ]
   },
   {
+    "id": "cc1",
+    "title": "CC1 : lecture SDCP, commandes et transfert segmenté",
+    "files": [
+      "connectors/elegoo/src/cc1.ts",
+      "connectors/elegoo/src/upload.ts",
+      "poc/elegoo-cc1.mjs",
+      "poc/elegoo-files.mjs"
+    ],
+    "symbols": [
+      "readElegooCC1",
+      "requestElegooCC1",
+      "commandElegooCC1",
+      "createElegooFileServices"
+    ],
+    "tests": [
+      "connectors/elegoo/test/cc1.test.ts",
+      "poc/elegoo.test.mjs",
+      "poc/production.test.mjs"
+    ],
+    "docs": [
+      "docs/protocols/ELEGOO-LAN.md"
+    ]
+  },
+  {
+    "id": "xtool",
+    "title": "xTool M2 : session, caméra et découverte",
+    "files": [
+      "connectors/xtool/src/monitor.ts",
+      "connectors/xtool/src/camera.ts",
+      "connectors/xtool/src/media.ts",
+      "connectors/xtool/src/discovery.ts",
+      "poc/xtool.mjs"
+    ],
+    "symbols": [
+      "createXToolServices",
+      "createXToolCamera",
+      "subscribeXToolVideo",
+      "discoverXTool"
+    ],
+    "tests": [
+      "connectors/xtool/test/monitor.test.ts",
+      "connectors/xtool/test/media-camera.test.ts",
+      "poc/xtool.test.mjs",
+      "poc/xtool-camera.test.mjs",
+      "poc/xtool-media.test.mjs"
+    ],
+    "docs": [
+      "docs/protocols/XTOOL-M2-LAN.md"
+    ]
+  },
+  {
+    "id": "ray5",
+    "title": "Longer Ray5 : GRBL, contrôles et carte SD",
+    "files": [
+      "connectors/longer/src/monitor.ts",
+      "connectors/longer/src/files.ts",
+      "poc/longer-ray5.mjs",
+      "poc/longer-ray5-files.mjs"
+    ],
+    "symbols": [
+      "createRay5Services",
+      "createRay5FileServices"
+    ],
+    "tests": [
+      "connectors/longer/test/connector.test.ts",
+      "poc/longer-ray5.test.mjs",
+      "poc/longer-ray5-controls.test.mjs",
+      "poc/longer-ray5-http.test.mjs"
+    ],
+    "docs": [
+      "docs/protocols/LONGER-RAY5-LAN.md"
+    ]
+  },
+  {
     "id": "permissions",
     "title": "Authentification et droits",
     "files": [
@@ -178,7 +254,8 @@
     "files": [
       "poc/discovery.mjs",
       "poc/xtool-discovery.mjs",
-      "poc/connectors.mjs"
+      "poc/connectors.mjs",
+      "connectors/xtool/src/discovery.ts"
     ],
     "symbols": [
       "scanNetwork",
@@ -197,15 +274,20 @@
     "id": "cloud",
     "title": "Comptes cloud et suivi en lecture",
     "files": [
+      "connectors/bambu/src/cloud-http.ts",
+      "connectors/bambu/src/cloud-monitor.ts",
       "poc/cloud-accounts.mjs",
       "poc/bambu-cloud-monitor.mjs",
       "poc/cloud.js"
     ],
     "symbols": [
       "createCloudAccounts",
-      "createCloudMonitor"
+      "createCloudMonitor",
+      "createCloudHttp"
     ],
     "tests": [
+      "connectors/bambu/test/cloud-http.test.ts",
+      "connectors/bambu/test/cloud-monitor.test.ts",
       "poc/cloud-accounts.test.mjs",
       "poc/bambu-cloud-monitor.test.mjs"
     ],
@@ -243,7 +325,8 @@
     "files": [
       "poc/machine-logs.mjs",
       "poc/diagnostics.mjs",
-      "poc/cloud-accounts.mjs"
+      "poc/cloud-accounts.mjs",
+      "connectors/bambu/src/cloud-http.ts"
     ],
     "symbols": [
       "createMachineLogs",
