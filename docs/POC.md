@@ -1,9 +1,21 @@
 # Phase 1 · POC — preuve de concept
 
-**État : phase active, complément de pilotage manuel en revue, recette matérielle en cours.**
+**État : recette finale en cours, centrée sur Elegoo CC2 et Bambu P2S.**
 Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-concept)) : vérifier les risques techniques sur du matériel réel avant le [MVP](MVP.md).
 
-**Prochaine action :** traiter l’incident urgent [#78](https://github.com/enamaryn/FabCORE/issues/78), puis le pilote cloud [#79](https://github.com/enamaryn/FabCORE/issues/79), avant de reprendre la recette [POC-10](#poc-10--recette-matérielle-sur-le-lxc) sur le LXC, en commençant par le terminal (POC-10.1) et les fichiers (POC-10.2).
+**Prochaine action :** mettre à jour après fusion du correctif d’inventaire CC2 et de diagnostic Bambu, puis tester les fichiers internes CC2 et le pilotage P2S en mode développeur. Le critère de clôture demandé le 22 novembre est la réussite des essais **CC2 et P2S**. Klipper, xTool, Longer et les autres extensions gardent leurs résultats et limites, mais leurs essais supplémentaires ne bloquent pas cette clôture. Le POC n’est pas encore déclaré validé.
+
+
+## Recette utilisateur · 22 novembre 2026 — état faisant foi
+
+- **CC2 : Pause et Stop validés sur matériel** selon le retour de Valentin ; chauffe buse/plateau et coupure déjà confirmées. La reprise CC2 et l’urgence 1007 ne sont pas validées par extension.
+- **Parc : non-duplication d’une machine déjà connectée validée.** Ne pas relancer tous les essais de découverte déjà acquis ; le parcours test → ajout reste distingué des autres scénarios.
+- **P2S : refus explicites Pause/Stop**, journal `mqtt message verify failed` ; même motif pour un lancement. Mode développeur depuis activé par Valentin, **nouveaux essais après mise à jour**, aucun succès matériel annoncé avant ceux-ci.
+- **CC2 : inventaire interne manquant identifié dans FabCore**, ancien mode copies uniquement. Correctif proposé : lecture native MQTT 1044, téléchargement HTTP et lancement 1020 d’un fichier préexistant ; recette sur firmware personnel à faire.
+- **Longer : homing validé** selon le retour du 22 novembre, autres fonctions non validées par extension.
+- Le bilan POC-11 portera sur CC2 et P2S, leurs droits et erreurs ; les défauts encore ouverts sur ce périmètre restent à résoudre ou à décider explicitement. Les mentions historiques « en revue/non déployé » ci-dessous ne remplacent pas ces observations datées.
+
+Commandes, sources et portée : [CC2](protocols/ELEGOO-LAN.md), [P2S LAN](protocols/BAMBU-LAN.md), [Longer](protocols/LONGER-RAY5-LAN.md). Aucune commande matérielle relancée par ce correctif.
 
 ## Grille de parc orientée ferme · 20 novembre 2026
 
@@ -324,9 +336,9 @@ En cours. Chaque sous-étape passe à `Testé matériel` une fois vérifiée sur
 
 - [x] POC-11.1 Une Bambu P2S connectée · **Testé matériel** : impression de 9 heures suivie dans FabCore, confirmation utilisateur du 18 novembre 2026.
 - [ ] POC-11.2 Deux Elegoo CC2 distinctes, sans confusion entre machines.
-- [ ] POC-11.3 Une machine Klipper : **lecture partiellement testée sur matériel le 20 novembre 2026** (deux instances, températures, liste et téléchargement). Parcours navigateur et production à terminer ; ne pas assimiler à une validation complète.
+- [ ] POC-11.3 **Non bloquant / reporté pour la clôture à la demande du 22 novembre.** Une machine Klipper : **lecture partiellement testée sur matériel le 20 novembre 2026** (deux instances, températures, liste et téléchargement). Parcours navigateur et production à terminer ; ne pas assimiler à une validation complète.
 - [ ] POC-11.4 Permissions vérifiées (administrateur, observateur, routes et flux). Séparation de l’interface constatée fonctionnelle à priori par Valentin le 18 novembre 2026 ; contrôles directs des autorisations serveur et des flux encore à vérifier.
-- [ ] POC-11.5 Commandes fiables : pause, reprise, terminal, lancement, sans renvoi automatique.
+- [ ] POC-11.5 Commandes fiables sur le périmètre CC2/P2S : Pause/Stop CC2 validés ; P2S à retester après activation du mode développeur. Lancement et parcours fichier à terminer. Reprise CC2 indisponible et documentée ; aucun renvoi automatique.
 - [ ] POC-11.6 Erreurs détectables : état hors ligne **testé sur matériel** en éteignant les deux CC2 (confirmation utilisateur du 18 novembre 2026). Restent l’accès refusé et le firmware en erreur.
 - [x] POC-11.7 Authentification locale et Pocket ID/OIDC fonctionnelles · **Testé matériel** : les deux parcours ont été essayés et confirmés par Valentin le 18 novembre 2026.
 - [ ] POC-11.8 Limites documentées dans le [guide](../poc/README.md) et la [matrice de compatibilité](MVP.md#mvp-05--connecteurs-p0-validés-modèle-par-modèle).
@@ -366,3 +378,7 @@ Bouton œil afficher/masquer sur les champs masqués, y compris connexion locale
 Branche `feat/ray5-controls-discovery`, à fusionner puis déployer par Valentin. Étend la supervision en lecture seule : découverte GRBL TCP/ESP3D avec session existante réutilisée, contrôles TCP XY/zéro G54/origine conditionnelle/M5/impulsion bornée/annulation jog/Reset/déverrouillage, Pause/Reprise/Stop avec rapport frais, et chaîne SD native liste/téléchargement/visualiseur/envoi vérifié/lancement séparé confirmé. Aucune émission laser, mouvement, écriture SD ou fabrication réelle pendant le développement. HTTP `/upload` et lecture originale `/SD` observés sur la Ray5 ; ESP221 reformate les octets et n’est pas utilisé pour les transferts. [Sources, limites, matrice et recette](protocols/LONGER-RAY5-LAN.md). Contrôles manuels ESP3D, caméra externe, air assist et Z motorisé non déclarés fonctionnels. Première action après mise à jour : scan puis jog minimal supervisé, lecture/envoi SD, travail court Pause/Reprise/Stop et vérification physique. Les fonctionnalités non essayées restent expérimentales ; cette PR ne clôture pas POC-10/11.
 
 Validation de cette proposition : 135 tests automatisés réussis sur le main fusionné #93, contrôles de syntaxe et `git diff --check`. Recette navigateur et matériel du pilotage encore à effectuer.
+
+## Correctif inventaire CC2 et refus P2S · proposition du 22 novembre 2026
+
+Branche `fix/cc2-native-files-bambu-auth` : inventaire local MQTT 1044 sur la session CC2 existante, réponse native et téléchargement HTTP, lancement d’un fichier interne sans copie préalable FabCore. Les copies historiques ne sont pas effacées. Refus Bambu de vérification distingué par `bambu-authorization` (HTTP 403), aide Mode développeur et télémétrie conservée, sans rejeu. 139 tests automatisés réussis, syntaxe et diff vérifiés. Code non fusionné et non déployé lors de cette préparation ; inventaire CC2 sur le firmware personnel et nouveaux essais P2S à réaliser après mise à jour, par Valentin. Fiches fabricant/modèle actualisées avec paramètres, sources et portée de chaque observation.

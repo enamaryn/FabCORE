@@ -64,3 +64,9 @@ Chaque module normalisé peut fournir `humidity` : pourcentage réel numérique 
 [Recherche et recette](../docs/protocols/LONGER-RAY5-LAN.md). Les contrôles TCP partagent le moniteur ; le registre conserve un `control` natif au lieu de le remplacer par le contrôleur HTTP générique. ACK séquentiels, résultats inconnus sans rejeu, état frais pour Pause/Reprise/Reset. Lecture `$$` limitée aux champs utiles ; aucune modification de configuration. Contrôles et lancement laser réservés à l’administrateur ; présence opérateur explicite pour impulsion et lancement. Le mode ESP3D reste sans contrôle manuel tant que ses acquittements ne sont pas qualifiés.
 
 `fileFamily` distingue laser/FDM et est vérifié pour les transferts côté serveur et navigateur. Ray5 utilise ses chemins `.gc/.nc` confinés, `/upload` SD et `/SD` pour les originaux ; pas `/files` (flash) ni ESP221 (lignes reformattées). Les lectures du connecteur peuvent être asynchrones après instrumentation : l’adaptateur fichiers attend leur résultat. Un upload compare les octets relus, ne lance jamais le fichier et ne remplace pas intentionnellement un nom existant.
+
+## Mise à jour CC2 / P2S du 22 novembre 2026
+
+CC2 : inventaire interne MQTT 1044 sur la session existante, résultat natif conservé ; `retainedOnly` retiré pour cette famille seulement. HTTP `/download` confiné au nom local et au serveur configuré ; lancement 1020 vérifié contre la liste native. Les anciennes copies sur disque restent présentes mais ne constituent pas un inventaire. CC1 reste en copies FabCore. Voir [les paramètres et les sources](../docs/protocols/ELEGOO-LAN.md).
+
+P2S : le motif constructeur `mqtt message verify failed` devient `bambu-authorization`, distinct des refus génériques et des résultats inconnus, pour commande, chauffe et lancement. Aucun rejeu ni changement automatique de mode. [Diagnostic et prérequis développeur](../docs/protocols/BAMBU-LAN.md).
