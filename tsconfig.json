@@ -23,5 +23,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "connectors/**/*.ts",
+    "packages/connector-sdk/**/*.ts"
+  ]
 }

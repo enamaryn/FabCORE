@@ -1,6 +1,6 @@
 # Migration du POC vers le socle MVP
 
-**État : plan formalisé, implémentation non commencée.** Référence : [bilan POC v0](POC-BILAN.md). Ce plan détaille MVP-00/01/02/03/12/13 ; il ne remplace pas le périmètre produit du [MVP](MVP.md).
+**État : migration engagée. MIG-01 et MIG-02.1 fusionnés ; migration CC2 en revue.** Référence : [bilan POC v0](POC-BILAN.md). Ce plan détaille MVP-00/01/02/03/12/13 ; il ne remplace pas le périmètre produit du [MVP](MVP.md).
 
 ## Règles de passage
 
@@ -10,8 +10,8 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 
 | Phase | Objet | Dépendance | État initial |
 | --- | --- | --- | --- |
-| MIG-00 | Référence et recette de non-régression | Clôture POC | Bilan rédigé ; publication à valider |
-| MIG-01 | Architecture, contrats et outillage | MIG-00 | MIG-01.1 et MIG-01.2 en revue ([ADR](adr/README.md)) |
+| MIG-00 | Référence et recette de non-régression | Clôture POC | POC v0 publié ; bilan accepté |
+| MIG-01 | Architecture, contrats et outillage | MIG-00 | Fusionné : PR #100 et #101 ([ADR](adr/README.md)) |
 | MIG-02 | Domaine et connecteurs TypeScript | MIG-01 | MIG-02.1 en revue |
 | MIG-03 | Services backend et API | MIG-02 | À faire |
 | MIG-04 | PostgreSQL et reprise des données | MIG-03 | À faire |
@@ -48,7 +48,7 @@ Acceptés : [ADR 0001 à 0007](adr/README.md) — TypeBox, Fastify, Kysely, Vite
 
 ### MIG-01.2 · Outillage et contrats
 
-En revue : TypeScript sans build (`npm run typecheck`), ESLint limité à `src/` (`npm run lint`), contrats TypeBox dans `src/domain/`, contrôle des licences (`npm run check:licenses`), CI Node 24 et 26 (`.github/workflows/ci.yml`). `npm run check` enchaîne tout.
+Fusionné dans la PR #101 : TypeScript sans build (`npm run typecheck`), ESLint limité à `src/` (`npm run lint`), contrats TypeBox dans `src/domain/`, contrôle des licences (`npm run check:licenses`), CI Node 24 et 26 (`.github/workflows/ci.yml`). `npm run check` enchaîne tout.
 
 - MIG-01.2.1 Ajouter compilation incrémentale JS/TS, typage strict des modules migrés, lint limité et scripts de développement.
 - MIG-01.2.2 Définir Machine, Connexion, Capacités, Télémétrie, Commande/Résultat, Événement et Erreur ; distinguer accepté, confirmé et inconnu.
@@ -60,6 +60,8 @@ En revue : TypeScript sans build (`npm run typecheck`), ESLint limité à `src/`
 
 ### MIG-02.1 · Domaine et adaptation
 
+Fusionné dans la PR #102 : contrats de cycle de vie, registre typé et normalisation. Le serveur HTTP reste celui du POC jusqu’à MIG-03.
+
 En revue : contrat `ConnectorManifest` et `ConnectorLifecycle` (`src/domain/connector.ts`) ; adaptateur `createTypedConnectorRegistry` (`src/application/connectors.ts`) autour du registre du POC, sans changer protocoles, sessions ni temporisations. Le serveur POC n'utilise pas encore l'adaptateur : branchement progressif à partir de MIG-02.2/MIG-03.
 
 - MIG-02.1.1 Extraire types, validations et contrats de cycle de vie : ouvrir, lire, commander, fermer.
@@ -67,6 +69,10 @@ En revue : contrat `ConnectorManifest` et `ConnectorLifecycle` (`src/domain/conn
 - MIG-02.1.3 Garder inconnue toute donnée non remontée ; ne pas inventer état, couleur, consigne ou succès.
 
 ### MIG-02.2 · Migration fabricant par fabricant
+
+**CC2 en revue** sur `mig/02-2-cc2` : session MQTT, identité et sondes dans `connectors/elegoo/src/monitor.ts`, inventaire/téléchargement/lancement dans `files.ts`. Les points d’entrée POC sont des adaptateurs de composition ; le serveur existant passe déjà par ces modules typés, une seule implémentation du protocole. Helpers communs de projection (chauffe/CANVAS), décodage HTTP et transfert segmenté CC1/CC2 injectés, sans copie ni migration de CC1. Ports internes initiaux dans `packages/connector-sdk`, workspaces privés ; SDK public, manifestes/fiches autonomes et chaîne complète de conformité restent à compléter aux jalons dédiés, pas déclarés livrés par cette extraction.
+
+Validation locale Node 24 : types, lint, **154 tests**, licences et navigation. Pas de commande matérielle, de déploiement ni de nouvelle validation firmware. Recette courte après mise à jour : températures/CANVAS, liste interne, téléchargement et pause/stop sur une fabrication supervisée. **P2S LAN reste la prochaine PR séparée.**
 
 - MIG-02.2.1 Migrer d'abord CC2 et P2S LAN dans deux étapes séparées, avec les tests des fichiers internes et refus d'autorisation.
 - MIG-02.2.2 Migrer Moonraker, OctoPrint/PrusaLink, puis les autres connecteurs et le pilote cloud sans élargir leurs capacités.

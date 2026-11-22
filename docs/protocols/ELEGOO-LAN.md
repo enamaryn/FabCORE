@@ -69,3 +69,9 @@ Code : [elegoo.mjs](../../poc/elegoo.mjs), [elegoo-files.mjs](../../poc/elegoo-f
 - [elegoo-web](https://github.com/runnane/elegoo-web/blob/main/src/ui/controls.ts) : 1021, 1022 et urgence 1007 ; certains autres documents du dépôt sont incohérents, privilégier le code et recouper.
 - [Documentation CC2 Home Assistant](https://github.com/danielcherubini/elegoo-homeassistant/blob/main/docs/CC2_PROTOCOL.md).
 - [Firmware communautaire, changelog](https://github.com/Neme77/centauri-carbon-2-community/blob/develop/CHANGELOG.md) : urgence pendant commandes longues. Il s’agit d’un autre chemin d’exécution ; ce n’est pas la preuve de la cause du défaut 1022 sur le firmware stock.
+
+## Implémentation TypeScript · migration CC2 du 22 novembre 2026
+
+Proposée sur `mig/02-2-cc2`, non déployée : logique MQTT/identité/lecture ponctuelle et sessions dans `connectors/elegoo/src/monitor.ts` ; inventaire natif, téléchargement et lancement dans `files.ts`. Adaptateurs de compatibilité `poc/elegoo.mjs` et `poc/elegoo-files.mjs`, sans duplication du protocole. Chauffe/CANVAS et transfert segmenté restent des helpers communs injectés. CC1 et P2S non migrées par ce changement. Les commandes, paramètres, sources et acquis matériels ci-dessus restent la référence ; aucune nouvelle commande ou capacité firmware n’est déduite du typage.
+
+154 tests automatisés passent, dont tests du module typé (identité, sessions isolées, corrélation 1044, refus et fermeture de RPC en attente) et recette simulée existante des fichiers internes/chauffes. Aucun ordre physique ni déploiement pendant le développement. Après mise à jour demandée : vérifier une session par CC2, températures/CANVAS, lecture des fichiers et téléchargement, puis Pause/Stop sur un essai supervisé.
