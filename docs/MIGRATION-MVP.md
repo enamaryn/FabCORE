@@ -1,6 +1,6 @@
 # Migration du POC vers le socle MVP
 
-**État : migration engagée. MIG-01, MIG-02.1 et migrations CC2/P2S LAN fusionnés ; Moonraker en revue.** Référence : [bilan POC v0](POC-BILAN.md). Ce plan détaille MVP-00/01/02/03/12/13 ; il ne remplace pas le périmètre produit du [MVP](MVP.md).
+**État : migration engagée. MIG-01, MIG-02.1 et migrations CC2/P2S LAN/Moonraker fusionnés ; OctoPrint/PrusaLink en revue.** Référence : [bilan POC v0](POC-BILAN.md). Ce plan détaille MVP-00/01/02/03/12/13 ; il ne remplace pas le périmètre produit du [MVP](MVP.md).
 
 ## Règles de passage
 
@@ -12,7 +12,7 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 | --- | --- | --- | --- |
 | MIG-00 | Référence et recette de non-régression | Clôture POC | POC v0 publié ; bilan accepté |
 | MIG-01 | Architecture, contrats et outillage | MIG-00 | Fusionné : PR #100 et #101 ([ADR](adr/README.md)) |
-| MIG-02 | Domaine et connecteurs TypeScript | MIG-01 | #102/#103/#104 fusionnés ; Moonraker en revue |
+| MIG-02 | Domaine et connecteurs TypeScript | MIG-01 | #102 à #105 fusionnés ; OctoPrint/PrusaLink en revue |
 | MIG-03 | Services backend et API | MIG-02 | À faire |
 | MIG-04 | PostgreSQL et reprise des données | MIG-03 | À faire |
 | MIG-05 | Événements et SSE | MIG-03/04 | À faire |
@@ -74,7 +74,9 @@ Fusionné (#102) : contrat `ConnectorManifest` et `ConnectorLifecycle` (`src/dom
 
 Validation locale Node 24 : types, lint, **154 tests**, licences et navigation. Pas de commande matérielle, de déploiement ni de nouvelle validation firmware. Recette courte après mise à jour : températures/CANVAS, liste interne, téléchargement et pause/stop sur une fabrication supervisée. **P2S LAN fusionnée (#104)** : session MQTT/TLS, corrélation `sequence_id`, refus `bambu-authorization` et sondes dans `connectors/bambu/src/monitor.ts` ; inventaire FTPS, téléchargement, envoi et lancement dans `files.ts`. `poc/bambu.mjs` et `poc/bambu-files.mjs` deviennent des adaptateurs ; certificat, projection des contrôles et AMS injectés. Caméra P2S, découverte et pilote cloud inchangés. 157 tests. Recette courte après mise à jour : télémétrie/AMS, liste FTPS, téléchargement, pause/reprise/arrêt supervisés et refus d'autorisation en mode non développeur.
 
-**Moonraker en revue** sur `mig/02-2-moonraker` (première partie de MIG-02.2.2) : supervision HTTP, Pause/Reprise/Cancel, fichiers natifs et terminal dans `connectors/moonraker/src/index.ts`. `poc/moonraker.mjs` compose le module avec les helpers HTTP/fichiers communs, sans implémentation parallèle ; exports utilitaires conservés pour les autres appelants. Aucun changement du registre, de la découverte ou des contrôles partagés. Ports HTTP internes ajoutés au SDK, workspace privé sans nouvelle dépendance externe. **164 tests** locaux Node 24, typage/lint/licences/navigation vérifiés. Pas de déploiement ni de commande matérielle. Recette physique après mise à jour demandée ; OctoPrint puis PrusaLink seront deux PR suivantes.
+**Moonraker fusionnée (#105)** (première partie de MIG-02.2.2) : supervision HTTP, Pause/Reprise/Cancel, fichiers natifs et terminal dans `connectors/moonraker/src/index.ts`. `poc/moonraker.mjs` compose le module avec les helpers HTTP/fichiers communs, sans implémentation parallèle ; exports utilitaires conservés pour les autres appelants. Aucun changement du registre, de la découverte ou des contrôles partagés. Ports HTTP internes ajoutés au SDK, workspace privé sans nouvelle dépendance externe. **164 tests** locaux Node 24, typage/lint/licences/navigation vérifiés. Pas de déploiement ni de commande matérielle. Recette physique après mise à jour demandée ; OctoPrint puis PrusaLink seront deux PR suivantes.
+
+**OctoPrint et PrusaLink en revue** (deuxième partie de MIG-02.2.2) : lecture, Pause/Reprise/Cancel, fichiers et terminal OctoPrint dans `connectors/octoprint/src/index.ts` ; statut, commandes sur la tâche courante et stockages PrusaLink dans `connectors/prusalink/src/index.ts`. `poc/octoprint.mjs` et `poc/prusalink.mjs` deviennent des adaptateurs composés avec les helpers HTTP/fichiers communs ; exports, endpoints, délais, intervalle 5 s et tolérances de sonde inchangés, aucune capacité ajoutée. **170 tests** locaux, typage/lint/licences/navigation vérifiés. Pas de déploiement ni de commande matérielle. Restent pour MIG-02.2.2 : CC1, xTool M2, Longer Ray5 et pilote Bambu Cloud.
 
 - MIG-02.2.1 Migrer d'abord CC2 et P2S LAN dans deux étapes séparées, avec les tests des fichiers internes et refus d'autorisation.
 - MIG-02.2.2 Migrer Moonraker, OctoPrint/PrusaLink, puis les autres connecteurs et le pilote cloud sans élargir leurs capacités.

@@ -8,7 +8,7 @@ Relevé : 19 novembre 2026, base FabCore `7d1e6a4`. Ce sont des familles d’API
 | OctoPrint | Habituellement 5000 ou reverse proxy local, `X-Api-Key` | POST `/api/job` : `pause` avec action pause/resume, ou `cancel` | `/api/files`, sélection avec `print:true`, terminal `/api/printer/command`, chauffe et jog natifs |
 | PrusaLink | Habituellement 80, `X-Api-Key` | Job courant `/api/v1/job` puis PUT pause/resume ou DELETE `/api/v1/job/<id>` | `/api/v1/storage` et `/api/v1/files`, lecture/envoi/lancement ; pas de nouveaux contrôles manuels génériques |
 
-Code : [Moonraker](../../poc/moonraker.mjs), [OctoPrint](../../poc/octoprint.mjs), [PrusaLink](../../poc/prusalink.mjs), [contrôles](../../poc/manual-controls.mjs). Les noms de fichiers et chemins doivent rester confinés à la cible et au stockage autorisés.
+Code : [Moonraker](../../poc/moonraker.mjs), [OctoPrint](../../connectors/octoprint/src/index.ts), [PrusaLink](../../connectors/prusalink/src/index.ts), [contrôles](../../poc/manual-controls.mjs). Les noms de fichiers et chemins doivent rester confinés à la cible et au stockage autorisés.
 
 ## État matériel et urgence
 
@@ -46,4 +46,17 @@ Refus de commande certain distinct d’un résultat inconnu ; aucun renvoi autom
 
 Validation automatisée locale Node 24 : **164 tests**, types/lint/licences ; cinq nouveaux tests directs du module (deux instances sur la même IP, refus/inconnu sans rejeu, fichiers et chemin natif, réponses terminal bornées, erreurs JSON/réseau/Klippy). Deux tests supplémentaires de composition vérifient le vrai multipart multichunk, ses erreurs de taille sans rejeu et la limite JSON de 64 Kio. Parcours HTTP et découverte existants conservés. Aucun ordre matériel envoyé pendant ce travail. Les acquis de lecture du 20 novembre restent historiques ; ils ne valident pas une nouvelle fabrication après migration.
 
-Après mise à jour demandée : vérifier les deux instances et leurs températures distinctes, liste et téléchargement ; envoi d’un fichier sans lancement, puis lancement/Pause/Reprise/Cancel uniquement sur une machine prête et sous supervision. Les réglages matériels personnels restent hors périmètre FabCore. OctoPrint et PrusaLink ne sont pas migrés ici. Sources officielles d’API : [objets imprimante](https://moonraker.readthedocs.io/en/latest/external_api/printer/), [fichiers](https://moonraker.readthedocs.io/en/latest/external_api/file_manager/), [journal G-code](https://moonraker.readthedocs.io/en/latest/external_api/server/#request-cached-gcode-responses). Les endpoints ci-dessus décrivent le code existant, pas une nouvelle qualification des versions actuelles de l’API.
+Après mise à jour demandée : vérifier les deux instances et leurs températures distinctes, liste et téléchargement ; envoi d’un fichier sans lancement, puis lancement/Pause/Reprise/Cancel uniquement sur une machine prête et sous supervision. Les réglages matériels personnels restent hors périmètre FabCore. OctoPrint et PrusaLink sont migrés séparément, voir ci-dessous. Sources officielles d’API : [objets imprimante](https://moonraker.readthedocs.io/en/latest/external_api/printer/), [fichiers](https://moonraker.readthedocs.io/en/latest/external_api/file_manager/), [journal G-code](https://moonraker.readthedocs.io/en/latest/external_api/server/#request-cached-gcode-responses). Les endpoints ci-dessus décrivent le code existant, pas une nouvelle qualification des versions actuelles de l’API.
+
+## OctoPrint et PrusaLink · migration TypeScript du 22 novembre 2026
+
+Proposée en PR, non déployée. Code canonique : [OctoPrint](../../connectors/octoprint/src/index.ts), [PrusaLink](../../connectors/prusalink/src/index.ts) ; adaptateurs [OctoPrint](../../poc/octoprint.mjs) et [PrusaLink](../../poc/prusalink.mjs) avec helpers HTTP/fichiers injectés, aucune seconde implémentation. Clé `X-Api-Key` obligatoire, origine privée validée, redirections refusées.
+
+| Usage | OctoPrint | PrusaLink |
+| --- | --- | --- |
+| État | GET `/api/job` puis `/api/printer` (3 s) ; pas de lecture imprimante si déconnecté ; position de fichier seulement en fabrication sur stockage local | GET `/api/v1/status` (3 s), détails `/api/v1/job` facultatifs en fabrication |
+| Commandes | POST `/api/job` `pause`/`resume`, `cancel` pour l'arrêt (5 s) | Tâche courante `/api/v1/job`, puis PUT `pause`/`resume` ou DELETE (15 s) ; pas de tâche = pas de commande |
+| Fichiers | `/api/files/local?recursive=true`, téléchargement `/downloads/files/local/…`, envoi multipart sans lancement, lancement `select`+`print` | Stockages disponibles, parcours borné (6 niveaux, 40 dossiers, 300 fichiers), téléchargement limité à l'origine de la machine, envoi PUT sans lancement ni écrasement |
+| Terminal | POST `/api/printer/command` : mise en file `accepted`, jamais « exécutée » ; 409 = déconnecté | Non pris en charge |
+
+4xx = refus certain ; 5xx ou réponse perdue = inconnu, sans renvoi. Six nouveaux tests directs des modules ; tests HTTP, terminal et fichiers existants conservés. Aucun ordre matériel envoyé. Recette réelle par imprimante toujours à établir (instance OctoPrint de test sans imprimante, pas de recette Prusa) : après mise à jour demandée, vérifier lecture, liste, téléchargement, envoi sans lancement, puis Pause/Reprise/Arrêt sous supervision.
