@@ -9,6 +9,7 @@ export async function openApiDocument(): Promise<unknown> {
     session: { installed: unused, oidcEnabled: unused, viewer: () => null },
     diagnostics: { view: unused, fleet: unused },
     fleet: { list: unused },
+    machines: { write: unused, spool: unused, networks: unused, discover: unused },
     notifications: { view: unused, save: unused, test: unused },
     logs: { machine: unused, machineLog: unused, cloudAccounts: unused, cloudLog: unused, cloudFailure: unused },
   }));

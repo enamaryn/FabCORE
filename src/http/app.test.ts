@@ -18,6 +18,7 @@ function build(view: () => Record<string, unknown> = () => ({ events: [] })) {
     session: { installed: () => true, oidcEnabled: () => false, viewer },
     diagnostics: { view, fleet: () => [{ id: 'm1', name: 'P2S' }] },
     fleet: { list: async () => [] },
+    machines: { write: async () => null, spool: () => ({ manualSpool: null }), networks: () => ({ networks: [] }), discover: async () => null },
     notifications: { view: () => ({ ntfy: { mode: 'off' }, smtp: { enabled: false }, internal: null }), save: () => { throw new Error('unused'); }, test: async () => ({ accepted: true as const }) },
     logs: { machine: () => null, machineLog: () => '', cloudAccounts: () => ({ providers: [], accounts: [] }), cloudLog: () => '', cloudFailure: () => { throw new Error('unused'); } },
   }));
@@ -85,7 +86,9 @@ test('socle HTTP : seules les routes migrées sont déléguées, identifiants co
   assert.equal(http.handles(request('GET', `/api/cloud-accounts/${id}/logs`)), true);
   assert.equal(http.handles(request('GET', '/api/machines/not-a-uuid/logs')), false, 'identifiant invalide : réponse POC inchangée');
   assert.equal(http.handles(request('GET', `/api/machines/${id}/camera`)), false);
-  assert.equal(http.handles(request('POST', '/api/machines')), false, 'écritures encore servies par le POC');
+  assert.equal(http.handles(request('POST', '/api/machines')), true);
+  assert.equal(http.handles(request('POST', `/api/machines/${id}/spool`)), true);
+  assert.equal(http.handles(request('POST', `/api/machines/${id}/command`)), false, 'commandes encore servies par le POC');
   assert.equal(http.handles(request('POST', `/api/cloud-accounts/${id}/login`)), false);
   assert.equal(http.handles(request('GET', `/api/cloud-accounts/${id}/login`)), false);
   await http.close();
