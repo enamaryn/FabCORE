@@ -12,7 +12,7 @@ class Socket extends EventEmitter {
   terminate() { this.destroy(); }
 }
 
-test('Ray5 : configuration privée TCP/ESP3D, aucune capacité de pilotage déclarée', () => {
+test('Ray5 : configuration privée TCP/ESP3D, capacités explicites de pilotage et fichiers', () => {
   const configure = connectorDefinition('longer-ray5').configure;
   assert.equal(configure({host:'192.168.1.60'}).origin,machine.origin);
   const http = configure({host:'192.168.1.60',transport:'esp3d',port:'8848',wsPort:'8849'});
@@ -21,7 +21,9 @@ test('Ray5 : configuration privée TCP/ESP3D, aucune capacité de pilotage décl
   for (const bad of [{host:'8.8.8.8'}, {host:'192.168.1.60',port:'0'}, {host:'192.168.1.60',port:'65536'}, {host:'192.168.1.60',transport:'auto'}, {host:'192.168.1.60',wsPort:'x'}]) assert.ok(!configure(bad));
   for (const origin of ['tcp://8.8.8.8:8080','tcp://192.168.1.1','http://user:pass@192.168.1.1:8848','http://192.168.1.1:8848/evil','http://192.168.1.1:8848/?x=1','ws://192.168.1.1:8849']) assert.equal(ray5Target({origin}),null);
   const capabilities = connectorCatalog['longer-ray5'];
-  for (const flag of ['commands','controls','files','terminal','camera','temperatures']) assert.equal(capabilities[flag],false,flag);
+  for (const flag of ['terminal','camera','temperatures']) assert.equal(capabilities[flag],false,flag);
+  for (const flag of ['commands','controls','files']) assert.equal(capabilities[flag],true,flag);
+  assert.equal(capabilities.fileFamily,'laser');
 });
 
 test('Ray5 : état, coordonnées et SD réels, aucune progression inférée ni conversion en watts', () => {

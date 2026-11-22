@@ -4,10 +4,10 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { connectorCatalog } from './connectors.mjs';
 
-test('Ray5 : formulaire TCP/ESP3D sans faux secret, supervision sans commandes ni pourcentage inventé', () => {
+test('Ray5 : formulaire TCP/ESP3D sans faux secret, supervision pilotage explicite sans pourcentage inventé', () => {
   const source=readFileSync(new URL('./live.js',import.meta.url),'utf8');
   const dialog={open:false,innerHTML:'',showModal(){this.open=true;}};
-  const sandbox={machineConnectors:connectorCatalog,state:{role:'admin',lang:'fr'},pendingPrintCommands:new Set(),dialog,URL,
+  const sandbox={machineConnectors:connectorCatalog,state:{role:'admin',lang:'fr'},pendingPrintCommands:new Set(),dialog,URL,canStart:()=>true,
     t:fr=>fr,esc:String,badge:()=>'',btn:(action,label)=>`<button data-action="${action}">${label}</button>`};
   runInNewContext(source.slice(source.indexOf('function openMachineForm('),source.indexOf('let discoveryCancel;'))+source.slice(source.indexOf('function liveFabrication('),source.indexOf('const temperatureHistory'))+';this.form=openMachineForm;this.job=liveFabrication;',sandbox);
   sandbox.form('longer-ray5','Ray5');
@@ -17,10 +17,10 @@ test('Ray5 : formulaire TCP/ESP3D sans faux secret, supervision sans commandes n
   assert.match(dialog.innerHTML,/value="esp3d" selected/);assert.match(dialog.innerHTML,/value="8848"/);
   const machine={kind:'longer-ray5',status:'ready',progress:0,progressKnown:false,nativeState:'Idle',machinePosition:{x:3,y:4,z:0},spindle:500};
   let html=sandbox.job(machine);
-  assert.match(html,/lecture seule/);assert.match(html,/Progression non communiquée/);assert.match(html,/X 3/);assert.match(html,/pas une mesure en watts/);
-  assert.doesNotMatch(html,/print-command:|files-focus|<progress|0 %/);
+  assert.match(html,/pilotage expérimental/);assert.match(html,/Progression non communiquée/);assert.match(html,/X 3/);assert.match(html,/pas une mesure en watts/);
+  assert.doesNotMatch(html,/<progress|0 %/);
   html=sandbox.job({...machine,status:'printing',progress:35,progressKnown:true,file:'piece.nc'});
-  assert.match(html,/35 %/);assert.match(html,/piece.nc/);assert.doesNotMatch(html,/print-command:/);
+  assert.match(html,/35 %/);assert.match(html,/piece.nc/);assert.match(html,/print-command:pause/);
 });
 
 test('fiche machine : contrôles par capacité, observateur et aperçu local sans lancement', () => {

@@ -360,3 +360,9 @@ Connecteur expérimental en lecture seule préparé sur `feat/longer-ray5-wifi` 
 ## Confort de saisie · visibilité des secrets (20 novembre 2026)
 
 Bouton œil afficher/masquer sur les champs masqués, y compris connexion locale, codes LAN, clés API, compte cloud et code de vérification. Champs masqués par défaut ; remasquage à l’envoi, à la fermeture du dialogue et quand l’onglet est caché. Même valeur et validation conservées, bouton accessible au clavier et libellés FR/EN. Branche `feat/secret-visibility`, non fusionnée et non déployée à la préparation. Recette visuelle navigateur à effectuer après déploiement.
+
+## Longer Ray5 · contrôles et découverte proposés le 22 novembre 2026
+
+Branche `feat/ray5-controls-discovery`, à fusionner puis déployer par Valentin. Étend la supervision en lecture seule : découverte GRBL TCP/ESP3D avec session existante réutilisée, contrôles TCP XY/zéro G54/origine conditionnelle/M5/impulsion bornée/annulation jog/Reset/déverrouillage, Pause/Reprise/Stop avec rapport frais, et chaîne SD native liste/téléchargement/visualiseur/envoi vérifié/lancement séparé confirmé. Aucune émission laser, mouvement, écriture SD ou fabrication réelle pendant le développement. HTTP `/upload` et lecture originale `/SD` observés sur la Ray5 ; ESP221 reformate les octets et n’est pas utilisé pour les transferts. [Sources, limites, matrice et recette](protocols/LONGER-RAY5-LAN.md). Contrôles manuels ESP3D, caméra externe, air assist et Z motorisé non déclarés fonctionnels. Première action après mise à jour : scan puis jog minimal supervisé, lecture/envoi SD, travail court Pause/Reprise/Stop et vérification physique. Les fonctionnalités non essayées restent expérimentales ; cette PR ne clôture pas POC-10/11.
+
+Validation de cette proposition : 135 tests automatisés réussis sur le main fusionné #93, contrôles de syntaxe et `git diff --check`. Recette navigateur et matériel du pilotage encore à effectuer.
