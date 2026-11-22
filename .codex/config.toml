@@ -1,0 +1,9 @@
+# Facultatif : activer seulement après validation du pilote dans le client local.
+# Ne modifie ni le modèle ni les permissions du client.
+[mcp_servers.serena]
+enabled = false
+command = "uvx"
+args = ["--from", "git+https://github.com/oraios/serena@7f7d6245bf96b60fdf4e752a779917372fd1ee6e", "serena", "start-mcp-server", "--project-from-cwd", "--context", "codex", "--agent-interface", "tools", "--enable-web-dashboard", "false", "--open-web-dashboard", "false"]
+
+[mcp_servers.serena.env]
+SERENA_USAGE_REPORTING = "false"

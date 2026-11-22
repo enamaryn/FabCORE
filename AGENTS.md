@@ -1,35 +1,32 @@
 # Travailler sur FabCore
 
-Ce fichier s’adresse à toute personne ou IA qui intervient sur le dépôt. **Phase active : [MVP — cadrage et migration](docs/MVP.md).** Le POC est clôturé ; suivre le [bilan](docs/POC-BILAN.md) et le [plan de migration](docs/MIGRATION-MVP.md).
+**Phase active : MVP — cadrage et migration.** POC clôturé. [Bilan](docs/POC-BILAN.md) · [Plan de migration](docs/MIGRATION-MVP.md) · [Périmètre MVP](docs/MVP.md).
 
-## Reprendre une session
+## Reprendre une tâche
 
-1. Vérifier le chemin du dépôt, la branche et l’état du répertoire avec `git status --short --branch`. Consulter `origin/main` et la PR ou le ticket lié à la demande pour savoir ce qui a déjà été fusionné et ce qui est en cours. Vérifier l’état sur GitHub si la copie locale est ancienne.
-2. Lire le document de la phase et les fichiers directement concernés. Utiliser `rg` pour cibler les lectures. Si une autre personne ou IA poursuit déjà le même travail, reprendre la branche prévue si elle est disponible, ou signaler le chevauchement avant de modifier les mêmes fichiers.
-3. Partir de `origin/main` sur une branche dédiée pour un nouveau jalon. Si le répertoire contient du travail en cours, utiliser un worktree séparé. Préserver les modifications locales, même si leur auteur est inconnu.
+1. Vérifier dépôt, branche, état local et référence distante : `git status --short --branch`. Vérifier sur GitHub si la copie est ancienne. Préserver tout travail local ; utiliser une branche/worktree dédié pour un nouveau jalon.
+2. Consulter [CODEMAP](docs/ai/CODEMAP.md), ou `node scripts/ai-context.mjs --list` puis `<sujet>`. Lire le symbole, son test et le seul document du jalon utile. Élargir aux dépendances identifiées ; ne pas relire tout le journal POC ou le prompt d'origine.
+3. Si une session travaille déjà sur le sujet, reprendre sa branche ou coordonner le périmètre avant d'écrire. Un seul propriétaire par fichier ; worktrees séparés pour travaux parallèles.
 
-| Phase | Document |
-| --- | --- |
-| POC · clôturé | [État actuel, recette et prochain jalon](docs/POC.md) |
-| MVP · cadrage actif | [Périmètre et agent local FabCore Cloud](docs/MVP.md) |
-| Développement complet | [Évolutions après le MVP](docs/FULL-DEVELOPPEMENT.md) |
+## Références à la demande
 
-Pour l’exploitation, consulter le [guide du POC](poc/README.md). Pour ajouter ou modifier un connecteur, lire le [contrat des connecteurs](poc/CONNECTORS.md). Pour une interface, lire les [règles produit](docs/PRODUCT.md). L’intention d’origine du projet est dans le [prompt d’origine](MASTER_PROMPT_ORIGIN.md), à consulter seulement pour un cadrage.
+- Connecteur : [contrat](poc/CONNECTORS.md), puis guide fabricant dans `docs/protocols/`.
+- Interface : [règles produit](docs/PRODUCT.md).
+- Exploitation : [guide](poc/README.md).
+- Organisation IA/délégation : [routine](docs/ai/WORKFLOW.md) ; [relais court](docs/ai/HANDOFF.md).
+- Étapes futures : [développement complet](docs/FULL-DEVELOPPEMENT.md).
+- Intention d'origine : `MASTER_PROMPT_ORIGIN.md`, seulement pour cadrage.
 
-## Modifier le code
+## Modifier et vérifier
 
-- Livrer le plus petit diff qui couvre la demande. Suivre les conventions du fichier et réutiliser les fonctions et interfaces du projet. Préserver les API, les installations existantes et les données déjà enregistrées, sauf changement demandé.
-- Ne pas lancer de formatage global, de renommage en série, de réorganisation du dépôt, de réécriture de module ou de montée de version des dépendances sans demande explicite. Limiter le formatage aux lignes modifiées. Modifier le fichier de verrouillage uniquement si les dépendances du jalon le nécessitent.
-- Ne pas écraser le travail d’une autre session. Éviter les commandes qui effacent des changements locaux ou réécrivent l’historique partagé. Ouvrir la PR pour revue. La fusion et le déploiement sur un serveur se font sur demande.
-- Avant de publier, relire `git diff --stat` et `git diff` (ou le diff de la branche contre `origin/main`). Exécuter `git diff --check` et `npm test` pour une modification du code. Indiquer les vérifications matérielles ou navigateur qui restent à faire.
+- Livrer le plus petit diff couvrant la demande. Réutiliser interfaces et conventions ; préserver contrats, installations, données et acquis de recette. Migration progressive, sans réécriture des connecteurs.
+- Aucun formatage global, renommage en série ou changement de dépendances sans besoin du jalon. Ne modifier le verrouillage que si nécessaire. Ne jamais effacer ou réécrire le travail d'une autre session.
+- Avant PR : relire `git diff --stat` et `git diff`, exécuter `git diff --check` et les contrôles adaptés. Pour du code produit : `npm test`. Pour la navigation : `node scripts/ai-context.mjs --check`. Indiquer tests physiques/navigateur restant à faire.
+- Si un point d'entrée change : mettre à jour `docs/ai/topics.json`, puis `node scripts/ai-context.mjs --write-map` et `--check`. La carte et les empreintes aident à naviguer ; vérifier les relations réelles dans le code.
+- Sorties d'outils : bilan et erreurs utiles ; conserver les détails dans un fichier temporaire sans masquer les codes d'échec. Aucun secret dans les journaux, docs ou PR.
 
-## Passer le relais
+## Agents et livraison
 
-Chaque jalon a sa propre PR. Mettre à jour le fichier de phase avec l’état et la prochaine action. Dans la PR, consigner en quelques lignes :
+Travail simple : un seul agent. Déléguer une tâche indépendante volumineuse à un spécialiste avec objectif, références, critères et périmètre courts ; deux spécialistes simultanés maximum au départ, sans sous-délégation ni débats répétés sur les décisions acquises. Profils locaux : `.codex/agents/`. Ne pas supposer leur chargement automatique dans ChatGPT Work ; y transmettre les instructions pertinentes explicitement.
 
-- Le résultat et le ticket, la branche ou le commit à reprendre.
-- Les décisions utiles à la reprise, avec les fichiers et points d’entrée touchés.
-- Les tests réellement exécutés et leur résultat.
-- Ce qui reste à faire, avec la première action concrète.
-
-Distinguer **ouvert**, **fusionné**, **déployé** et **testé sur matériel**. Garder les détails dans la PR liée et le suivi utilisateur dans le fichier de phase. Ne jamais y copier de clés API, codes LAN ou secrets de déploiement.
+Chaque jalon a sa PR et son état de reprise : branche/commit, résultat, vérifications, limites et première action suivante. Distinguer ouvert, fusionné, déployé et testé matériel. Ouvrir la PR pour revue ; fusion et déploiement sur demande. Aucune commande machine implicite dans une tâche de développement. Les profils de lecture seule ne modifient ni fichiers ni matériel ; leurs restrictions textuelles ne remplacent pas les permissions du client.
