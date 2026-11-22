@@ -15,7 +15,7 @@ Ce fichier est la référence commune pour les assistants. Choisir le sujet ci-d
 | Parc / fiche machine | `poc/live.js` → `liveFleet`, `liveDetail`, `filesPanel` | `poc/machine-cockpit.test.mjs` |
 | Commandes et chauffe | `poc/manual-controls.mjs` → `createManualControls` | `poc/manual-controls-http.test.mjs` |
 | Découverte / multi-instance | `poc/discovery.mjs` → `scanNetwork`, `detectMoonraker` | `poc/discovery.test.mjs` |
-| Contrats du domaine (MIG) | `src/domain/` → `mergeOutcome` (`command.ts`), `restrictCapabilities` (`capabilities.ts`) | `src/domain/contracts.test.ts` |
+| Contrats du domaine (MIG) | `src/domain/` → `mergeOutcome` (`command.ts`), `restrictCapabilities` (`capabilities.ts`) ; adaptateur `src/application/connectors.ts` → `createTypedConnectorRegistry` | `src/domain/contracts.test.ts`, `src/application/connectors.test.ts` |
 | Comptes cloud / logs | `poc/cloud-accounts.mjs` → `createCloudAccounts` ; `poc/machine-logs.mjs` | `poc/cloud-accounts.test.mjs` |
 
 Autre sujet ou références actuelles avec lignes/empreintes : `node scripts/ai-context.mjs --list`, puis `node scripts/ai-context.mjs <sujet>`. Pas de numéro de ligne figé dans ce fichier. Lors d'un déplacement ou renommage, actualiser cette table et la carte détaillée.

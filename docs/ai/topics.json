@@ -234,22 +234,28 @@
   },
   {
     "id": "contracts",
-    "title": "Contrats du domaine et outillage TypeScript",
+    "title": "Contrats du domaine, cycle de vie des connecteurs et outillage TypeScript",
     "files": [
       "src/domain/index.ts",
       "src/domain/command.ts",
       "src/domain/capabilities.ts",
       "src/domain/telemetry.ts",
+      "src/domain/connector.ts",
+      "src/application/connectors.ts",
       "eslint.config.js",
       "tsconfig.json"
     ],
     "symbols": [
       "mergeOutcome",
       "restrictCapabilities",
-      "isEffectProven"
+      "isEffectProven",
+      "normalizeTelemetry",
+      "createTypedConnectorRegistry",
+      "connectorManifest"
     ],
     "tests": [
-      "src/domain/contracts.test.ts"
+      "src/domain/contracts.test.ts",
+      "src/application/connectors.test.ts"
     ],
     "docs": [
       "docs/adr/README.md",
