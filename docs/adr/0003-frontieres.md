@@ -1,6 +1,6 @@
 # ADR 0003 · Frontières des couches
 
-**État :** Proposé · **Étape :** MIG-01.1.3
+**État :** Accepté (2026-11-22) · **Étape :** MIG-01.1.3
 
 ## Contexte
 

@@ -1,6 +1,6 @@
 # ADR 0001 · Socle technique acquis
 
-**État :** Proposé · **Étape :** MIG-01.1.1 · **Sources :** [bilan POC](../POC-BILAN.md#conserver-migrer-différer), [MVP-00](../MVP.md)
+**État :** Accepté (2026-11-22) · **Étape :** MIG-01.1.1 · **Sources :** [bilan POC](../POC-BILAN.md#conserver-migrer-différer), [MVP-00](../MVP.md)
 
 ## Contexte
 

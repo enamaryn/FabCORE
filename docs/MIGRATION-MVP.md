@@ -40,7 +40,7 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 
 ### MIG-01.1 · Décisions d'architecture
 
-En revue : [ADR 0001 à 0007](adr/README.md) — TypeBox, Fastify, Kysely, Vite, Node 24 (CI 24 + 26), PostgreSQL ≥ 16, i18n, connecteurs autonomes, profils d'installation.
+Acceptés : [ADR 0001 à 0007](adr/README.md) — TypeBox, Fastify, Kysely, Vite, Node 24 (CI 24 + 26), PostgreSQL ≥ 16, i18n, connecteurs autonomes, profils d'installation.
 
 - MIG-01.1.1 Formaliser les décisions acquises : TypeScript strict, Node.js LTS, monolithe modulaire, React, PostgreSQL et SSE.
 - MIG-01.1.2 Choisir et motiver le framework HTTP éventuel, le build frontend, l'accès SQL/ORM et les outils de validation ; ne pas imposer ces choix silencieusement.

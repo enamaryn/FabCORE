@@ -1,6 +1,6 @@
 # ADR 0002 · Outillage
 
-**État :** Proposé · **Étape :** MIG-01.1.2 · Installation effective en MIG-01.2, sans mise à jour globale des dépendances existantes.
+**État :** Accepté (2026-11-22) · **Étape :** MIG-01.1.2 · Installation effective en MIG-01.2, sans mise à jour globale des dépendances existantes.
 
 ## Contexte
 

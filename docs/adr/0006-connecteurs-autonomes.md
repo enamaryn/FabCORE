@@ -1,6 +1,6 @@
 # ADR 0006 · Connecteurs autonomes et fiches modèle
 
-**État :** Proposé · **Étape :** MIG-01.1.3 · Contrat : [CONNECTORS.md](../../poc/CONNECTORS.md). Typage MIG-02, SDK documenté FD-01.
+**État :** Accepté (2026-11-22) · **Étape :** MIG-01.1.3 · Contrat : [CONNECTORS.md](../../poc/CONNECTORS.md). Typage MIG-02, SDK documenté FD-01.
 
 ## Contexte
 
