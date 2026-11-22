@@ -1,6 +1,7 @@
 import { manualSpool, supportsManualSpool } from './manual-spool.mjs';
 import { createServer } from 'node:http';
 import { createHttpApp } from '../src/http/app.ts';
+import { HttpError } from '../src/http/errors.ts';
 import { migratedRoutes } from '../src/http/routes/index.ts';
 import { once } from 'node:events';
 import { randomBytes, randomUUID, createHash, scrypt, timingSafeEqual } from 'node:crypto';
@@ -235,13 +236,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
       const [, id, action] = cloudRoute;
       try {
-        if (req.method === 'GET' && !id) return answer(res, 200, cloud.list());
-        if (req.method === 'GET' && ['logs', 'logs-download'].includes(action)) {
-          const content = cloud.logs(id);
-          if (action === 'logs') return answer(res, 200, { lines: content.trim().split('\n').filter(Boolean).slice(-300).map(line => JSON.parse(line)) });
-          res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': `attachment; filename="fabcore-cloud-${id}.log"` });
-          return res.end(content);
-        }
+        // Lectures (liste et journaux) servies par src/http/routes/logs.ts.
         if (req.method !== 'POST') return error(res, 405, 'missing');
         if (!requireJson(req, res)) return;
         if (!withinLimit('/cloud/' + (id ?? 'new'))) return error(res, 429, 'rate');
@@ -263,19 +258,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         return error(res, failure instanceof CloudError ? failure.status : 500, failure instanceof CloudError ? failure.message : 'cloud-storage');
       }
     }
-    const machineLogRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/(logs|logs-download)$/);
-    if (req.method === 'GET' && machineLogRoute) {
-      if (!viewer) return error(res, 401, 'sign-in');
-      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
-      const machine = store.state.machines.find(item => item.id === machineLogRoute[1]);
-      if (!machine) return error(res, 404, 'missing');
-      try {
-        const content = machineLogs.read(machine.id);
-        if (machineLogRoute[2] === 'logs') return answer(res, 200, { machine: { id: machine.id, name: machine.name, kind: machine.kind, mode: machine.mode ?? 'lan' }, lines: content.trim().split('\n').filter(Boolean).slice(-500).map(line => JSON.parse(line)) });
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': `attachment; filename="fabcore-machine-${machine.id}.log"` });
-        return res.end(content);
-      } catch { return error(res, 503, 'logs-unavailable'); }
-    }
+    // Journaux par machine (GET logs, logs-download) : src/http/routes/logs.ts.
     const preview = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera\/preview(?:\/(side|far|near))?$/);
     const camera = preview ?? path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera(?:\/(side|far|near))?$/);
     if (req.method === 'GET' && camera) {
@@ -345,9 +328,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
       const internal = internalNtfy(directory);
       const current = store.state.notifications ?? {};
-      if (req.method === 'GET' && path === '/api/notifications') {
-        return answer(res, 200, publicNotifications(current, internal));
-      }
+      // Lecture des réglages (GET) : src/http/routes/notifications.ts.
       if (req.method !== 'POST') return error(res, 405, 'missing');
       if (!requireJson(req, res)) return;
       let data;
@@ -395,30 +376,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         discoveryActive = false;
       }
     }
-    if (req.method === 'GET' && path === '/api/machines') {
-      if (!activeSession) return error(res, 401, 'sign-in');
-      const machines = await Promise.all(store.state.machines.map(async (machine) => {
-        const definition = connectorDefinition(machine.kind ?? 'klipper');
-        let telemetry;
-        try {
-          telemetry = (definition?.live ? await connectors.read(machine.kind, machine) : null) ?? snapshot(machine);
-          if (!['connecting', 'ready', 'printing', 'paused', 'done', 'offline', 'error'].includes(telemetry?.status)) throw new Error('invalid-telemetry');
-        } catch {
-          // One failed connector must not hide the rest of the fleet.
-          telemetry = { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' };
-        }
-        if (!store.state.machines.includes(machine)) return null;
-        diagnostics.status(machine.id, telemetry);
-        return {
-          id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial,
-          model: machine.kind === 'bambu-cloud' ? machine.model : definition?.model ?? connectorCatalog.klipper.model,
-          cameraOpen: [...cameraStreams.values()].some(stream => stream.machineId === machine.id && [...stream.viewers.values()].some(({ owner }) => owner === activeSession)),
-          ...telemetry,
-          manualSpool: supportsManualSpool(machine.kind ?? 'klipper') ? manualSpool(machine.manualSpool) : null
-        };
-      }));
-      return answer(res, 200, { machines: machines.filter(Boolean) });
-    }
+    // Lecture du parc (GET /api/machines) : src/http/routes/fleet.ts, service listFleet ci-dessous.
     const spoolRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/spool$/);
     if (req.method === 'POST' && spoolRoute) {
       if (!viewer) return error(res, 401, 'sign-in');
@@ -845,6 +803,30 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     }
     return signIn(res, username, role);
   }
+  // Service de lecture du parc, appelé par la route typée GET /api/machines.
+  async function listFleet(activeSession) {
+    const machines = await Promise.all(store.state.machines.map(async (machine) => {
+      const definition = connectorDefinition(machine.kind ?? 'klipper');
+      let telemetry;
+      try {
+        telemetry = (definition?.live ? await connectors.read(machine.kind, machine) : null) ?? snapshot(machine);
+        if (!['connecting', 'ready', 'printing', 'paused', 'done', 'offline', 'error'].includes(telemetry?.status)) throw new Error('invalid-telemetry');
+      } catch {
+        // One failed connector must not hide the rest of the fleet.
+        telemetry = { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' };
+      }
+      if (!store.state.machines.includes(machine)) return null;
+      diagnostics.status(machine.id, telemetry);
+      return {
+        id: machine.id, name: machine.name, origin: machine.origin, kind: machine.kind ?? 'klipper', serial: machine.serial,
+        model: machine.kind === 'bambu-cloud' ? machine.model : definition?.model ?? connectorCatalog.klipper.model,
+        cameraOpen: [...cameraStreams.values()].some(stream => stream.machineId === machine.id && [...stream.viewers.values()].some(({ owner }) => owner === activeSession)),
+        ...telemetry,
+        manualSpool: supportsManualSpool(machine.kind ?? 'klipper') ? manualSpool(machine.manualSpool) : null
+      };
+    }));
+    return machines.filter(Boolean);
+  }
   // Socle HTTP typé (MIG-03) : routes migrées servies par Fastify, les autres par le routeur POC ci-dessus.
   const viewerOf = (req) => {
     const key = session(req);
@@ -853,7 +835,16 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   };
   const http = createHttpApp({ allowedHost, viewer: viewerOf, onFailure: () => diagnostics.record('server', 'request-failed') }, migratedRoutes({
     session: { installed: () => Boolean(store.state.admin), oidcEnabled: () => Boolean(secure && oidc && store.state.admin), viewer: viewerOf },
-    diagnostics: { view: () => diagnostics.view(), fleet: () => store.state.machines.map(({ id, name }) => ({ id, name })) }
+    diagnostics: { view: () => diagnostics.view(), fleet: () => store.state.machines.map(({ id, name }) => ({ id, name })) },
+    fleet: { list: viewer => listFleet(viewer.session) },
+    notifications: { view: () => publicNotifications(store.state.notifications ?? {}, internalNtfy(directory)) },
+    logs: {
+      machine: id => store.state.machines.find(item => item.id === id) ?? null,
+      machineLog: id => machineLogs.read(id),
+      cloudAccounts: () => cloud.list(),
+      cloudLog: id => cloud.logs(id),
+      cloudFailure: failure => new HttpError(failure instanceof CloudError ? failure.status : 500, failure instanceof CloudError ? failure.message : 'cloud-storage')
+    }
   }));
   const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => {
     if (http.handles(req)) return http.dispatch(req, res);
