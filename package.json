@@ -3,17 +3,30 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": ">=24 <27"
   },
   "scripts": {
     "start": "node poc/server.mjs",
-    "test": "node --test"
+    "dev": "node --watch poc/server.mjs",
+    "test": "node --test",
+    "typecheck": "tsc -p .",
+    "lint": "eslint",
+    "check:licenses": "node scripts/check-licenses.mjs",
+    "check": "npm run typecheck && npm run lint && npm test && npm run check:licenses"
   },
   "dependencies": {
     "basic-ftp": "^6.2.6",
     "mqtt": "^5.16.1",
     "nodemailer": "^10.6.0",
     "openid-client": "^6.9.0",
+    "typebox": "^1.4.5",
     "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.14.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.0"
   }
 }
