@@ -9,7 +9,7 @@ Ce fichier est la référence commune pour les assistants. Choisir le sujet ci-d
 | Sujet | Point d'entrée | Test de départ |
 | --- | --- | --- |
 | CC2 : session et fichiers | `connectors/elegoo/src/monitor.ts` → `createCC2Services` ; `files.ts` → `createCC2Files` ; adaptateurs `poc/elegoo*.mjs` | `connectors/elegoo/test/monitor.test.ts`, `poc/cc2-native-files.test.mjs` |
-| P2S LAN / autorisations | `poc/bambu.mjs` → `createBambuMonitor` ; `poc/manual-controls.mjs` | `poc/bambu-auth-http.test.mjs` |
+| P2S LAN / autorisations | `connectors/bambu/src/monitor.ts` → `createP2SMonitor`, `files.ts` → `createP2SFiles` ; adaptateur `poc/bambu.mjs` ; `poc/manual-controls.mjs` | `connectors/bambu/test/monitor.test.ts`, `poc/bambu-auth-http.test.mjs` |
 | Envoi de fichier Moonraker | `poc/server.mjs` → `createFabCore` ; `poc/moonraker.mjs` → `createMoonrakerFiles` | `poc/files.test.mjs` |
 | Droits et authentification | `poc/server.mjs` → `createFabCore` ; `poc/oidc.mjs` | `poc/oidc.test.mjs` |
 | Parc / fiche machine | `poc/live.js` → `liveFleet`, `liveDetail`, `filesPanel` | `poc/machine-cockpit.test.mjs` |

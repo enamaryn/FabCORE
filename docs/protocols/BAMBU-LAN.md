@@ -14,7 +14,7 @@ Valentin confirme avoir **activé le mode développeur le 22 novembre**. Les nou
 
 - Transport : session MQTTS existante ; topic `device/<serial>/request` ; canal `print`.
 - Pause/Reprise/Stop : `{ "print": { "command":"pause|resume|stop", "param":"", "sequence_id":"<transaction>" } }`.
-- Lancement : `command="project_file"`, paramètres construits par [bambu-files.mjs](../../poc/bambu-files.mjs) pour le chemin réel du G-code/plateau.
+- Lancement : `command="project_file"`, paramètres construits par [connectors/bambu/src/files.ts](../../connectors/bambu/src/files.ts) pour le chemin réel du G-code/plateau.
 - Chauffe : `command="gcode_line"`, `M104 S<consigne>` pour la buse, `M140 S<consigne>` pour le plateau ; attente de la consigne réellement remontée, pas seulement d’un ACK.
 - Un refus de vérification connu produit désormais `bambu-authorization` et HTTP 403, avec aide localisée dans l’interface. L’état réel de fabrication reste affiché ; ce refus ne met pas artificiellement la machine hors ligne. Les autres refus restent distincts.
 - Aucun rejeu automatique, aucune signature fabriquée ni usurpation du logiciel officiel. Une commande critique réussie ultérieure peut effacer l’avertissement ; elle ne prouve pas que toutes les autres fonctions sont autorisées.
@@ -33,7 +33,7 @@ Après fusion/mise à jour : confirmer LAN + mode développeur sur l’écran, p
 | AMS | Modules et emplacements réellement remontés, couleurs, emplacement actif | Humidité en % = `humidity_raw` ; `humidity` 1–5 est un indice |
 | Éclairage / ventilateurs / chauffe | `manual-controls.mjs`, fonctions effectivement annoncées | Disponibilité dépend du firmware et des permissions |
 
-Fichiers de code : [bambu.mjs](../../poc/bambu.mjs), [bambu-files.mjs](../../poc/bambu-files.mjs), [bambu-camera.mjs](../../poc/bambu-camera.mjs), [manual-controls.mjs](../../poc/manual-controls.mjs), [connectors.mjs](../../poc/connectors.mjs).
+Fichiers de code : [bambu.mjs](../../poc/bambu.mjs), [connectors/bambu/src/files.ts](../../connectors/bambu/src/files.ts), [bambu-camera.mjs](../../poc/bambu-camera.mjs), [manual-controls.mjs](../../poc/manual-controls.mjs), [connectors.mjs](../../poc/connectors.mjs).
 
 ## Recette connue et limites
 
@@ -46,3 +46,7 @@ Bambu distingue mode LAN standard et mode développeur, avec des restrictions d�
 - [OpenBambuAPI MQTT](https://github.com/Doridian/OpenBambuAPI/blob/main/mqtt.md), [G-code](https://github.com/Doridian/OpenBambuAPI/blob/main/gcode.md), [FTPS](https://github.com/Doridian/OpenBambuAPI) : rétro-ingénierie communautaire.
 - [ha-bambulab](https://github.com/greghesp/ha-bambulab), code consulté au commit `d2793d837648967f631d34a5b2f468a94099bef0` : températures compactes, AMS et distinction cloud/local.
 - [Bambu, intégrations tierces](https://blog.bambulab.com/updates-and-third-party-integration-with-bambu-connect/), [contrôle d’autorisation](https://blog.bambulab.com/firmware-update-introducing-new-authorization-control-system-2/) : politique officielle, à revalider pour chaque firmware/modèle.
+
+## Implémentation TypeScript · migration P2S LAN du 22 novembre 2026
+
+Proposée en PR, non déployée : session MQTT, accusés corrélés et sondes dans `connectors/bambu/src/monitor.ts` ; FTPS dans `files.ts`. Adaptateurs de compatibilité `poc/bambu.mjs` et `poc/bambu-files.mjs`, sans duplication du protocole. Tests du module typé : refus d'autorisation effacé au premier succès, autres refus distincts, aucune publication sans rapport frais, fermeture sans rejeu, inventaire et lancement. Aucun ordre physique pendant le développement. Après mise à jour demandée : vérifier télémétrie/AMS, liste et téléchargement FTPS, pause/reprise/arrêt sur une fabrication supervisée, et le refus explicite hors mode développeur.

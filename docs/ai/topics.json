@@ -28,15 +28,20 @@
     "id": "bambu",
     "title": "P2S LAN et autorisations",
     "files": [
+      "connectors/bambu/src/monitor.ts",
+      "connectors/bambu/src/files.ts",
       "poc/bambu.mjs",
       "poc/bambu-files.mjs",
       "poc/manual-controls.mjs"
     ],
     "symbols": [
+      "createP2SMonitor",
+      "createP2SFiles",
       "createBambuMonitor",
       "createManualControls"
     ],
     "tests": [
+      "connectors/bambu/test/monitor.test.ts",
       "poc/bambu.test.mjs",
       "poc/bambu-auth-http.test.mjs"
     ],
