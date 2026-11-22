@@ -28,6 +28,7 @@ Autre sujet ou références actuelles avec lignes/empreintes : `node scripts/ai-
 ## Références à la demande
 
 - Connecteur : [contrat](poc/CONNECTORS.md), puis guide fabricant dans `docs/protocols/`.
+- Décisions d'architecture : [ADR](docs/adr/README.md).
 - Interface : [règles produit](docs/PRODUCT.md).
 - Exploitation : [guide](poc/README.md).
 - Organisation IA/délégation : [routine](docs/ai/WORKFLOW.md) ; [relais court](docs/ai/HANDOFF.md).
