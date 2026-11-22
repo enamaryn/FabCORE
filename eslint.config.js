@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   { ignores: ['node_modules/**', 'poc/**', 'design/**', 'scripts/**'] },
   {
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'connectors/**/*.ts', 'packages/connector-sdk/**/*.ts'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
     rules: {
@@ -13,6 +13,14 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true, argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
+    },
+  },
+  {
+    files: ['connectors/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [
+        { group: ['**/poc/**', '**/src/domain/**', '**/src/application/**', '**/src/http/**', '**/src/persistence/**', '**/src/config/**'], message: 'Un connecteur ne dépend pas du cœur ou du POC ; utiliser les ports SDK (ADR 0003).' },
+      ] }],
     },
   },
   {

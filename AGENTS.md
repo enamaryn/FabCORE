@@ -8,7 +8,7 @@ Ce fichier est la référence commune pour les assistants. Choisir le sujet ci-d
 
 | Sujet | Point d'entrée | Test de départ |
 | --- | --- | --- |
-| Fichiers internes CC2 | `poc/elegoo-files.mjs` → `createElegooFiles` ; session dans `poc/elegoo.mjs` | `poc/cc2-native-files.test.mjs` |
+| CC2 : session et fichiers | `connectors/elegoo/src/monitor.ts` → `createCC2Services` ; `files.ts` → `createCC2Files` ; adaptateurs `poc/elegoo*.mjs` | `connectors/elegoo/test/monitor.test.ts`, `poc/cc2-native-files.test.mjs` |
 | P2S LAN / autorisations | `poc/bambu.mjs` → `createBambuMonitor` ; `poc/manual-controls.mjs` | `poc/bambu-auth-http.test.mjs` |
 | Envoi de fichier Moonraker | `poc/server.mjs` → `createFabCore` ; `poc/moonraker.mjs` → `createMoonrakerFiles` | `poc/files.test.mjs` |
 | Droits et authentification | `poc/server.mjs` → `createFabCore` ; `poc/oidc.mjs` | `poc/oidc.test.mjs` |

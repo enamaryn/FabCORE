@@ -72,3 +72,9 @@ Chaque module normalisé peut fournir `humidity` : pourcentage réel numérique 
 CC2 : inventaire interne MQTT 1044 sur la session existante, résultat natif conservé ; `retainedOnly` retiré pour cette famille seulement. HTTP `/download` confiné au nom local et au serveur configuré ; lancement 1020 vérifié contre la liste native. Les anciennes copies sur disque restent présentes mais ne constituent pas un inventaire. CC1 reste en copies FabCore. Voir [les paramètres et les sources](../docs/protocols/ELEGOO-LAN.md).
 
 P2S : le motif constructeur `mqtt message verify failed` devient `bambu-authorization`, distinct des refus génériques et des résultats inconnus, pour commande, chauffe et lancement. Aucun rejeu ni changement automatique de mode. [Diagnostic et prérequis développeur](../docs/protocols/BAMBU-LAN.md).
+
+## Migration CC2 TypeScript · MIG-02.2.1
+
+Session et sondes : `connectors/elegoo/src/monitor.ts` ; fichiers natifs : `connectors/elegoo/src/files.ts`. `poc/elegoo.mjs` ne porte plus le protocole : il injecte les projections communes et réexporte les fonctions existantes. `poc/elegoo-files.mjs` compose le transfert segmenté partagé et conserve la branche CC1. Pas de deuxième client ni d’implémentation CC2 parallèle. Les ports internes initiaux du SDK n’importent aucune couche du cœur ; helpers encore partagés injectés par composition.
+
+Topics, identifiant déterministe, méthodes 1002/2005/1044/1020/1021/1022/1028, limites de tailles, délais, jeton HTTP, absence de reprise et absence de rejeu inchangés. Le serveur POC utilise les adaptateurs ; la migration des routes vers le nouveau registre relève de MIG-03. Le SDK public et les manifestes autonomes ne sont pas déclarés terminés. Référence protocole et limites : [Elegoo LAN](../docs/protocols/ELEGOO-LAN.md).

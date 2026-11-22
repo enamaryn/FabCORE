@@ -1,6 +1,6 @@
 # Phase 2 · MVP — produit utilisable au quotidien
 
-**État : cadrage actif après clôture du POC le 22 novembre 2026.** Implémentation de la migration non commencée. Voir le [bilan technique](POC-BILAN.md) et le [plan détaillé MIG-00 à MIG-08](MIGRATION-MVP.md).
+**État : cadrage actif après clôture du POC le 22 novembre 2026.** Migration technique engagée : MIG-01 et MIG-02.1 fusionnés, CC2 en revue. Voir le [bilan technique](POC-BILAN.md) et le [plan détaillé MIG-00 à MIG-08](MIGRATION-MVP.md).
 Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-mvp--produit-utilisable)) : un produit assez fiable pour un usage réel, sans repousser la sécurité ni les autorisations.
 
 Le découpage suit la même convention que le [POC](POC.md#lire-ce-plan) : étapes `MVP-xx`, sous-étapes `MVP-xx.y`, états `À faire` · `En cours` · `Ouvert` · `Fusionné` · `Déployé` · `Testé matériel` · `Reporté`. L’ordre des étapes est l’ordre de travail recommandé. MVP-00 est un préalable bloquant.
@@ -12,7 +12,7 @@ Recherche initiale : [Bambu Cloud et comptes multiples](protocols/BAMBU-CLOUD.md
 | Étape | Contenu | État |
 | --- | --- | --- |
 | MVP-00 | Cadrage et décisions d’architecture | En cours |
-| MVP-01 | Socle technique et migration TypeScript | À faire |
+| MVP-01 | Socle technique et migration TypeScript | En cours : outillage/contrats fusionnés, connecteurs en migration |
 | MVP-02 | Interface complète de la maquette UX/UI | À faire |
 | MVP-03 | Installation, mise à jour et administration | À faire |
 | MVP-04 | Comptes, rôles et permissions | À faire |
@@ -30,7 +30,7 @@ Recherche initiale : [Bambu Cloud et comptes multiples](protocols/BAMBU-CLOUD.md
 
 ## MVP-00 · Cadrage
 
-En cours. Décisions acquises synthétisées dans le [bilan](POC-BILAN.md) ; choix d’outillage proposés dans les [décisions d’architecture](adr/README.md) (MIG-01.1, en revue). Matériel prioritaire : P2S LAN et deux CC2 ; versions firmware exactes à relever.
+En cours. Décisions acquises synthétisées dans le [bilan](POC-BILAN.md) ; choix d’outillage acceptés dans les [décisions d’architecture](adr/README.md) (PR #100/#101). Matériel prioritaire : P2S LAN et deux CC2 ; versions firmware exactes à relever.
 
 - [x] MVP-00.1 Bilan du POC ([POC-11](POC.md#poc-11--clôture-du-poc-et-passage-au-mvp)) : [conservé, migré et différé](POC-BILAN.md#conserver-migrer-différer).
 - [x] MVP-00.2 Architecture · **décidé** : TypeScript strict sur Node.js LTS, monolithe modulaire, migration progressive module par module depuis le POC (pas de réécriture), tests verts à chaque étape. Les connecteurs du POC sont repris, pas réécrits.
@@ -45,11 +45,11 @@ En cours. Décisions acquises synthétisées dans le [bilan](POC-BILAN.md) ; cho
 
 ## MVP-01 · Socle technique et migration TypeScript
 
-À faire. Dépend de MVP-00. Le POC reste fonctionnel pendant toute la migration.
+En cours. MIG-01 et MIG-02.1 fusionnés ; le POC reste fonctionnel pendant toute la migration.
 
 - [ ] MVP-01.0 Migration vers TypeScript :
-  - [ ] Outillage : Node.js LTS, `tsconfig` strict, lint, formatage limité aux fichiers migrés.
-  - [ ] Types partagés : machine, télémétrie, capacités, événements, erreurs.
+  - [x] Outillage : Node.js LTS, `tsconfig` strict, lint, formatage limité aux fichiers migrés.
+  - [x] Types partagés : machine, télémétrie, capacités, événements, erreurs.
   - [ ] Connecteurs du POC migrés un par un, tests existants conservés et verts.
   - [ ] Serveur HTTP et routes migrés, comportement inchangé.
 - [ ] MVP-01.1 Structure du monolithe modulaire : présentation, authentification, utilisateurs, registre des machines, connecteurs, commandes, télémétrie, événements, notifications, fichiers, administration.

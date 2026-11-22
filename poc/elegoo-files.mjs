@@ -1,3 +1,4 @@
+import { createCC2Files } from '../connectors/elegoo/src/files.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm, open } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
@@ -25,33 +26,7 @@ export async function stagedUpload(source, size, send) {
 
 // elegoo-link: CC2 HTTP PUT /upload; CC1 multipart POST /uploadFile/upload.
 export function createElegooFiles(rpc, { cc1 = false, fetcher = fetch, queryFiles } = {}) {
-  const native = !cc1 && queryFiles ? {
-    async list(machine) {
-      const result = await queryFiles(machine);
-      if (!Array.isArray(result?.file_list)) throw new Error('files-unavailable');
-      const entries = result.file_list.slice(0, 300).filter(item => item && (!item.type || item.type === 'file') && filePath(item.filename) && !item.filename.includes('/'));
-      return [...new Map(entries.map(item => [item.filename, { path: item.filename,
-        size: Number.isSafeInteger(item.size) && item.size >= 0 ? item.size : null,
-        modified: Number.isFinite(item.create_time) && item.create_time > 0 && item.create_time < 100000000000 ? item.create_time * 1000 : null
-      }])).values()];
-    },
-    async download(machine, path, signal) {
-      if (!filePath(path) || path.includes('/')) throw new Error('invalid-file');
-      const host = new URL(machine.origin).hostname;
-      if (!privateIPv4(host)) throw new Error('invalid-machine');
-      const url = new URL('/download', 'http://' + host);
-      url.searchParams.set('file_name', path); url.searchParams.set('X-Token', machine.accessCode);
-      const response = await fetcher(url, { redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000) });
-      if (!response.ok) return response;
-      const type = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
-      if (['text/html','application/json'].includes(type)) { await response.body?.cancel(); throw new Error('files-unavailable'); }
-      return response;
-    }
-  } : {};
-  return {
-    ...native,
-    async upload(machine, name, source, size) {
-      if (native.list && (await native.list(machine)).some(item => item.path === name)) throw new Error('file-exists');
+  const upload = async (machine, name, source, size) => {
       return stagedUpload(source, size, async (path, md5) => {
         const file = await open(path, 'r');
         const uuid = randomUUID();
@@ -76,12 +51,12 @@ export function createElegooFiles(rpc, { cc1 = false, fetcher = fetch, queryFile
           return name;
         } finally { await file.close(); }
       });
-    },
+    };
+  if (!cc1) return createCC2Files(rpc, { fetcher, queryFiles, filePath, privateIPv4, upload });
+  return {
+    upload,
     async start(machine, path) {
-      if (native.list && !(await native.list(machine)).some(item => item.path === path)) throw new Error('missing');
-      const params = cc1 ? { Filename: path, StartLayer: 0, Calibration_switch: 1, PrintPlatformType: 0, Tlp_Switch: 0, slot_map: [] }
-        : { storage_media: 'local', filename: path, config: { delay_video: false, printer_check: true, print_layout: 'A', bedlevel_force: false, slot_map: [] } };
-      return rpc(machine, cc1 ? 128 : 1020, params);
+      return rpc(machine, 128, { Filename: path, StartLayer: 0, Calibration_switch: 1, PrintPlatformType: 0, Tlp_Switch: 0, slot_map: [] });
     }
   };
 }

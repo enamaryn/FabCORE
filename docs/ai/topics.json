@@ -3,15 +3,20 @@
     "id": "cc2-files",
     "title": "Inventaire et lancement CC2",
     "files": [
-      "poc/connectors.mjs",
+      "connectors/elegoo/src/monitor.ts",
+      "connectors/elegoo/src/files.ts",
       "poc/elegoo.mjs",
-      "poc/elegoo-files.mjs"
+      "poc/elegoo-files.mjs",
+      "poc/connectors.mjs"
     ],
     "symbols": [
+      "createCC2Services",
+      "createCC2Files",
       "createElegooMonitor",
       "createElegooFiles"
     ],
     "tests": [
+      "connectors/elegoo/test/monitor.test.ts",
       "poc/cc2-native-files.test.mjs",
       "poc/elegoo.test.mjs"
     ],
