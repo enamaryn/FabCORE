@@ -82,3 +82,9 @@ Topics, identifiant déterministe, méthodes 1002/2005/1044/1020/1021/1022/1028,
 ## Migration P2S LAN TypeScript · MIG-02.2.1
 
 Session MQTT/TLS, corrélation des accusés et sondes : `connectors/bambu/src/monitor.ts` ; fichiers FTPS implicites (racine et `cache/`), téléchargement, envoi et lancement `gcode_file`/`project_file` : `connectors/bambu/src/files.ts`. `poc/bambu.mjs` et `poc/bambu-files.mjs` injectent le certificat `poc/certs/bambu-p2s.pem` (partagé avec la caméra et la découverte), la projection des contrôles et des AMS, puis réexportent les fonctions existantes. Topics, identifiants, QoS 0 sans rétention, délais (8 s rapport, 6 s accusé, 60 s fraîcheur, 14 s sonde), refus `bambu-authorization`, absence de mapping AMS et absence de rejeu inchangés. Caméra, découverte et pilote cloud Bambu ne sont pas migrés ici.
+
+## Migration Moonraker TypeScript · MIG-02.2.2
+
+`connectors/moonraker/src/index.ts` est l’unique implémentation de la lecture, des commandes, des fichiers et du terminal. `poc/moonraker.mjs` injecte le décodage JSON borné, la validation d’origine et les helpers de chemin/multipart ; il conserve ses exports utilitaires pour les appelants existants. Le module typé n’importe ni le POC ni le cœur, seulement les ports/types SDK et ses types locaux. Le serveur, la découverte et le registre gardent leurs contrats existants.
+
+Adresses par origine complète (IP + port), clés API, endpoints, délais et `redirect:error` conservés. Envoi multipart vers `gcodes` sans lancement ; lancement explicite avec chemin retourné. Erreur HTTP 4xx de commande = refus ; 5xx, réponse perdue ou résultat inattendu = inconnu, sans rejeu. Terminal : succès `/printer/gcode/script` = exécuté ; une erreur de lecture ultérieure du journal ne rejoue pas le script. Contrôles partagés, SDK public et manifestes autonomes ne sont pas migrés par ce déplacement. [Commandes, sources et recette](../docs/protocols/HTTP-LAN.md).

@@ -10,7 +10,7 @@ Ce fichier est la référence commune pour les assistants. Choisir le sujet ci-d
 | --- | --- | --- |
 | CC2 : session et fichiers | `connectors/elegoo/src/monitor.ts` → `createCC2Services` ; `files.ts` → `createCC2Files` ; adaptateurs `poc/elegoo*.mjs` | `connectors/elegoo/test/monitor.test.ts`, `poc/cc2-native-files.test.mjs` |
 | P2S LAN / autorisations | `connectors/bambu/src/monitor.ts` → `createP2SMonitor`, `files.ts` → `createP2SFiles` ; adaptateur `poc/bambu.mjs` ; `poc/manual-controls.mjs` | `connectors/bambu/test/monitor.test.ts`, `poc/bambu-auth-http.test.mjs` |
-| Envoi de fichier Moonraker | `poc/server.mjs` → `createFabCore` ; `poc/moonraker.mjs` → `createMoonrakerFiles` | `poc/files.test.mjs` |
+| Moonraker : états, fichiers, commandes et terminal | `connectors/moonraker/src/index.ts` → `createMoonrakerServices` ; adaptateur `poc/moonraker.mjs` | `connectors/moonraker/test/connector.test.ts`, `poc/files.test.mjs`, `poc/terminal.test.mjs` |
 | Droits et authentification | `poc/server.mjs` → `createFabCore` ; `poc/oidc.mjs` | `poc/oidc.test.mjs` |
 | Parc / fiche machine | `poc/live.js` → `liveFleet`, `liveDetail`, `filesPanel` | `poc/machine-cockpit.test.mjs` |
 | Commandes et chauffe | `poc/manual-controls.mjs` → `createManualControls` | `poc/manual-controls-http.test.mjs` |

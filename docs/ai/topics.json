@@ -51,22 +51,30 @@
   },
   {
     "id": "upload",
-    "title": "Envoi HTTP vers Moonraker",
+    "title": "Moonraker : supervision, fichiers, commandes et terminal",
     "files": [
+      "connectors/moonraker/src/index.ts",
+      "poc/moonraker.mjs",
       "poc/server.mjs",
       "poc/connectors.mjs",
-      "poc/moonraker.mjs",
       "poc/connector-http.mjs"
     ],
     "symbols": [
-      "createFabCore",
+      "createMoonrakerServices",
+      "readMoonraker",
+      "commandMoonraker",
       "createMoonrakerFiles",
-      "multipart"
+      "sendMoonrakerGcode"
     ],
     "tests": [
-      "poc/files.test.mjs"
+      "connectors/moonraker/test/connector.test.ts",
+      "poc/server.test.mjs",
+      "poc/files.test.mjs",
+      "poc/terminal.test.mjs",
+      "poc/moonraker-stream.test.mjs"
     ],
     "docs": [
+      "docs/protocols/HTTP-LAN.md",
       "poc/CONNECTORS.md"
     ]
   },
