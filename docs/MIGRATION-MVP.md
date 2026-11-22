@@ -12,7 +12,7 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 | --- | --- | --- | --- |
 | MIG-00 | Référence et recette de non-régression | Clôture POC | Bilan rédigé ; publication à valider |
 | MIG-01 | Architecture, contrats et outillage | MIG-00 | MIG-01.1 et MIG-01.2 en revue ([ADR](adr/README.md)) |
-| MIG-02 | Domaine et connecteurs TypeScript | MIG-01 | À faire |
+| MIG-02 | Domaine et connecteurs TypeScript | MIG-01 | MIG-02.1 en revue |
 | MIG-03 | Services backend et API | MIG-02 | À faire |
 | MIG-04 | PostgreSQL et reprise des données | MIG-03 | À faire |
 | MIG-05 | Événements et SSE | MIG-03/04 | À faire |
@@ -59,6 +59,8 @@ En revue : TypeScript sans build (`npm run typecheck`), ESLint limité à `src/`
 ## MIG-02 · Typer les connecteurs sans changer les protocoles
 
 ### MIG-02.1 · Domaine et adaptation
+
+En revue : contrat `ConnectorManifest` et `ConnectorLifecycle` (`src/domain/connector.ts`) ; adaptateur `createTypedConnectorRegistry` (`src/application/connectors.ts`) autour du registre du POC, sans changer protocoles, sessions ni temporisations. Le serveur POC n'utilise pas encore l'adaptateur : branchement progressif à partir de MIG-02.2/MIG-03.
 
 - MIG-02.1.1 Extraire types, validations et contrats de cycle de vie : ouvrir, lire, commander, fermer.
 - MIG-02.1.2 Adapter le registre existant ; conserver identifiants, capacités, temporisations et corrélations.
