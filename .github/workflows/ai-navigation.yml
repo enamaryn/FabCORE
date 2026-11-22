@@ -1,0 +1,22 @@
+name: AI navigation checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  navigation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: node --check scripts/ai-context.mjs
+      - run: node scripts/ai-context.mjs --check
+      - run: python3 scripts/check-ai-config.py

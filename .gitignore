@@ -1,2 +1,7 @@
 /.fabcore/
 /node_modules/
+# Caches/outils IA locaux ; seule la configuration Serena est versionnée.
+/.serena/*
+!/.serena/project.yml
+/.solidlsp/
+/.gitnexus/

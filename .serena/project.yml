@@ -1,0 +1,16 @@
+# Outil de développement facultatif ; caches et mémoires restent locaux.
+project_name: FabCore
+language_servers: [typescript]
+agent_interface: tools
+read_only: true
+ignore_all_files_in_gitignore: true
+ignored_paths:
+  - ".fabcore/**"
+  - "node_modules/**"
+  - "poc/certs/**"
+  - ".serena/**"
+fixed_tools:
+  - get_symbols_overview
+  - find_symbol
+  - find_referencing_symbols
+  - search_for_pattern

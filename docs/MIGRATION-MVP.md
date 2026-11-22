@@ -165,6 +165,10 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 
 **Sortie :** socle migré accepté et installation récupérable. La fin de cette migration n'équivaut pas à la livraison de toutes les fonctions commerciales du MVP.
 
+## Préalable IA avant MIG-01
+
+Organisation, carte et profils proposés dans [docs/ai/WORKFLOW.md](ai/WORKFLOW.md). Le [pilote Serena](ai/SERENA.md) reste facultatif et évalué séparément ; ni serveur de production ni dépendance runtime ajoutés. Valider ce préalable avant les changements techniques du MVP.
+
 ## Première action après validation du plan
 
 Ouvrir une PR MIG-01.1 de décisions et contrats, puis MIG-01.2 pour l'outillage minimal. Ne pas commencer par réécrire les connecteurs, déplacer tout le dépôt ou changer les dépendances en bloc.
