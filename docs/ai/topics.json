@@ -231,5 +231,29 @@
       "poc/README.md",
       "docs/MIGRATION-MVP.md"
     ]
+  },
+  {
+    "id": "contracts",
+    "title": "Contrats du domaine et outillage TypeScript",
+    "files": [
+      "src/domain/index.ts",
+      "src/domain/command.ts",
+      "src/domain/capabilities.ts",
+      "src/domain/telemetry.ts",
+      "eslint.config.js",
+      "tsconfig.json"
+    ],
+    "symbols": [
+      "mergeOutcome",
+      "restrictCapabilities",
+      "isEffectProven"
+    ],
+    "tests": [
+      "src/domain/contracts.test.ts"
+    ],
+    "docs": [
+      "docs/adr/README.md",
+      "docs/MIGRATION-MVP.md"
+    ]
   }
 ]

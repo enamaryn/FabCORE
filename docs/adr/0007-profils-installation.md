@@ -1,6 +1,6 @@
 # ADR 0007 · Profils d'installation et configuration
 
-**État :** Proposé · **Étape :** MIG-01.1.3 · Mise en œuvre MVP-02.3, MVP-03 et MIG-08.
+**État :** Accepté (2026-11-22) · **Étape :** MIG-01.1.3 · Mise en œuvre MVP-02.3, MVP-03 et MIG-08.
 
 ## Contexte
 
