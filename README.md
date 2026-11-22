@@ -14,6 +14,8 @@ Gardez un œil sur vos fabrications, ouvrez les caméras en direct et voyez quel
 
 ![Tableau de bord FabCore avec le parc et l’activité récente](docs/screenshots/vue-ensemble.webp)
 
+**POC clôturé le 22 novembre 2026 sur P2S et deux CC2.** [Bilan et limites](docs/POC-BILAN.md) · [Migration vers le MVP](docs/MIGRATION-MVP.md). Release « POC v0 » préparée pour validation, sans migration de l’installation.
+
 ## Ce que vous pouvez faire
 
 - **Suivre vos fabrications.** Retrouvez l’état des machines, les températures et l’avancement sur une même page. Mettez en pause ou reprenez une impression Klipper depuis la fiche de la machine.

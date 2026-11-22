@@ -1,6 +1,6 @@
 # Travailler sur FabCore
 
-Ce fichier s’adresse à toute personne ou IA qui intervient sur le dépôt. **Phase active : [POC](docs/POC.md).**
+Ce fichier s’adresse à toute personne ou IA qui intervient sur le dépôt. **Phase active : [MVP — cadrage et migration](docs/MVP.md).** Le POC est clôturé ; suivre le [bilan](docs/POC-BILAN.md) et le [plan de migration](docs/MIGRATION-MVP.md).
 
 ## Reprendre une session
 
@@ -10,8 +10,8 @@ Ce fichier s’adresse à toute personne ou IA qui intervient sur le dépôt. **
 
 | Phase | Document |
 | --- | --- |
-| POC · phase active | [État actuel, recette et prochain jalon](docs/POC.md) |
-| MVP · planifié | [Périmètre et agent local FabCore Cloud](docs/MVP.md) |
+| POC · clôturé | [État actuel, recette et prochain jalon](docs/POC.md) |
+| MVP · cadrage actif | [Périmètre et agent local FabCore Cloud](docs/MVP.md) |
 | Développement complet | [Évolutions après le MVP](docs/FULL-DEVELOPPEMENT.md) |
 
 Pour l’exploitation, consulter le [guide du POC](poc/README.md). Pour ajouter ou modifier un connecteur, lire le [contrat des connecteurs](poc/CONNECTORS.md). Pour une interface, lire les [règles produit](docs/PRODUCT.md). L’intention d’origine du projet est dans le [prompt d’origine](MASTER_PROMPT_ORIGIN.md), à consulter seulement pour un cadrage.
