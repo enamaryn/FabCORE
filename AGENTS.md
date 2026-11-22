@@ -15,6 +15,7 @@ Ce fichier est la référence commune pour les assistants. Choisir le sujet ci-d
 | CC1 : SDCP et transfert | `connectors/elegoo/src/cc1.ts` → `readElegooCC1`, `requestElegooCC1` ; `upload.ts` → `createElegooFileServices` | `connectors/elegoo/test/cc1.test.ts`, `poc/elegoo.test.mjs` |
 | xTool M2 : session, caméra et découverte | `connectors/xtool/src/monitor.ts` → `createXToolServices` ; `camera.ts`, `media.ts`, `discovery.ts` | `connectors/xtool/test/monitor.test.ts`, `poc/xtool.test.mjs` |
 | Longer Ray5 : GRBL et carte SD | `connectors/longer/src/monitor.ts` → `createRay5Services` ; `files.ts` → `createRay5FileServices` | `connectors/longer/test/connector.test.ts`, `poc/longer-ray5-controls.test.mjs` |
+| Socle HTTP / OpenAPI (MIG-03) | `src/http/app.ts` → `createHttpApp` ; routes migrées `src/http/routes/index.ts` → `migratedRoutes` ; délégation dans `poc/server.mjs` | `src/http/app.test.ts`, `poc/server.test.mjs` |
 | Droits et authentification | `poc/server.mjs` → `createFabCore` ; `poc/oidc.mjs` | `poc/oidc.test.mjs` |
 | Parc / fiche machine | `poc/live.js` → `liveFleet`, `liveDetail`, `filesPanel` | `poc/machine-cockpit.test.mjs` |
 | Commandes et chauffe | `poc/manual-controls.mjs` → `createManualControls` | `poc/manual-controls-http.test.mjs` |

@@ -185,6 +185,34 @@
     ]
   },
   {
+    "id": "http",
+    "title": "Socle HTTP Fastify, routes migrées et OpenAPI",
+    "files": [
+      "src/http/app.ts",
+      "src/http/errors.ts",
+      "src/http/routes/index.ts",
+      "src/http/routes/session.ts",
+      "src/http/routes/diagnostics.ts",
+      "src/http/openapi.ts",
+      "poc/server.mjs"
+    ],
+    "symbols": [
+      "createHttpApp",
+      "migratedRoutes",
+      "openApiDocument",
+      "HttpError"
+    ],
+    "tests": [
+      "src/http/app.test.ts",
+      "poc/server.test.mjs"
+    ],
+    "docs": [
+      "docs/api/openapi.json",
+      "docs/adr/0002-outillage.md",
+      "docs/MIGRATION-MVP.md"
+    ]
+  },
+  {
     "id": "permissions",
     "title": "Authentification et droits",
     "files": [

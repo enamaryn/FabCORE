@@ -1,5 +1,7 @@
 import { manualSpool, supportsManualSpool } from './manual-spool.mjs';
 import { createServer } from 'node:http';
+import { createHttpApp } from '../src/http/app.ts';
+import { migratedRoutes } from '../src/http/routes/index.ts';
 import { once } from 'node:events';
 import { randomBytes, randomUUID, createHash, scrypt, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -227,13 +229,6 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       } catch { /* The local login page remains available when OIDC fails. */ }
       return redirect('/?auth=oidc-failed', oidc.clearCookie);
     }
-    if (req.method === 'GET' && path === '/api/session') {
-      return answer(res, 200, {
-        installed: Boolean(store.state.admin), authenticated: Boolean(activeSession),
-        username: viewer?.username ?? null, ...(viewer ? { role: viewer.role } : {}),
-        ...(secure && oidc && store.state.admin ? { oidcEnabled: true } : {})
-      });
-    }
     const cloudRoute = path.match(/^\/api\/cloud-accounts(?:\/([a-f0-9-]{36})\/(login|verify|devices|disconnect|delete|logs|logs-download|telemetry-start|telemetry-stop|import))?$/);
     if (cloudRoute) {
       if (!viewer) return error(res, 401, 'sign-in');
@@ -267,14 +262,6 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       } catch (failure) {
         return error(res, failure instanceof CloudError ? failure.status : 500, failure instanceof CloudError ? failure.message : 'cloud-storage');
       }
-    }
-    if (req.method === 'GET' && path === '/api/diagnostics') {
-      if (!viewer) return error(res, 401, 'sign-in');
-      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
-      return answer(res, 200, {
-        ...diagnostics.view(),
-        fleet: store.state.machines.map(({ id, name }) => ({ id, name }))
-      });
     }
     const machineLogRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/(logs|logs-download)$/);
     if (req.method === 'GET' && machineLogRoute) {
@@ -858,14 +845,25 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     }
     return signIn(res, username, role);
   }
+  // Socle HTTP typé (MIG-03) : routes migrées servies par Fastify, les autres par le routeur POC ci-dessus.
+  const viewerOf = (req) => {
+    const key = session(req);
+    const entry = key ? sessions.get(key) : null;
+    return entry ? { session: key, username: entry.username, role: entry.role } : null;
+  };
+  const http = createHttpApp({ allowedHost, viewer: viewerOf, onFailure: () => diagnostics.record('server', 'request-failed') }, migratedRoutes({
+    session: { installed: () => Boolean(store.state.admin), oidcEnabled: () => Boolean(secure && oidc && store.state.admin), viewer: viewerOf },
+    diagnostics: { view: () => diagnostics.view(), fleet: () => store.state.machines.map(({ id, name }) => ({ id, name })) }
+  }));
   const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => {
+    if (http.handles(req)) return http.dispatch(req, res);
     route(req, res).catch(() => {
       diagnostics.record('server', 'request-failed');
       if (!res.headersSent) error(res, 500, 'internal');
       else res.end();
     });
   });
-  server.on('close', () => { connectors.close(); cloud.close(); });
+  server.on('close', () => { connectors.close(); cloud.close(); void http.close(); });
   return { server, token };
 }
 
