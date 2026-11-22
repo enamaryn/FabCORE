@@ -58,3 +58,14 @@ test('Ray5 SD : refus hors repos et erreur de vérification après upload ne lan
   await assert.rejects(files.upload(machine, 'a.gc', (async function* () { yield content; })(), content.length), /upload-failed/);
   assert.equal(uploads, 1); assert.equal(starts, 0);
 });
+
+test('Ray5 : après fermeture, aucun appel tardif ne rouvre de socket', async () => {
+  const sockets: Socket[] = [];
+  const monitor = services.createRay5Monitor({ connectTCP: () => { const s = new Socket(); sockets.push(s); return s; }, pollMs: 10000 });
+  monitor.read(machine);
+  monitor.close();
+  assert.equal(sockets[0]!.destroyed, true);
+  assert.equal(monitor.read(machine).status, 'error', 'adresse refusée une fois fermé');
+  await assert.rejects(monitor.command(machine, 'pause'), /command-unconfirmed/);
+  assert.equal(sockets.length, 1);
+});

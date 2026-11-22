@@ -141,6 +141,8 @@ export function createCC2Services({ reportedControls, canvasFilaments, readRespo
   // configured machine and use the same identifier when reconnecting.
   function createElegooMonitor({ fetcher = fetch, connectPrinter = connect, now = Date.now, diagnostics }: CC2MonitorOptions = {}) {
     const sessions = new Map<string, Session>();
+    // Après close(), plus aucune session n'est ouverte : un appel tardif ne doit pas recréer de connexion.
+    let closed = false;
     function forget(id: string) {
       const entry = sessions.get(id);
       sessions.delete(id);
@@ -314,6 +316,7 @@ export function createCC2Services({ reportedControls, canvasFilaments, readRespo
         return entry.rpc(method, {});
       },
       async read(machine: CC2Machine) {
+        if (closed) return empty('offline', 'elegoo-connection');
         let entry = sessions.get(machine.id);
         if (!entry) {
           entry = { controlAt: 0, current: empty('connecting', null), retry: 0 };
@@ -334,7 +337,7 @@ export function createCC2Services({ reportedControls, canvasFilaments, readRespo
         return entry.current;
       },
       forget,
-      close() { for (const id of sessions.keys()) forget(id); }
+      close() { closed = true; for (const id of sessions.keys()) forget(id); }
     };
   }
 

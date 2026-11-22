@@ -45,7 +45,8 @@
     "tests": [
       "connectors/bambu/test/monitor.test.ts",
       "poc/bambu.test.mjs",
-      "poc/bambu-auth-http.test.mjs"
+      "poc/bambu-auth-http.test.mjs",
+      "connectors/bambu/test/lifecycle.test.ts"
     ],
     "docs": [
       "docs/protocols/BAMBU-LAN.md"
@@ -385,7 +386,8 @@
     ],
     "tests": [
       "src/domain/contracts.test.ts",
-      "src/application/connectors.test.ts"
+      "src/application/connectors.test.ts",
+      "poc/connector-lifecycle.test.mjs"
     ],
     "docs": [
       "docs/adr/README.md",
