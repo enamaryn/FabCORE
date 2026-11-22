@@ -329,47 +329,11 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     if (path === '/api/discovery') {
       if (!viewer) return error(res, 401, 'sign-in');
       if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
-      const available = networks();
-      if (req.method === 'GET') return answer(res, 200, { networks: available.map(({ cidr }) => cidr) });
-      if (req.method !== 'POST') return error(res, 405, 'missing');
-      if (!requireJson(req, res)) return;
-      let data;
-      try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
-      const network = available.find(({ cidr }) => cidr === data.network);
-      if (!network) return error(res, 400, 'discovery-network');
-      if (discoveryActive) return error(res, 429, 'discovery-busy');
-      const abort = new AbortController();
-      const stop = () => abort.abort();
-      res.once('close', stop);
-      discoveryActive = true;
-      try {
-        const found = await scan(network, abort.signal, { machines: store.state.machines, readRay5: async machine => (await connectors.get('longer-ray5')).read(machine) });
-        if (abort.signal.aborted) return;
-        const devices = reconcileDiscovery(network, found, store.state.machines);
-        return answer(res, 200, { devices });
-      } finally {
-        res.off('close', stop);
-        discoveryActive = false;
-      }
+      // GET et POST : src/http/routes/machines.ts ; autres méthodes refusées comme avant.
+      return error(res, 405, 'missing');
     }
     // Lecture du parc (GET /api/machines) : src/http/routes/fleet.ts, service listFleet ci-dessous.
-    const spoolRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/spool$/);
-    if (req.method === 'POST' && spoolRoute) {
-      if (!viewer) return error(res, 401, 'sign-in');
-      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
-      if (!requireJson(req, res)) return;
-      let data;
-      try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
-      const machine = store.state.machines.find(item => item.id === spoolRoute[1]);
-      if (!machine) return error(res, 404, 'missing');
-      if (!supportsManualSpool(machine.kind ?? 'klipper')) return error(res, 400, 'spool-unsupported');
-      const spool = data.spool === null ? null : manualSpool(data.spool);
-      if (data.spool !== null && !spool) return error(res, 400, 'spool-invalid');
-      // Notes can be edited offline. Reported modules retain display priority.
-      const machines = store.state.machines.map(item => item === machine ? { ...item, manualSpool: spool } : item);
-      store.save({ ...store.state, machines });
-      return answer(res, 200, { manualSpool: spool });
-    }
+    // Bobine manuelle (POST /api/machines/{id}/spool) : src/http/routes/machines.ts.
     const command = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/command$/);
     if (req.method === 'POST' && command) {
       if (!viewer) return error(res, 401, 'sign-in');
@@ -626,21 +590,18 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       }
       return error(res, 404, 'missing');
     }
-    if (req.method !== 'POST' || !['/api/setup', '/api/login', '/api/logout', '/api/machines', '/api/machines/test', '/api/machines/pair', '/api/machines/edit', '/api/machines/delete', '/api/observers'].includes(path)) {
-      return error(res, 404, 'missing');
-    }
-    if (!requireJson(req, res)) return;
-    if (path.startsWith('/api/machines') || path === '/api/observers') {
-      if (!viewer) return error(res, 401, 'sign-in');
-      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
-    }
-    let data;
-    try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
-    if (path.startsWith('/api/machines')) {
+    // Comptes (POST /api/setup, login, logout, observers) et machines (POST /api/machines, test, pair, edit, delete) :
+    // src/http/routes/accounts.ts et machines.ts. Toute autre requête répond 404 comme avant.
+    return error(res, 404, 'missing');
+  }
+  // Services d'administration du parc, appelés par src/http/routes/machines.ts. Erreurs : HttpError (code stable).
+  // `signal` est annulé quand le client ferme la requête ; `null` signifie alors qu'aucune réponse n'est due.
+  const machineAdmin = {
+    async write(action, data, { viewer, signal, stillSignedIn }) {
       const existing = store.state.machines.find((machine) => machine.id === data.id);
-      if (existing && pendingCommands.has(existing.id)) return error(res, 409, 'command-busy');
-      if (path === '/api/machines/delete') {
-        if (!existing) return error(res, 404, 'missing');
+      if (existing && pendingCommands.has(existing.id)) throw new HttpError(409, 'command-busy');
+      if (action === 'delete') {
+        if (!existing) throw new HttpError(404, 'missing');
         const machines = store.state.machines.filter((machine) => machine !== existing);
         store.save({ ...store.state, machines });
         snapshot.forget(existing.id);
@@ -649,26 +610,26 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         for (const stream of cameraStreams.values()) {
           if (stream.machineId === existing.id) stream.controller.abort();
         }
-        return answer(res, 200, { id: existing.id });
+        return { status: 200, body: { id: existing.id } };
       }
-      if ((path === '/api/machines/edit' || data.id) && !existing) return error(res, 404, 'missing');
+      if ((action === 'edit' || data.id) && !existing) throw new HttpError(404, 'missing');
       const name = value(data, 'name', 80).trim();
       const kind = data.kind ?? 'klipper';
-      if (existing && kind !== (existing.kind ?? 'klipper')) return error(res, 400, 'machine-invalid');
+      if (existing && kind !== (existing.kind ?? 'klipper')) throw new HttpError(400, 'machine-invalid');
       const definition = connectorDefinition(kind);
       const connection = definition?.configure(data, existing);
-      if (!name || !connection) return error(res, 400, 'machine-invalid');
+      if (!name || !connection) throw new HttpError(400, 'machine-invalid');
       const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection, ...(existing?.manualSpool ? { manualSpool: existing.manualSpool } : {}) };
-      if (kind === 'bambu' && store.state.machines.some(item => item.id !== machine.id && ['bambu', 'bambu-cloud'].includes(item.kind) && item.serial === machine.serial)) return error(res, 409, 'cloud-machine-exists');
-      const testing = path === '/api/machines/test';
-      const pairing = path === '/api/machines/pair';
+      if (kind === 'bambu' && store.state.machines.some(item => item.id !== machine.id && ['bambu', 'bambu-cloud'].includes(item.kind) && item.serial === machine.serial)) throw new HttpError(409, 'cloud-machine-exists');
+      const testing = action === 'test';
+      const pairing = action === 'pair';
       if (pairing) {
-        if (kind !== 'xtool-m2') return error(res, 400, 'machine-invalid');
-        if (xtoolPairings.has(machine.origin)) return error(res, 409, 'xtool-pairing-busy');
+        if (kind !== 'xtool-m2') throw new HttpError(400, 'machine-invalid');
+        if (xtoolPairings.has(machine.origin)) throw new HttpError(409, 'xtool-pairing-busy');
         if (store.state.machines.some(entry => entry.origin === machine.origin && entry.id !== existing?.id)) {
-          return error(res, 409, 'machine-duplicate');
+          throw new HttpError(409, 'machine-duplicate');
         }
-        if (!existing && store.state.machines.length >= 8) return error(res, 409, 'machine-limit');
+        if (!existing && store.state.machines.length >= 8) throw new HttpError(409, 'machine-limit');
       }
       const cc2TestKey = kind === 'elegoo' && !existing
         ? digest(JSON.stringify([machine.origin, machine.accessCode])).toString('hex')
@@ -678,18 +639,16 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (verifiedCC2) {
         machine.serial = previousTest.serial;
       } else if (testing || definition.verify) {
-        if (probes >= 2) return error(res, 429, 'probe-busy');
+        if (probes >= 2) throw new HttpError(429, 'probe-busy');
         probes++;
         if (pairing) xtoolPairings.add(machine.origin);
-        const abort = new AbortController();
-        res.once('close', () => abort.abort());
         try {
           const connector = await connectors.get(kind);
-          if (abort.signal.aborted) return;
+          if (signal.aborted) return null;
           const sameConnection = existing && existing.origin === machine.origin && existing.accessCode === machine.accessCode;
-          const result = await connector.probe(machine, { signal: abort.signal, testing, sameConnection, pairing });
-          if (abort.signal.aborted) return;
-          if (pairing && !session(req)) return error(res, 401, 'sign-in');
+          const result = await connector.probe(machine, { signal, testing, sameConnection, pairing });
+          if (signal.aborted) return null;
+          if (pairing && !stillSignedIn()) throw new HttpError(401, 'sign-in');
           if (testing) {
             if (cc2TestKey) {
               cc2Tests.delete(viewer);
@@ -697,17 +656,17 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
                 cc2Tests.set(viewer, { key: cc2TestKey, serial: result.serial, expires: Date.now() + 60_000 });
               }
             }
-            return answer(res, 200, {
+            return { status: 200, body: {
               ok: result.ok,
               issue: result.issue ?? (result.ok ? null : 'elegoo-report'),
               ...(result.ok && result.serial ? { serial: result.serial } : {})
-            });
+            } };
           }
-          if (!result.ok) return error(res, 422, result.issue ?? 'elegoo-info');
+          if (!result.ok) throw new HttpError(422, result.issue ?? 'elegoo-info');
           machine.serial = result.serial;
           if (result.fingerprint) machine.fingerprint = result.fingerprint;
           if (pairing && result.pairingToken) machine.pairingToken = result.pairingToken;
-          if (existing && !store.state.machines.includes(existing)) return error(res, 409, 'machine-changed');
+          if (existing && !store.state.machines.includes(existing)) throw new HttpError(409, 'machine-changed');
         } finally {
           probes--;
           if (pairing) xtoolPairings.delete(machine.origin);
@@ -715,9 +674,9 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       }
       if (store.state.machines.some((entry) => entry.id !== existing?.id &&
           (entry.origin === machine.origin || (machine.serial && entry.kind === kind && entry.serial === machine.serial)))) {
-        return error(res, 409, 'machine-duplicate');
+        throw new HttpError(409, 'machine-duplicate');
       }
-      if (!existing && store.state.machines.length >= 8) return error(res, 409, 'machine-limit');
+      if (!existing && store.state.machines.length >= 8) throw new HttpError(409, 'machine-limit');
       const machines = existing ? store.state.machines.map((entry) => entry.id === machine.id ? machine : entry)
         : [...store.state.machines, machine];
       store.save({ ...store.state, machines });
@@ -729,11 +688,34 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
           if (stream.machineId === machine.id) stream.controller.abort();
         }
       }
-      return answer(res, existing ? 200 : 201, { id: machine.id });
+      return { status: existing ? 200 : 201, body: { id: machine.id } };
+    },
+    spool(id, data) {
+      const machine = store.state.machines.find(item => item.id === id);
+      if (!machine) throw new HttpError(404, 'missing');
+      if (!supportsManualSpool(machine.kind ?? 'klipper')) throw new HttpError(400, 'spool-unsupported');
+      const spool = data.spool === null ? null : manualSpool(data.spool);
+      if (data.spool !== null && !spool) throw new HttpError(400, 'spool-invalid');
+      // Notes can be edited offline. Reported modules retain display priority.
+      const machines = store.state.machines.map(item => item === machine ? { ...item, manualSpool: spool } : item);
+      store.save({ ...store.state, machines });
+      return { manualSpool: spool };
+    },
+    networks: () => ({ networks: networks().map(({ cidr }) => cidr) }),
+    async discover(data, signal) {
+      const network = networks().find(({ cidr }) => cidr === data.network);
+      if (!network) throw new HttpError(400, 'discovery-network');
+      if (discoveryActive) throw new HttpError(429, 'discovery-busy');
+      discoveryActive = true;
+      try {
+        const found = await scan(network, signal, { machines: store.state.machines, readRay5: async machine => (await connectors.get('longer-ray5')).read(machine) });
+        if (signal.aborted) return null;
+        return { devices: reconcileDiscovery(network, found, store.state.machines) };
+      } finally {
+        discoveryActive = false;
+      }
     }
-    // Comptes (setup, login, logout, observers) : src/http/routes/accounts.ts, service accounts ci-dessous.
-    return error(res, 404, 'missing');
-  }
+  };
   // Services des comptes, appelés par src/http/routes/accounts.ts. Erreurs : HttpError (code stable).
   const grant = (username, role) => ({ body: { authenticated: true, username, role }, cookie: newSession(username, role) });
   const credentials = data => ({ username: value(data, 'username', 40).trim(), password: value(data, 'password', 128) });
@@ -846,6 +828,12 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     session: { installed: () => Boolean(store.state.admin), oidcEnabled: () => Boolean(secure && oidc && store.state.admin), viewer: viewerOf },
     diagnostics: { view: () => diagnostics.view(), fleet: () => store.state.machines.map(({ id, name }) => ({ id, name })) },
     fleet: { list: viewer => listFleet(viewer.session) },
+    machines: {
+      write: (action, data, { viewer, signal, stillSignedIn }) => machineAdmin.write(action, data, { viewer: sessions.get(viewer.session), signal, stillSignedIn }),
+      spool: (id, data) => machineAdmin.spool(id, data),
+      networks: () => machineAdmin.networks(),
+      discover: (data, signal) => machineAdmin.discover(data, signal)
+    },
     notifications: notificationService,
     logs: {
       machine: id => store.state.machines.find(item => item.id === id) ?? null,
