@@ -75,7 +75,7 @@ test('Ray5 : fermeture/péremption effacent les mesures et reconnexion temporis�
 
 test('Ray5 ESP3D : arduino, CURRENT_ID/PAGEID, HTTP Error sans faux succès, aucun reset', async ctx => {
   const socket=new Socket();const calls=[];let url;
-  const monitor=createRay5Monitor({openWS:u=>{url=u;queueMicrotask(()=>socket.emit('open'));return socket;},fetcher:async(u,o)=>{calls.push([u,o]);return new Response('Error');},pollMs:10000,probeMs:40});ctx.after(()=>monitor.close());
+  const monitor=createRay5Monitor({openWS:u=>{url=u;queueMicrotask(()=>socket.emit('open'));return socket;},fetcher:async(u,o)=>{calls.push([u,o]);return new Response('Error');},pollMs:10000,probeMs:2000});ctx.after(()=>monitor.close());
   const http={...machine,origin:'http://192.168.1.60:8848'};
   const probing=monitor.probe(http);await turn();
   assert.equal(url,'ws://192.168.1.60:8849/');assert.equal(calls.length,0);
