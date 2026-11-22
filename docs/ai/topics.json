@@ -79,6 +79,35 @@
     ]
   },
   {
+    "id": "octoprint-prusalink",
+    "title": "OctoPrint et PrusaLink : supervision, fichiers et commandes",
+    "files": [
+      "connectors/octoprint/src/index.ts",
+      "connectors/prusalink/src/index.ts",
+      "poc/octoprint.mjs",
+      "poc/prusalink.mjs",
+      "poc/connectors.mjs"
+    ],
+    "symbols": [
+      "createOctoPrintServices",
+      "createPrusaLinkServices",
+      "readOctoPrint",
+      "readPrusaLink",
+      "createPrusaOperations"
+    ],
+    "tests": [
+      "connectors/octoprint/test/connector.test.ts",
+      "connectors/prusalink/test/connector.test.ts",
+      "poc/octoprint.test.mjs",
+      "poc/files.test.mjs",
+      "poc/terminal.test.mjs"
+    ],
+    "docs": [
+      "docs/protocols/HTTP-LAN.md",
+      "poc/CONNECTORS.md"
+    ]
+  },
+  {
     "id": "permissions",
     "title": "Authentification et droits",
     "files": [
