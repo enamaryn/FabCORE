@@ -210,17 +210,17 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
       });
     });
     client.on('message', (topic, payload, packet) => {
-      if (!entry.close || packet?.retain || payload.length > 65536) return;
+      if (!entry.close || packet?.retain || payload.length > 512 * 1024) return;
       let message;
       try { message = JSON.parse(payload); } catch { return; }
       if (topic === registration && !registered) {
         if (message?.error !== 'ok') return fail('error', 'elegoo-register');
         registered = true;
-        entry.rpc = (method, params) => new Promise((resolve, reject) => {
+        entry.rpc = (method, params, raw = false) => new Promise((resolve, reject) => {
           if (!entry.close || !client.connected) return reject(new Error('elegoo-connection'));
           const id = ++transaction;
           const timer = setTimeout(() => { pending.delete(id); reject(new Error('command-unconfirmed')); }, 6000);
-          pending.set(id, { method, resolve, reject, timer });
+          pending.set(id, { method, raw, resolve, reject, timer });
           diagnostics?.trace?.(machine.id, 'mqtt-send', { topic: request, method, sequence_id: id, params });
           client.publish(request, JSON.stringify({ id, method, params }), { qos: 0, retain: false }, error => {
             if (error && pending.has(id)) { clearTimeout(timer); pending.delete(id); reject(error); }
@@ -236,7 +236,12 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
       if (item && (message.method === undefined || message.method === item.method)) {
         diagnostics?.trace?.(machine.id, 'mqtt-command-response', { topic, method: item.method, sequence_id: message.id, correlated: true, payload: message.result });
         pending.delete(message.id); clearTimeout(item.timer);
-        if (Number.isInteger(message.result?.error_code)) item.resolve(message.result.error_code === 0);
+        if (Number.isInteger(message.result?.error_code)) {
+          if (item.raw) {
+            if (message.result.error_code === 0) item.resolve(message.result);
+            else item.reject(new Error('files-unavailable'));
+          } else item.resolve(message.result.error_code === 0);
+        }
         else item.reject(new Error('command-unconfirmed'));
         return;
       }
@@ -268,6 +273,11 @@ export function createElegooMonitor({ fetcher = fetch, connectPrinter = connect,
     });
   }
   return {
+    queryFiles(machine) {
+      const entry = sessions.get(machine.id);
+      if (!entry?.rpc) throw new Error('elegoo-connection');
+      return entry.rpc(1044, { storage_media: 'local', path: '/' }, true);
+    },
     controlState(machine) {
       const entry = sessions.get(machine.id);
       if (!entry?.rpc || now() - entry.controlAt > 30000) return undefined;

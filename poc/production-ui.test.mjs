@@ -93,7 +93,8 @@ test('fichiers : filtrer et paginer conserve la cible exacte des actions', () =>
   sandbox.state.role = 'admin';
   const cc2 = sandbox.filesState('cc2'); cc2.files = [];
   html = sandbox.filesPanel({ id: 'cc2', kind: 'elegoo', status: 'ready' });
-  assert.match(html, /Aucun fichier envoyé via FabCore/);
+  assert.match(html, /inventaire natif MQTT 1044/);
+  assert.match(html, /Aucun fichier pris en charge trouvé/);
   assert.doesNotMatch(html, /Aucun fichier G-code sur la machine/);
 });
 

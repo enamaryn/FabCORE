@@ -12,6 +12,10 @@ Relevé du **22 novembre 2026**. Remplace le premier pilote en lecture seule du 
 
 Lire le code des références est nécessaire : Ray5-Pilot possède un Stop configurable (`hold_only` est une pause, pas une annulation), un mode soft-reset et des tolérances à certaines réponses HTTP `Error`. FabCore ne transforme pas ces réponses ambiguës en preuve d’exécution. Les commandes ESP3D d’autres générations, les ports de Ray5 Mini et les ports d’émulateurs ne sont pas généralisés à cette Ray5.
 
+## Retour utilisateur du 22 novembre
+
+Valentin confirme le homing réussi depuis FabCore sur sa Ray5 : prise d’origine validée sur matériel. Firmware exact non relevé ; les autres commandes et le parcours SD restent à tester. Le périmètre de clôture du POC reste CC2/P2S à sa demande.
+
 ## Observations matérielles en lecture seule
 
 Depuis le LXC, sur la Ray5 de recette : ports 80 et 8080 ouverts ; 8848/8849 refusés. Requête TCP `?` : `<Idle|MPos:0.000,0.000,0.000|FS:0,0>` ; aucun mouvement ni tir.

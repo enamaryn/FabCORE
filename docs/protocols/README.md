@@ -5,7 +5,7 @@ Relevé du 19 novembre 2026, base FabCore `7d1e6a4`. Ce dossier décrit le code 
 | Fabricant / famille | Modèles ou accès couverts | Dossier |
 | --- | --- | --- |
 | Bambu Lab | P2S ; autres modèles non validés dans FabCore | [LAN](BAMBU-LAN.md), [recherche cloud](BAMBU-CLOUD.md) |
-| Elegoo | Centauri Carbon (CC1), Centauri Carbon 2 avec/sans CANVAS | [LAN et commandes](ELEGOO-LAN.md) |
+| Elegoo | CC1 ; CC2 avec/sans CANVAS, Pause/Stop et chauffe confirmés, inventaire interne proposé | [LAN et commandes](ELEGOO-LAN.md) |
 | Longer | Ray5 Wi-Fi, supervision et lecture SD observées ; pilotage TCP et production SD expérimentaux à qualifier | [Recherche et recette](LONGER-RAY5-LAN.md) |
 | xTool | M2, identité JS002, protocole WS-V2 | [LAN et caméras](XTOOL-M2-LAN.md) |
 | Klipper, OctoPrint, PrusaLink | Familles d’API ; compatibilité dépend du firmware et du modèle | [API HTTP locales](HTTP-LAN.md) |

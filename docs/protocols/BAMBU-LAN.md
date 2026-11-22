@@ -2,6 +2,25 @@
 
 Relevé : 19 novembre 2026, code FabCore `7d1e6a4`. Référence intégrée : P2S. Ne pas annoncer X1/P1/A1/H2 compatibles sur cette seule base.
 
+## Incident de vérification des commandes · 22 novembre 2026
+
+Retour utilisateur : Pause et Stop refusés sur la P2S pendant un essai, alors que la supervision fonctionne. Lecture seule du journal du LXC : réponses MQTT corrélées aux commandes Pause et Stop avec `result="failed"`, `reason="mqtt message verify failed"`. Le même motif apparaît pour `project_file`. Ce sont des refus explicites, pas un timeout, une panne réseau ni une preuve d’arrêt.
+
+Le manuel officiel P2S, section **7.3.2, page imprimée 68**, indique que le contrôle direct par des logiciels tiers passe par **Settings → LAN Only → Developer Mode** après activation du LAN uniquement : [manuel P2S V1.0 2026.05](https://csm.bblcdn.com/hub/9425242c00344b0e801b6179f9a243aa.pdf). Voir aussi [l’explication officielle des modes standard et développeur](https://blog.bambulab.com/updates-and-third-party-integration-with-bambu-connect/). La disponibilité de la télémétrie ne prouve pas l’autorisation d’écriture.
+
+Valentin confirme avoir **activé le mode développeur le 22 novembre**. Les nouveaux essais auront lieu après la mise à jour du correctif ; **Pause/Stop, chauffe et lancement ne sont pas validés par ce seul changement de réglage**. Aucun mode modifié à distance, firmware changé ou commande matérielle rejouée pendant ce diagnostic. Le LAN uniquement désactive les fonctions cloud de la machine selon le manuel ; il ne constitue pas un accès simultané LAN/cloud dans FabCore.
+
+### Messages et commandes concernés
+
+- Transport : session MQTTS existante ; topic `device/<serial>/request` ; canal `print`.
+- Pause/Reprise/Stop : `{ "print": { "command":"pause|resume|stop", "param":"", "sequence_id":"<transaction>" } }`.
+- Lancement : `command="project_file"`, paramètres construits par [bambu-files.mjs](../../poc/bambu-files.mjs) pour le chemin réel du G-code/plateau.
+- Chauffe : `command="gcode_line"`, `M104 S<consigne>` pour la buse, `M140 S<consigne>` pour le plateau ; attente de la consigne réellement remontée, pas seulement d’un ACK.
+- Un refus de vérification connu produit désormais `bambu-authorization` et HTTP 403, avec aide localisée dans l’interface. L’état réel de fabrication reste affiché ; ce refus ne met pas artificiellement la machine hors ligne. Les autres refus restent distincts.
+- Aucun rejeu automatique, aucune signature fabriquée ni usurpation du logiciel officiel. Une commande critique réussie ultérieure peut effacer l’avertissement ; elle ne prouve pas que toutes les autres fonctions sont autorisées.
+
+Après fusion/mise à jour : confirmer LAN + mode développeur sur l’écran, puis sur un travail court supervisé tester Pause, reprise et Stop ; comparer état réel et retour FabCore. Tester ensuite chauffe/coupure puis lancement séparément. En cas de nouvel échec, conserver réponse native et firmware exact. Le panneau ne doit jamais annoncer un arrêt sur la seule publication MQTT.
+
 ## Connexion et fonctions intégrées
 
 | Fonction | Transport / implémentation | Limites |

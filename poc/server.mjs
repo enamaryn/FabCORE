@@ -477,7 +477,10 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
             if (after.includes(status) || (machine.kind === 'longer-ray5' && action === 'stop' && status === 'error' && report.nativeState === 'Alarm' && report.spindle === 0 && report.feedRate === 0)) return answer(res, 200, { status });
             if (attempt < 3) await delay(350);
           }
-        } catch { /* The request may have reached the printer. Never retry it automatically. */ }
+        } catch (failure) {
+          if (failure.message === 'bambu-authorization') return error(res, 403, 'bambu-authorization');
+          /* The request may have reached the printer. Never retry it automatically. */
+        }
         return error(res, 504, 'command-unconfirmed');
       } finally {
         snapshot.forget(machine.id);
@@ -519,6 +522,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         diagnostics.record('controls', result.outcome, machine.id);
         return answer(res, result.outcome === 'rejected' ? 502 : 200, result.outcome === 'rejected' ? { error: 'command-rejected' } : result);
       } catch (failure) {
+        if (failure.message === 'bambu-authorization') return error(res, 403, 'bambu-authorization');
         const heaterUnconfirmed = attempted && failure.message === 'heater-unconfirmed';
         diagnostics.record('controls', !attempted ? 'request-failed' : heaterUnconfirmed ? 'heater-unconfirmed' : failure.message === 'command-rejected' ? 'rejected' : 'unconfirmed', machine.id);
         return error(res, !attempted || failure.message === 'command-rejected' ? 502 : 504, !attempted ? 'controls-unavailable' : heaterUnconfirmed ? 'heater-unconfirmed' : failure.message === 'command-rejected' ? 'command-rejected' : 'command-unconfirmed');
@@ -688,6 +692,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
               if (attempt < 5) await delay(500);
             }
           } catch (failure) {
+            if (failure.message === 'bambu-authorization') return error(res, 403, 'bambu-authorization');
             if (['project-format', 'project-no-gcode', 'project-multiple-plates'].includes(failure.message)) return error(res, 400, failure.message);
             /* La demande a pu atteindre la machine : ne jamais la renvoyer automatiquement. */
           }

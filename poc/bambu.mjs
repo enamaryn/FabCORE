@@ -96,8 +96,16 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
         trace('mqtt-command-response', { channel, correlated: true, payload: delta });
         pending.delete(String(delta.sequence_id));
         clearTimeout(acknowledgement.timer);
-        if (delta.result === 'success') acknowledgement.resolve(true);
-        else if (delta.result === 'fail' || delta.result === 'failed') acknowledgement.resolve(false);
+        if (delta.result === 'success') {
+          if (['pause','resume','stop','gcode_line','project_file'].includes(delta.command)) printer.authorizationDenied = false;
+          acknowledgement.resolve(true);
+        }
+        else if (delta.result === 'fail' || delta.result === 'failed') {
+          if (typeof delta.reason === 'string' && /mqtt message verify failed|signature verification failed/i.test(delta.reason)) {
+            printer.authorizationDenied = true;
+            acknowledgement.reject(new Error('bambu-authorization'));
+          } else acknowledgement.resolve(false);
+        }
         else acknowledgement.reject(new Error('command-unconfirmed'));
         return;
       }
@@ -182,8 +190,8 @@ export function createBambuMonitor(connectPrinter = connect, diagnostics) {
     },
     read(machine) {
       if (!printers.has(machine.id)) printers.set(machine.id, open(machine, true));
-      const { current, lastReport } = printers.get(machine.id);
-      return { ...current, checkedAt: lastReport ? new Date(lastReport).toISOString() : null };
+      const { current, lastReport, authorizationDenied } = printers.get(machine.id);
+      return { ...current, ...(authorizationDenied ? { controlIssue: 'bambu-authorization' } : {}), checkedAt: lastReport ? new Date(lastReport).toISOString() : null };
     },
     async probe(machine, signal) {
       const printer = open(machine);

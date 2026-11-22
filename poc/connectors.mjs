@@ -104,7 +104,7 @@ const definitions = {
     const { createElegooFiles } = await import('./elegoo-files.mjs');
     return {
       read, controlState: monitor?.controlState, request: monitor?.request, close: monitor?.close, command: (...args) => monitor?.command(...args),
-      files: retainedFiles(join(directory, 'files'), createElegooFiles((...args) => monitor.request(...args), { fetcher: fetchFiles })),
+      files: createElegooFiles((...args) => monitor.request(...args), { fetcher: fetchFiles, queryFiles: machine => monitor.queryFiles(machine) }),
       forget(id, changed) { if (changed) monitor?.forget(id); },
       async probe(machine, options) {
         let result;
@@ -116,7 +116,7 @@ const definitions = {
       },
       camera: (machine, output, signal, frame) => elegooCamera(machine, output, signal, frame, openCamera, identify)
     };
-  }, { camera: true, filaments: 'CANVAS', controls: true, interval: 7000, verify: true, commands: true, commandActions: ['pause', 'stop'], files: true, retainedOnly: true, externalFilament: true }),
+  }, { camera: true, filaments: 'CANVAS', controls: true, interval: 7000, verify: true, commands: true, commandActions: ['pause', 'stop'], files: true, externalFilament: true }),
   'elegoo-cc1': localConnector('Elegoo · Centauri Carbon', 'elegoo-cc1', (host, data, existing) => {
     const serial = existing?.serial ?? value(data, 'serial', 64);
     if (!serial || /^[a-zA-Z0-9_-]{6,64}$/.test(serial)) return { origin: `ws://${host}:3030`, serial: serial || undefined };

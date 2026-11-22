@@ -5,6 +5,7 @@ state.events = [];
 state.users = [];
 
 const problem = (code) => ({
+  'bambu-authorization': t('Bambu refuse la vérification de la commande. Sur la P2S : Paramètres → LAN uniquement → Mode développeur. Le LAN seul ne suffit pas au contrôle tiers. Aucun nouvel envoi automatique.', 'Bambu rejected command verification. On P2S: Settings → LAN Only → Developer Mode. LAN alone does not authorize third-party control. No automatic retry.'),
   'laser-confirm': t('Confirmez votre présence et la préparation de la zone laser.', 'Confirm operator presence and laser work area readiness.'),
   'oidc-failed': t('Connexion Pocket ID indisponible ou accès refusé. Vous pouvez utiliser un compte local.',
     'Pocket ID sign-in is unavailable or access was denied. You can use a local account.'),
@@ -252,6 +253,7 @@ function liveFabrication(m) {
       <div class="row between wrap"><h2>${t('Fabrication','Print job')}</h2><div class="row wrap">${badge(m.status)}${controls}</div></div>
       ${m.kind === 'xtool-m2' ? `<p class="muted">${t('Lancer concerne le projet déjà préparé dans la M2. Les confirmations physiques restent nécessaires.', 'Start uses the project already prepared on the M2. Physical confirmations remain required.')}</p>` : ''}
       ${m.kind === 'elegoo' && m.status === 'paused' ? `<p class="notice">${t('Reprise CC2 : utilisez l’écran de la machine ; le SDK ne documente pas encore une reprise exploitable.', 'CC2 resume: use the machine screen; the SDK does not yet document a usable resume command.')}</p>` : ''}
+      ${m.controlIssue === 'bambu-authorization' ? `<p class="notice">${problem(m.controlIssue)}</p>` : ''}
       ${m.issue?`<p class="notice">${liveIssue(m.issue)}</p>`:''}
       ${m.kind === 'longer-ray5' ? `<p class="notice">${t('Ray5 · pilotage expérimental selon le transport ; confirmer les commandes sur la machine.', 'Ray5 · experimental transport-dependent controls; verify commands on the machine.')}</p><small>GRBL · ${esc(m.nativeState || '—')}${m.firmware ? ' · ' + esc(m.firmware) : ''}</small>
       <p>${t('Position machine (unités du contrôleur)','Machine position (controller units)')} : ${['x','y','z'].map(axis => axis.toUpperCase() + ' ' + (Number.isFinite(m.machinePosition?.[axis]) ? m.machinePosition[axis] : '—')).join(' · ')}</p>
@@ -1380,6 +1382,7 @@ function filesPanel(m) {
       <div class="row between wrap"><h2>${machineConnectors[m.kind]?.retainedOnly ? t('Fichiers envoyés via FabCore','Files uploaded through FabCore') : t('Fichiers de la machine','Machine files')}</h2>${btn('files-refresh', t('Actualiser','Refresh'), '', 'ghost', entry.loading ? 'disabled' : '')}</div>
       ${machineConnectors[m.kind]?.retainedOnly ? `<p class="notice">${t('Fichiers envoyés via FabCore uniquement : le protocole ne fournit pas ici la liste complète du stockage de la machine.', 'Only files uploaded through FabCore: the protocol does not provide a complete storage listing here.')}</p>` : ''}
       ${m.kind === 'longer-ray5' ? `<p class="notice">${t('Carte SD native · lecture à l’arrêt · 16 Mio par fichier · inventaire limité à 300 fichiers / 24 dossiers / 3 sous-niveaux. Tailles et dates non fiables : affichées inconnues. Aucun transfert vers une imprimante FDM.','Native SD card · read while idle · 16 MiB per file · inventory limited to 300 files / 24 folders / 3 sublevels. Unreliable sizes and dates are shown as unknown. No transfer to FDM printers.')}</p>` : ''}
+      ${m.kind === 'elegoo' ? `<p class="notice">${t('Stockage interne CC2 · inventaire natif MQTT 1044, limité à 300 entrées. Téléchargement et visualisation selon le firmware. Les anciennes copies FabCore ne sont pas présentées comme des fichiers encore présents.', 'CC2 internal storage · native MQTT 1044 inventory, limited to 300 entries. Download and preview depend on firmware. Old FabCore copies are not presented as files still on the printer.')}</p>` : ''}
       <label>${t('Visualiser un G-code local sans l’envoyer','Preview a local G-code without uploading it')}<input type="file" accept=".gcode,.gco,.g,.gc,.nc" data-gcode-local></label>
       ${current ? `<div class="notice row between wrap"><span>${t('Impression en cours','Print in progress')} · <strong>${esc(fileName(current))}</strong></span>${btn('viewer-live', t('Suivre en direct','Follow live'), 'activity', 'primary')}</div>` : ''}
       ${state.role === 'admin' ? `<label class="stack"><span>${t('Envoyer un fichier G-code sur la machine','Upload a G-code file to the machine')}</span>
