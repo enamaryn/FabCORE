@@ -1,4 +1,5 @@
 import { createConnection } from 'node:net';
+import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import { privateIPv4 } from './connector-http.mjs';
 
@@ -44,7 +45,7 @@ export function parseRay5Status(line) {
 }
 const unavailable = (status, issue) => ({ status, issue, nozzle: null, bed: null, progress: 0, progressKnown: false, file: '', machinePosition: null, workPosition: null, feedRate: null, spindle: null });
 
-// Read-only by construction: only '?' and the GRBL build-info query '$I' are emitted.
+// Commands share the live TCP session; never queued offline or replayed.
 // One session per endpoint, shared by polling, probes and multiple viewers.
 export function createRay5Monitor({ connectTCP = createConnection, openWS = (url) => new WebSocket(url, 'arduino', { maxPayload: 8192, handshakeTimeout: 3500, followRedirects: false }), fetcher = fetch,
   diagnostics, now = Date.now, pollMs = 2000, staleMs = 10000, retryMs = 3000, probeMs = 4500, idleMs = 60000 } = {}) {
@@ -52,6 +53,7 @@ export function createRay5Monitor({ connectTCP = createConnection, openWS = (url
   let closed = false;
   const trace = (e, event, details = {}) => diagnostics?.trace?.(e.machine.id, event, { transport: e.target.transport, host: e.target.host, port: e.target.port, ...details });
   function stop(e) {
+    e.pending?.reject(new Error('command-unconfirmed')); e.pending = null;
     e.stopped = true; e.current = null; e.issue = 'ray5-connection';
     clearInterval(e.poll); clearTimeout(e.idle);
     e.request?.abort();
@@ -64,6 +66,7 @@ export function createRay5Monitor({ connectTCP = createConnection, openWS = (url
   function fail(e, issue = 'ray5-connection') {
     if (e.stopped) return;
     clearInterval(e.poll); e.request?.abort();
+    e.pending?.reject(new Error('command-unconfirmed')); e.pending = null;
     const socket = e.socket; e.socket = null;
     e.connected = false; e.current = null; e.page = null; e.buffer = ''; e.firmware = null;
     e.issue = issue;
@@ -73,6 +76,18 @@ export function createRay5Monitor({ connectTCP = createConnection, openWS = (url
     for (const notify of e.waiters) notify();
   }
   function line(e, text) {
+    const setting = /^\$(13|22|30|31|32|130|131)=(-?\d+(?:\.\d+)?)$/.exec(text);
+    if (setting && Number.isFinite(Number(setting[2]))) e.settings[setting[1]] = Number(setting[2]);
+    if (text === 'ok' || /^error:\d+$/i.test(text)) {
+      if (!e.initialized) { e.initialized = true; return; }
+      if (e.pending) {
+        const pending = e.pending;
+        trace(e, 'ray5-command-response', { payload: text, outcome: text === 'ok' ? 'accepted' : 'rejected' });
+        if (text !== 'ok') { e.pending = null; pending.resolve(false); if (pending.remaining > 1) fail(e); }
+        else if (--pending.remaining === 0) { e.pending = null; pending.resolve(true); }
+      }
+    }
+
     const page = /^CURRENT_ID:(\d{1,8})$/.exec(text);
     if (page) { e.page = page[1]; poll(e); return; }
     const version = /^\[VER:([^\]\r\n]{1,120})\]$/.exec(text) ?? /^Grbl ([A-Za-z0-9.()_-]{1,80})/.exec(text);
@@ -80,7 +95,7 @@ export function createRay5Monitor({ connectTCP = createConnection, openWS = (url
     const alarm = /^ALARM:(\d{1,3})$/.exec(text);
     const report = parseRay5Status(alarm ? '<Alarm>' : text);
     if (!report) return;
-    e.current = report; e.reportAt = now(); e.failures = 0; e.issue = null;
+    e.current = report; e.revision = (e.revision ?? 0) + 1; e.reportAt = now(); e.failures = 0; e.issue = null;
     trace(e, 'ray5-report', { status: report.status, issue: report.issue, payload: text });
     for (const notify of e.waiters) notify();
   }
@@ -129,7 +144,7 @@ export function createRay5Monitor({ connectTCP = createConnection, openWS = (url
   }
   function connect(e) {
     if (closed || e.stopped || e.socket || now() < e.retryAt) return;
-    e.current = null; e.reportAt = null; e.openedAt = now(); e.connected = false; e.issue = null;
+    e.settings = {}; e.queried = false; e.initialized = false; e.current = null; e.reportAt = null; e.openedAt = now(); e.connected = false; e.issue = null;
     trace(e, 'ray5-connecting');
     try {
       const socket = e.target.transport === 'tcp' ? connectTCP({ host: e.target.host, port: e.target.port }) : openWS(`ws://${e.target.host}:${e.target.wsPort}/`);
@@ -158,7 +173,7 @@ export function createRay5Monitor({ connectTCP = createConnection, openWS = (url
     for (const e of entries.values()) if (e.machine.id === machine.id && e.key !== key) stop(e);
     let e = entries.get(key);
     if (!e) {
-      e = { key, machine, target, waiters: new Set(), stopped: false, current: null, reportAt: null, openedAt: now(), buffer: '', page: null, retryAt: 0, failures: 0, issue: null };
+      e = { key, machine, target, waiters: new Set(), stopped: false, current: null, reportAt: null, openedAt: now(), buffer: '', settings: {}, queried: false, initialized: false, page: null, retryAt: 0, failures: 0, issue: null };
       entries.set(key, e);
     }
     e.machine = machine;
@@ -171,7 +186,93 @@ export function createRay5Monitor({ connectTCP = createConnection, openWS = (url
     if (e.current && now() - e.reportAt <= staleMs) return { ...e.current, firmware: e.firmware, checkedAt: new Date(e.reportAt).toISOString() };
     return unavailable(e.socket ? 'connecting' : ['ray5-access', 'ray5-response'].includes(e.issue) ? 'error' : 'offline', e.issue ?? 'ray5-report');
   }
+  function active(machine) {
+    const e = entries.get(machine.origin + '|' + (machine.wsPort ?? 8849));
+    if (!e || e.stopped || !e.connected || e.target.transport !== 'tcp' || !e.current || now() - e.reportAt > staleMs) throw new Error('command-unconfirmed');
+    return e;
+  }
+  function sendLine(machine, command) {
+    const e = active(machine);
+    if (!e.initialized || e.pending) throw new Error('command-busy');
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { if (e.pending === pending) fail(e); }, 3500);
+      const pending = { remaining: Array.isArray(command) ? command.length : 1,
+        resolve: ok => { clearTimeout(timer); resolve(ok); }, reject: err => { clearTimeout(timer); reject(err); } };
+      e.pending = pending;
+      trace(e, 'ray5-command-send', { payload: command });
+      try { e.socket.write((Array.isArray(command) ? command.join('\n') : command) + '\n'); } catch { fail(e); }
+    });
+  }
+  async function realtime(machine, byte, expected) {
+    const e = active(machine), revision = e.revision;
+    if (e.pending) throw new Error('command-busy');
+    trace(e, 'ray5-command-send', { action: {33:'pause',126:'resume',24:'reset',133:'jog-cancel'}[byte] });
+    if (byte === 24) { e.settings = {}; e.queried = false; e.initialized = false; }
+    e.socket.write(Buffer.from([byte]));
+    for (let i = 0; i < 35; i++) {
+      if (e.stopped || !e.socket || !e.connected) throw new Error('command-unconfirmed');
+      e.socket.write('?'); await delay(100);
+      if (e.revision > revision && expected(e.current)) {
+        if (byte === 24) e.socket.write('$I\n');
+        return true;
+      }
+    }
+    throw new Error('command-unconfirmed');
+  }
+  async function settings(machine) {
+    const e = active(machine);
+    if (!e.queried && e.current.nativeState === 'Idle' && e.initialized) {
+      if (!await sendLine(machine, '$$')) throw new Error('command-rejected');
+      e.queried = true;
+    }
+    return e.settings;
+  }
+  const control = {
+    async read(machine) {
+      let e, config;
+      try { e = active(machine); config = await settings(machine); }
+      catch { return { lights: [], heaters: [], fans: [], motion: null, laser: null }; }
+      return { lights: [], heaters: [], fans: [], motion: { homed: null, axes: ['X','Y'], home: config['22'] === 1 },
+        laser: { writable: e.initialized, max: config['30'] > 0 ? config['30'] : null, mode: config['32'] === 1, nativeState: e.current.nativeState } };
+    },
+    async execute(machine, command) {
+      const e = active(machine), idle = e.current.nativeState === 'Idle';
+      const accepted = async text => { if (!await sendLine(machine, text)) throw new Error('command-rejected'); };
+      if (command.action === 'reset') return { outcome: await realtime(machine,24,r => ['Idle','Alarm'].includes(r.nativeState) && r.spindle === 0 && r.feedRate === 0) ? 'confirmed' : 'rejected' };
+      if (command.action === 'jog-cancel') return { outcome: await realtime(machine,133,r => r.nativeState === 'Idle' && r.spindle === 0) ? 'confirmed' : 'rejected' };
+      if (command.action === 'unlock') {
+        if (e.current.nativeState !== 'Alarm') throw new Error('command-rejected');
+        await accepted('$X'); return { outcome: 'accepted' };
+      }
+      if (command.action === 'laser-off') { await accepted('M5'); return { outcome: 'accepted' }; }
+      if (!idle) throw new Error('command-rejected');
+      if (command.action === 'move') {
+        if (!['X','Y'].includes(command.axis) || ![0.1,1,10].includes(Math.abs(command.distance))) throw new Error('command-rejected');
+        await accepted('M5');
+        if (e.current.nativeState !== 'Idle') throw new Error('command-rejected');
+        await accepted(`$J=G91 G21 ${command.axis}${command.distance} F600`);
+      } else if (command.action === 'home') {
+        if ((await settings(machine))['22'] !== 1) throw new Error('command-rejected');
+        await accepted('M5'); await accepted('$H');
+      } else if (command.action === 'zero') { await accepted('M5'); await accepted('G10 L20 P1 X0 Y0'); }
+      else if (command.action === 'laser-pulse') {
+        const config = await settings(machine), power = Math.floor(config['30'] * command.value / 100);
+        if (!Number.isFinite(power) || config['30'] > 1000000 || command.operatorPresent !== true || config['32'] !== 1 || !(config['30'] > 0) || !(power >= Math.max(1,config['31'] ?? 0)) || !Number.isInteger(command.value) || command.value < 1 || command.value > 5 || ![100,250,500].includes(command.duration)) throw new Error('command-rejected');
+        // Entire short block includes dwell and M5. Count all four acknowledgements.
+        await accepted(['M5','G1 M3 S' + power,'G4 P' + command.duration/1000,'M5']);
+      } else throw new Error('command-rejected');
+      return { outcome: 'accepted' };
+    }
+  };
   return {
+    control,
+    async command(machine, action) {
+      const native = active(machine).current.nativeState;
+      if (action === 'pause' && native === 'Run') return realtime(machine,33,r => r.nativeState === 'Hold:0' && r.spindle === 0);
+      if (action === 'resume' && native === 'Hold:0') return realtime(machine,126,r => r.nativeState === 'Run');
+      if (action === 'stop' && /^(Run|Hold)/.test(native)) return realtime(machine,24,r => ['Idle','Alarm'].includes(r.nativeState) && r.spindle === 0 && r.feedRate === 0);
+      return false;
+    },
     read(machine) { const e = entry(machine); if (e?.current && now() - e.reportAt > staleMs) fail(e, 'ray5-stale'); return snapshot(e); },
     async probe(machine, { signal } = {}) {
       if (signal?.aborted) return { ok: false, issue: 'ray5-connection' };

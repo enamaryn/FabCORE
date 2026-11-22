@@ -44,16 +44,21 @@ async function elegooCamera(machine, output, signal, onFrame, openCamera, identi
 }
 
 const definitions = {
-  'longer-ray5': localConnector('Longer · Ray5 Wi-Fi (lecture seule)', 'longer-ray5', (host, data) => {
+  'longer-ray5': localConnector('Longer · Ray5 Wi-Fi', 'longer-ray5', (host, data) => {
     const transport = data.transport ?? 'tcp';
     const portText = String(data.port ?? (transport === 'tcp' ? 8080 : 8848));
     const wsText = String(data.wsPort ?? 8849);
     if (!['tcp', 'esp3d'].includes(transport) || !/^\d{1,5}$/.test(portText) || !/^\d{1,5}$/.test(wsText)) return null;
     const port = Number(portText), wsPort = Number(wsText);
     if (port < 1 || port > 65535 || wsPort < 1 || wsPort > 65535) return null;
-    return { origin: transport === 'tcp' ? `tcp://${host}:${port}` : new URL(`http://${host}:${port}`).origin, transport, wsPort };
-  }, async ({ diagnostics }) => (await import('./longer-ray5.mjs')).createRay5Monitor({ diagnostics }),
-  { live: true, verify: true, temperatures: false }),
+    const httpPort = Number(data.httpPort ?? (transport === 'tcp' ? 80 : port));
+    if (!Number.isInteger(httpPort) || httpPort < 1 || httpPort > 65535) return null;
+    return { httpPort, origin: transport === 'tcp' ? `tcp://${host}:${port}` : new URL(`http://${host}:${port}`).origin, transport, wsPort };
+  }, async ({ diagnostics, ray5 }) => {
+    const monitor = ray5 ?? (await import('./longer-ray5.mjs')).createRay5Monitor({ diagnostics });
+    monitor.files ??= (await import('./longer-ray5-files.mjs')).createRay5Files({ read: machine => monitor.read(machine), diagnostics });
+    return monitor;
+  }, { live: true, verify: true, temperatures: false, controls: true, commands: true, commandActions: ['pause','resume','stop'], files: true, fileFamily: 'laser' }),
   'bambu-cloud': { model: 'Bambu Lab · Cloud', form: 'cloud', filaments: 'AMS', configure() { return null; },
     async load({ cloud }) { return { read: machine => cloud.readMachine(machine) }; } },
   klipper: httpConnector('Klipper · Moonraker', 7125, false, async ({ readPrinter, sendCommand, sendGcode, fetchFiles }) => {
@@ -147,8 +152,8 @@ function identified(result, tolerated) {
 }
 export const connectorDefinition = kind => typeof kind === 'string' && Object.hasOwn(definitions, kind) ? definitions[kind] : null;
 export const connectorCatalog = Object.fromEntries(Object.entries(definitions).map(([kind, {
-  model, form, port, required, camera = false, commands = false, commandActions = [], files = false, projects = false, retainedOnly = false, externalFilament = false, terminal = false, filaments = null, temperatures = true, printJob = true, controls = false
-}]) => [kind, { model, form, port, required, camera, commands, commandActions, files, projects, retainedOnly, externalFilament, terminal, filaments, temperatures, printJob, controls }]));
+  model, form, port, required, camera = false, commands = false, commandActions = [], files = false, projects = false, retainedOnly = false, externalFilament = false, terminal = false, filaments = null, temperatures = true, printJob = true, controls = false, fileFamily = 'fdm'
+}]) => [kind, { model, form, port, required, camera, commands, commandActions, files, projects, retainedOnly, externalFilament, terminal, filaments, temperatures, printJob, controls, fileFamily }]));
 
 export function createConnectorRegistry(options, definition = connectorDefinition) {
   const pending = new Map();
@@ -160,7 +165,7 @@ export function createConnectorRegistry(options, definition = connectorDefinitio
       if (!entry || closed) return null;
       if (!pending.has(kind)) {
         pending.set(kind, Promise.resolve().then(() => entry.load(options)).then(async connector => {
-          if (entry.controls) {
+          if (entry.controls && !connector.control) {
             const { createManualControls } = await import('./manual-controls.mjs');
             connector.control = createManualControls(kind, { fetcher: options.fetchFiles, send: (...args) => connector.send(...args), request: (...args) => connector.request(...args), read: connector.controlState, trace: (...args) => options.diagnostics?.trace?.(...args) });
           }

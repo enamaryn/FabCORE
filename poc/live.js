@@ -5,6 +5,7 @@ state.events = [];
 state.users = [];
 
 const problem = (code) => ({
+  'laser-confirm': t('Confirmez votre présence et la préparation de la zone laser.', 'Confirm operator presence and laser work area readiness.'),
   'oidc-failed': t('Connexion Pocket ID indisponible ou accès refusé. Vous pouvez utiliser un compte local.',
     'Pocket ID sign-in is unavailable or access was denied. You can use a local account.'),
   'notifications-invalid': t('Vérifiez les informations de connexion et les secrets.', 'Check connection settings and secrets.'),
@@ -243,7 +244,7 @@ function liveFleet() {
 function liveFabrication(m) {
   const translatableTime = m.checkedAt ? new Date(m.checkedAt).toLocaleTimeString(state.lang) : '—';
   const canManage = state.role === 'admin';
-  const available = machineConnectors[m.kind]?.commandActions ?? [];
+  const available = m.kind === 'longer-ray5' && m.transport === 'esp3d' ? [] : machineConnectors[m.kind]?.commandActions ?? [];
   const actions = m.status === 'printing' ? ['pause', 'stop'] : m.status === 'paused' ? ['resume', 'stop'] : ['ready', 'done'].includes(m.status) ? ['start'] : [];
   const labels = { pause: t('Pause','Pause'), resume: t('Reprendre','Resume'), stop: t('Stop','Stop'), start: t('Lancer le projet préparé','Start prepared project') };
   const controls = canManage ? actions.filter(action => available.includes(action)).map(action => btn('print-command:' + action, labels[action], '', action === 'stop' ? 'danger' : 'primary', pendingPrintCommands.has(m.id) ? 'disabled' : '')).join('') + (machineConnectors[m.kind]?.files && canStart(m) ? btn('files-focus', t('Choisir un fichier','Choose a file'), '', 'primary') : '') : '';
@@ -252,8 +253,9 @@ function liveFabrication(m) {
       ${m.kind === 'xtool-m2' ? `<p class="muted">${t('Lancer concerne le projet déjà préparé dans la M2. Les confirmations physiques restent nécessaires.', 'Start uses the project already prepared on the M2. Physical confirmations remain required.')}</p>` : ''}
       ${m.kind === 'elegoo' && m.status === 'paused' ? `<p class="notice">${t('Reprise CC2 : utilisez l’écran de la machine ; le SDK ne documente pas encore une reprise exploitable.', 'CC2 resume: use the machine screen; the SDK does not yet document a usable resume command.')}</p>` : ''}
       ${m.issue?`<p class="notice">${liveIssue(m.issue)}</p>`:''}
-      ${m.kind === 'longer-ray5' ? `<p class="notice">${t('Supervision en lecture seule · aucune commande laser disponible dans ce pilote.', 'Read-only monitoring · no laser commands available in this pilot.')}</p><small>GRBL · ${esc(m.nativeState || '—')}${m.firmware ? ' · ' + esc(m.firmware) : ''}</small>
+      ${m.kind === 'longer-ray5' ? `<p class="notice">${t('Ray5 · pilotage expérimental selon le transport ; confirmer les commandes sur la machine.', 'Ray5 · experimental transport-dependent controls; verify commands on the machine.')}</p><small>GRBL · ${esc(m.nativeState || '—')}${m.firmware ? ' · ' + esc(m.firmware) : ''}</small>
       <p>${t('Position machine (unités du contrôleur)','Machine position (controller units)')} : ${['x','y','z'].map(axis => axis.toUpperCase() + ' ' + (Number.isFinite(m.machinePosition?.[axis]) ? m.machinePosition[axis] : '—')).join(' · ')}</p>
+      <p>${t('Position de travail','Work position')} : ${['x','y'].map(axis => axis.toUpperCase() + ' ' + (Number.isFinite(m.workPosition?.[axis]) ? m.workPosition[axis] : '—')).join(' · ')}</p>
       <small>${t('Vitesse reçue','Reported feed')} : ${Number.isFinite(m.feedRate) ? m.feedRate : '—'} · ${t('Consigne laser S (pas une mesure en watts)','Laser S setpoint (not a watts measurement)')} : ${Number.isFinite(m.spindle) ? m.spindle : '—'}</small>` : ''}
       ${machineConnectors[m.kind]?.printJob === false ? '' : m.progressKnown === false ? `<p>${esc(m.file || '')}</p><small>${t('Progression non communiquée par la machine.', 'Progress not reported by the machine.')}</small>` : `<div class="row between"><span>${esc(m.file)||t('Aucun fichier en cours','No active file')}</span><strong>${m.progress} %</strong></div>
       <progress value="${m.progress}" max="100" aria-label="${t('Progression','Progress')}"></progress>`}
@@ -819,7 +821,7 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
   const isCC1 = form === 'elegoo-cc1';
   const isM2 = form === 'xtool-m2';
   const isRay5 = form === 'longer-ray5';
-  const ray5Transport = existing?.transport ?? 'tcp';
+  const ray5Transport = existing?.transport ?? detected?.transport ?? 'tcp';
   const serial = existing?.serial ?? detected?.serial ?? '';
   const manualSerial = isBambu || (isCC1 && !existing && !serial);
   const serialField = manualSerial
@@ -837,9 +839,10 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
       ${form !== 'http' ? `
       <label>${t('Adresse IPv4 locale','Local IPv4 address')}<input name="host" placeholder="192.168.1.50" required maxlength="15" value="${existing ? esc(new URL(existing.origin).hostname) : esc(detected?.host ?? '')}"></label>
       ${isRay5 ? `<label>${t('Interface Wi-Fi du firmware','Firmware Wi-Fi interface')}<select name="transport"><option value="tcp" ${ray5Transport === 'tcp' ? 'selected' : ''}>GRBL TCP · 8080</option><option value="esp3d" ${ray5Transport === 'esp3d' ? 'selected' : ''}>ESP3D · HTTP 8848 / WebSocket 8849</option></select></label>
-      <label>${t('Port TCP ou HTTP','TCP or HTTP port')}<input name="port" type="number" min="1" max="65535" required value="${existing ? Number(new URL(existing.origin).port || 80) : 8080}"></label>
-      <label data-ray5-ws ${ray5Transport === 'esp3d' ? '' : 'hidden'}>${t('Port WebSocket ESP3D','ESP3D WebSocket port')}<input name="wsPort" type="number" min="1" max="65535" value="${existing?.wsPort ?? 8849}"></label>
-      <small>${t('Lecture seule : état et positions. Choisissez le mode réellement fourni par le firmware ; aucun changement du Wi-Fi ou du firmware n’est effectué.', 'Read only: status and positions. Select the interface actually provided by the firmware; no Wi-Fi or firmware changes are made.')}</small>` : ''}
+      <label>${t('Port TCP ou HTTP','TCP or HTTP port')}<input name="port" type="number" min="1" max="65535" required value="${existing?.origin || detected?.origin ? Number(new URL(existing?.origin ?? detected.origin).port || 80) : 8080}"></label>
+      <label data-ray5-ws ${ray5Transport === 'esp3d' ? '' : 'hidden'}>${t('Port WebSocket ESP3D','ESP3D WebSocket port')}<input name="wsPort" type="number" min="1" max="65535" value="${existing?.wsPort ?? detected?.wsPort ?? 8849}"></label>
+      <label>${t('Port HTTP de la carte SD','SD card HTTP port')}<input name="httpPort" type="number" min="1" max="65535" required value="${existing?.httpPort ?? detected?.httpPort ?? (ray5Transport === 'tcp' ? 80 : 8848)}"></label>
+      <small>${t('Pilotage expérimental en TCP ; ESP3D : supervision et SD. Aucun réglage Wi-Fi ou firmware modifié.', 'Experimental TCP controls; ESP3D: monitoring and SD. Wi-Fi and firmware settings are unchanged.')}</small>` : ''}
       ${isCC1 || isM2 || isRay5 ? '' : `<label>${t('Code d’accès LAN','LAN access code')}<input name="accessCode" type="password" ${existing ? '' : 'required'} minlength="${isBambu ? 8 : 1}" maxlength="${isBambu ? 8 : 64}" autocomplete="new-password"></label>`}
       ` : `
       <label>${t('Adresse ', 'Address for ')}${esc(addressLabel)}<input name="origin" type="url" placeholder="http://192.168.1.50${port === 80 ? '' : ':' + port}" required maxlength="200" value="${esc(existing?.origin ?? detected?.origin ?? '')}"></label>
@@ -1074,6 +1077,7 @@ dialog.addEventListener('change', (event) => {
   if (event.target.form?.id === 'add-machine' && event.target.name === 'transport') {
     const form = event.target.form;
     form.elements.port.value = event.target.value === 'tcp' ? '8080' : '8848';
+    form.elements.httpPort.value = event.target.value === 'tcp' ? '80' : '8848';
     form.querySelector('[data-ray5-ws]').hidden = event.target.value !== 'esp3d';
     return;
   }
@@ -1217,7 +1221,25 @@ function manualState(id) {
   if (!manualStates.has(id)) manualStates.set(id, { data: null, at: 0, loading: false, busy: false, error: '', result: '' });
   return manualStates.get(id);
 }
+function ray5ControlsPanel(m, part) {
+  const entry = manualState(m.id), laser = entry.data?.laser;
+  if (part === 'heat') return unavailablePanel(t('Températures','Temperatures'), t('Non applicable à ce laser.', 'Not applicable to this laser.'));
+  const admin = state.role === 'admin', busy = entry.busy || !laser?.writable;
+  const idle = !busy && laser?.nativeState === 'Idle';
+  const action = (key,label,enabled = true) => admin ? btn('ray5-control:'+key,label,'',key === 'reset' ? 'danger' : '',busy || !enabled ? 'disabled' : '') : '';
+  const error = entry.error ? `<p class="error" role="alert">${esc(entry.error)}</p>` : '';
+  const result = entry.result ? `<p role="status">${esc(entry.result)}</p>` : '';
+  const content = !admin ? unavailableContent(t('Lecture seule : commandes réservées à un administrateur.','Read only: controls are restricted to an administrator.')) : part === 'motion' ? `<div class="jog-layout"><div class="jog-pad">${[['Y',1,'↑','1/2'],['X',-1,'←','2/1'],['X',1,'→','2/3'],['Y',-1,'↓','3/2']].map(([axis,sign,label,grid]) => btn('manual-jog:'+axis+':'+sign,label,'','',`${idle ? '' : 'disabled'} aria-label="${axis} ${sign > 0 ? '+' : '−'}" style="grid-area:${grid}"`)).join('')}<span style="grid-area:2/2">XY</span></div></div>
+    <div class="jog-options"><label>${t('Pas','Step')} <select data-jog-step ${idle ? '' : 'disabled'}><option value="0.1">0,1 mm</option><option value="1" selected>1 mm</option><option value="10">10 mm</option></select></label>${action('zero',t('Définir zéro XY · G54','Set XY zero · G54'),idle)}${entry.data?.motion?.home ? action('home',t('Prise d’origine','Home'),idle) : ''}${action('jog-cancel',t('Annuler déplacement','Cancel jog'),laser?.nativeState === 'Jog')}</div><small>${t('M5 avant chaque mouvement · avance 600 mm/min · limites à vérifier physiquement. Axe Z motorisé non déclaré.','M5 before each move · feed 600 mm/min · physically verify travel limits. No motorized Z axis declared.')}</small>`
+    : `<div class="row wrap">${action('laser-off',t('Couper laser · M5','Laser off · M5'))}${action('reset',t('Arrêt / Reset GRBL','Stop / GRBL reset'))}${action('unlock',t('Déverrouiller alarme','Unlock alarm'),laser?.nativeState === 'Alarm')}</div>
+      <p class="notice">${t('Reset abandonne le travail et peut invalider la position. Aucun déverrouillage automatique. Ce bouton dépend du réseau et ne remplace pas l’arrêt matériel.','Reset abandons the job and may invalidate position. No automatic unlock. This network-dependent button does not replace the hardware stop.')}</p>
+      ${laser?.mode && laser.max > 0 ? `<form class="row wrap" data-ray5-pulse><label>${t('Test laser (%)','Laser test (%)')}<input name="value" type="number" min="1" max="5" value="1" required ${idle ? '' : 'disabled'}></label><label>${t('Durée','Duration')}<select name="duration" ${idle ? '' : 'disabled'}><option value="100">100 ms</option><option value="250">250 ms</option><option value="500">500 ms</option></select></label><button type="submit" ${idle ? '' : 'disabled'}>${t('Impulsion','Pulse')}</button></form><small>${t('Consigne calculée depuis $30 ; ce pourcentage n’est pas une mesure de puissance optique.','Setpoint calculated from $30; this percentage is not an optical power measurement.')}</small>` : `<small>${t('Test laser désactivé tant que $30 et le mode laser $32 ne sont pas lus.','Laser test disabled until $30 and laser mode $32 are read.')}</small>`}
+      ${!laser ? `<p>${t('Contrôles TCP indisponibles : attendre un rapport récent et les réponses GRBL. Le mode ESP3D reste en supervision.','TCP controls unavailable: wait for fresh status and GRBL responses. ESP3D remains monitoring only.')}</p>` : ''}`;
+  return `<section class="panel stack" data-manual-controls="${part}"><div class="row between"><h2>${part === 'motion' ? t('Déplacements XY','XY movement') : t('Laser / contrôleur','Laser / controller')}</h2>${part === 'quick' ? btn('manual-refresh',t('Actualiser','Refresh')) : ''}</div>${content}${error}${result}</section>`;
+}
+
 function manualControlsPanel(m, part = 'all') {
+  if (m.kind === 'longer-ray5') return ray5ControlsPanel(m,part);
   if (!machineConnectors[m.kind]?.controls) {
     const title = part === 'heat' ? t('Températures','Temperatures') : part === 'quick' ? t('Actions rapides','Quick actions') : part === 'motion' ? t('Déplacements','Movement') : t('Contrôles','Controls');
     const message = t('Commandes non prises en charge par cette connexion.', 'Controls not supported by this connection.');
@@ -1276,13 +1298,14 @@ async function sendManualControl(id, command) {
   const entry = manualState(id);
   if (entry.busy) return;
   const printing = ['printing', 'paused'].includes(entry.data?.status);
+  if (machine(id)?.kind === 'longer-ray5' && ['zero','unlock','reset','laser-pulse'].includes(command.action) && !window.confirm(t('Confirmer cette action sur la Ray5 ? Pour une impulsion, soyez présent avec les protections laser et la zone dégagée.','Confirm this Ray5 action? For a pulse, be present with laser protection and a clear work area.'))) return;
   if (command.action === 'home' && !window.confirm(t('Effectuer la prise d’origine XYZ ? Vérifiez que les axes sont dégagés.', 'Home XYZ? Check that the axes are clear.'))) return;
   if (printing && ['heat', 'fan'].includes(command.action) && !window.confirm(t('Modifier ce réglage pendant la fabrication ou sa pause ?', 'Change this setting during the print or its pause?'))) return;
   entry.busy = true; entry.error = ''; entry.result = '';
   app.querySelectorAll('[data-manual-controls] button,[data-manual-controls] input,[data-manual-controls] select').forEach(node => { node.disabled = true; });
   try {
     const result = await api('machines/' + id + '/controls', { ...command, confirm: true, duringPrint: printing });
-    entry.result = result.outcome === 'confirmed' ? t('Consigne confirmée par la machine.','Setpoint confirmed by the machine.') : result.outcome === 'executed' ? t('Commande exécutée.','Command executed.') : t('Commande acceptée ; vérifiez le retour machine.','Command accepted; check the machine report.');
+    entry.result = machine(id)?.kind === 'longer-ray5' && result.outcome === 'confirmed' ? t('État d’arrêt confirmé par un nouveau rapport GRBL.','Stopped state confirmed by a new GRBL report.') : result.outcome === 'confirmed' ? t('Consigne confirmée par la machine.','Setpoint confirmed by the machine.') : result.outcome === 'executed' ? t('Commande exécutée.','Command executed.') : t('Commande acceptée ; vérifiez le retour machine.','Command accepted; check the machine report.');
   } catch (error) { entry.error = problem(error.code); }
   finally {
     entry.busy = false;
@@ -1346,7 +1369,7 @@ function filePage(entry) {
 }
 
 function filesPanel(m) {
-  if (!machineConnectors[m.kind]?.files) return `<section class="panel stack"><h2>${t('Visualiseur G-code','G-code viewer')}</h2><label>${t('Ouvrir un fichier local pour visualiser ses trajectoires','Open a local file to view its toolpaths')}<input type="file" accept=".gcode,.gco,.g" data-gcode-local></label><p class="muted">${t('Le transfert des projets natifs de cette machine n’est pas encore pris en charge. Cet aperçu local n’envoie aucune commande.', 'Native project transfer for this machine is not supported yet. This local preview sends no commands.')}</p></section>`;
+  if (!machineConnectors[m.kind]?.files) return `<section class="panel stack"><h2>${t('Visualiseur G-code','G-code viewer')}</h2><label>${t('Ouvrir un fichier local pour visualiser ses trajectoires','Open a local file to view its toolpaths')}<input type="file" accept=".gcode,.gco,.g,.gc,.nc" data-gcode-local></label><p class="muted">${t('Le transfert des projets natifs de cette machine n’est pas encore pris en charge. Cet aperçu local n’envoie aucune commande.', 'Native project transfer for this machine is not supported yet. This local preview sends no commands.')}</p></section>`;
   const entry = filesState(m.id);
   const current = liveFile(m);
   const page = filePage(entry);
@@ -1356,10 +1379,11 @@ function filesPanel(m) {
   return `<section class="panel stack" data-files data-file-start="${canStart(m)}"><style>.file-download{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:9px 13px;border:1px solid var(--line);border-radius:8px;text-decoration:none;color:var(--text);font-weight:600}.file-download:hover{background:var(--raised)}</style>
       <div class="row between wrap"><h2>${machineConnectors[m.kind]?.retainedOnly ? t('Fichiers envoyés via FabCore','Files uploaded through FabCore') : t('Fichiers de la machine','Machine files')}</h2>${btn('files-refresh', t('Actualiser','Refresh'), '', 'ghost', entry.loading ? 'disabled' : '')}</div>
       ${machineConnectors[m.kind]?.retainedOnly ? `<p class="notice">${t('Fichiers envoyés via FabCore uniquement : le protocole ne fournit pas ici la liste complète du stockage de la machine.', 'Only files uploaded through FabCore: the protocol does not provide a complete storage listing here.')}</p>` : ''}
-      <label>${t('Visualiser un G-code local sans l’envoyer','Preview a local G-code without uploading it')}<input type="file" accept=".gcode,.gco,.g" data-gcode-local></label>
+      ${m.kind === 'longer-ray5' ? `<p class="notice">${t('Carte SD native · lecture à l’arrêt · 16 Mio par fichier · inventaire limité à 300 fichiers / 24 dossiers / 3 sous-niveaux. Tailles et dates non fiables : affichées inconnues. Aucun transfert vers une imprimante FDM.','Native SD card · read while idle · 16 MiB per file · inventory limited to 300 files / 24 folders / 3 sublevels. Unreliable sizes and dates are shown as unknown. No transfer to FDM printers.')}</p>` : ''}
+      <label>${t('Visualiser un G-code local sans l’envoyer','Preview a local G-code without uploading it')}<input type="file" accept=".gcode,.gco,.g,.gc,.nc" data-gcode-local></label>
       ${current ? `<div class="notice row between wrap"><span>${t('Impression en cours','Print in progress')} · <strong>${esc(fileName(current))}</strong></span>${btn('viewer-live', t('Suivre en direct','Follow live'), 'activity', 'primary')}</div>` : ''}
       ${state.role === 'admin' ? `<label class="stack"><span>${t('Envoyer un fichier G-code sur la machine','Upload a G-code file to the machine')}</span>
-        <input type="file" accept=".gcode,.gco,.g${machineConnectors[m.kind]?.projects ? ",.3mf" : ""}" data-files-upload ${upload ? 'disabled' : ''}></label>
+        <input type="file" accept=".gcode,.gco,.g${m.kind === 'longer-ray5' ? ",.gc,.nc" : ""}${machineConnectors[m.kind]?.projects ? ",.3mf" : ""}" data-files-upload ${upload ? 'disabled' : ''}></label>
         ${upload ? `<p role="status">${t('Envoi de','Uploading')} ${esc(upload.name)}… <span data-upload-percent>${upload.percent}</span> %</p><progress value="${upload.percent}" max="100" data-upload-bar></progress>` : ''}` : ''}
       <div class="row wrap" style="align-items:end">
         <label class="stack" style="flex:2 1 220px;min-width:0">${t('Rechercher un fichier','Search files')}<input type="search" data-files-search value="${esc(entry.query)}" placeholder="${t('Nom du fichier…','File name…')}" maxlength="200"></label>
@@ -1423,11 +1447,11 @@ async function loadFiles(id) {
 function uploadFile(id, file) {
   const entry = filesState(id);
   entry.error = '';
-  if (!/^[\x20-\x7E]{1,200}$/.test(file.name) || file.name.includes('/') || !(machineConnectors[machine(id)?.kind]?.projects ? /\.(gcode|gco|g|3mf)$/i : /\.(gcode|gco|g)$/i).test(file.name)) {
+  if (!/^[\x20-\x7E]{1,200}$/.test(file.name) || file.name.includes('/') || !(machine(id)?.kind === 'longer-ray5' ? /\.(gcode|gco|g|gc|nc)$/i : machineConnectors[machine(id)?.kind]?.projects ? /\.(gcode|gco|g|3mf)$/i : /\.(gcode|gco|g)$/i).test(file.name)) {
     entry.error = t('Nom invalide : caractères ASCII et extension prise en charge par la machine.', 'Invalid name: ASCII characters and an extension supported by the machine.');
     return renderFiles(id);
   }
-  if (file.size > gcodeLimit || file.size < 1) {
+  if (file.size > (machine(id)?.kind === 'longer-ray5' ? 16 * 1024 * 1024 : gcodeLimit) || file.size < 1) {
     entry.error = problem('file-too-large');
     return renderFiles(id);
   }
@@ -1461,6 +1485,7 @@ function uploadFile(id, file) {
 
 function fileTransferCandidates(id, path) {
   return state.machines.filter(m => m.id !== id && machineConnectors[m.kind]?.files &&
+    (machineConnectors[m.kind]?.fileFamily ?? 'fdm') === (machineConnectors[state.machines.find(item => item.id === id)?.kind]?.fileFamily ?? 'fdm') &&
     (!/\.3mf$/i.test(path) || machineConnectors[m.kind]?.projects));
 }
 
@@ -1540,6 +1565,7 @@ function openFileTransfer(id, path) {
 function openTransferredPrint(results) {
   const successful = results.filter(result => result.ok).map(result => ({ id: result.item.id, name: result.item.name, path: result.value.path }));
   const eligible = successful.filter(item => machine(item.id) && canStart(machine(item.id)));
+  const laser = eligible.some(item => machineConnectors[machine(item.id).kind]?.fileFamily === 'laser');
   const external = eligible.some(item => machineConnectors[machine(item.id).kind]?.externalFilament);
   dialog.innerHTML = `<form id="transfer-print" class="stack">
     ${fileBatchStyles()}<h2>${t('Transferts terminés','Transfers finished')}</h2>
@@ -1547,7 +1573,7 @@ function openTransferredPrint(results) {
     ${eligible.length ? `<p>${t('Lancer maintenant sur toutes les machines disponibles ou seulement votre sélection ?','Start now on all available machines or only your selection?')}</p>
       <label class="row"><input type="checkbox" data-transfer-all checked> ${t('Toutes les machines disponibles','All available machines')}</label>
       <fieldset class="stack"><legend>${t('Machines à démarrer','Machines to start')}</legend>${eligible.map(item => `<label class="row"><input type="checkbox" name="print" value="${esc(item.id)}" checked>${esc(item.name)} · ${esc(item.path)}</label>`).join('')}</fieldset>
-      <label class="row"><input type="checkbox" name="confirm" required>${t('Les plateaux sont libres et les fichiers préparés pour ces machines et matériaux.','Beds are clear and the files are prepared for these machines and materials.')}${external ? ' ' + t('Bobine externe uniquement sur Bambu/Elegoo, sans sélection AMS/CANVAS.', 'External spool only on Bambu/Elegoo, without AMS/CANVAS selection.') : ''}</label>` : `<p>${t('Aucune destination disponible pour lancer une impression maintenant. Les copies réussies sont conservées.','No destination is available to start a print now. Successful copies are kept.')}</p>`}
+      <label class="row"><input type="checkbox" name="confirm" required>${t('Les plateaux sont libres et les fichiers préparés pour ces machines et matériaux.','Beds are clear and the files are prepared for these machines and materials.')}${laser ? ' ' + t('Je suis présent auprès des lasers, avec protections, extraction et zones dégagées.', 'I am present at the lasers, with protection, extraction and clear work areas.') : ''}${external ? ' ' + t('Bobine externe uniquement sur Bambu/Elegoo, sans sélection AMS/CANVAS.', 'External spool only on Bambu/Elegoo, without AMS/CANVAS selection.') : ''}</label>` : `<p>${t('Aucune destination disponible pour lancer une impression maintenant. Les copies réussies sont conservées.','No destination is available to start a print now. Successful copies are kept.')}</p>`}
     ${successful.length > eligible.length ? `<small>${t('Les machines occupées ou indisponibles ne sont pas proposées au lancement.','Busy or unavailable machines are not offered for starting.')}</small>` : ''}
     <p class="error" role="alert"></p><p role="status" hidden></p><ul class="transfer-list" data-print-results aria-live="polite" hidden></ul>
     <div class="row wrap">${btn('close', t('Ne pas lancer','Do not start'))}${eligible.length ? `<button type="submit" value="selected">${t('Lancer la sélection','Start selection')}</button><button type="submit" value="all" class="primary">${t('Tout lancer','Start all')}</button>` : ''}</div>
@@ -1575,7 +1601,7 @@ function openTransferredPrint(results) {
     list.hidden = false;
     list.innerHTML = fileBatchRows(selected);
     await runFileBatch(selected, item => api('machines/' + item.id + '/print', {
-      path: item.path, confirm: true, ...(machineConnectors[machine(item.id)?.kind]?.externalFilament ? { filamentMode: 'external' } : {})
+      path: item.path, confirm: true, ...(machine(item.id)?.kind === 'longer-ray5' ? { operatorPresent: true } : {}), ...(machineConnectors[machine(item.id)?.kind]?.externalFilament ? { filamentMode: 'external' } : {})
     }), (result, count, total) => {
       status.textContent = `${count} / ${total}`;
       updateFileBatch(list, result.item, result.ok ? 'success' : 'error', result.ok ? t('Impression lancée','Print started') : problem(result.error.code || 'command-unconfirmed'));
@@ -1593,10 +1619,11 @@ function openTransferredPrint(results) {
 async function startPrint(id, path) {
   const m = machine(id);
   const filament = machineConnectors[m?.kind]?.externalFilament ? '\n\n' + t('Bobine externe uniquement : aucun choix automatique AMS/CANVAS. Le fichier doit être préparé pour cette machine et ce filament.', 'External spool only: no automatic AMS/CANVAS mapping. The file must be prepared for this machine and filament.') : '';
-  if (!m || !path || !window.confirm(t('Lancer l’impression sur','Start printing on') + ' ' + m.name + ' ?\n\n' + path + filament)) return;
+  const laser = m?.kind === 'longer-ray5';
+  if (!m || !path || !window.confirm((laser ? t('Lancer le travail laser sur','Start laser job on') : t('Lancer l’impression sur','Start printing on')) + ' ' + m.name + ' ?\n\n' + path + filament + (laser ? '\n\n' + t('Je suis présent, équipé des protections laser, avec extraction et zone de travail dégagée. Profil machine, matériau, origine et puissance vérifiés.', 'I am present with laser protection, extraction and a clear work area. Machine profile, material, origin and power checked.') : ''))) return;
   try {
-    await api('machines/' + id + '/print', { path, confirm: true, ...(filament ? { filamentMode: 'external' } : {}) });
-    toast(t('Impression lancée.', 'Print started.'));
+    await api('machines/' + id + '/print', { path, confirm: true, ...(laser ? { operatorPresent: true } : {}), ...(filament ? { filamentMode: 'external' } : {}) });
+    toast(laser ? t('Travail laser lancé.', 'Laser job started.') : t('Impression lancée.', 'Print started.'));
   } catch (error) {
     toast(problem(error.code));
   }
@@ -1985,7 +2012,7 @@ app.addEventListener('change', (event) => {
   }
   if (event.target.matches('[data-gcode-local]') && event.target.files[0] && state.machine) {
     const file = event.target.files[0];
-    if (!/\.(gcode|gco|g)$/i.test(file.name) || file.size > gcodeLimit) return toast(problem('file-too-large'));
+    if (!/\.(gcode|gco|g|gc|nc)$/i.test(file.name) || file.size > gcodeLimit) return toast(problem('file-too-large'));
     Object.assign(gcode, { machine: state.machine, path: file.name, local: true, follow: false, size: file.size, result: null, layer: 0, read: 0, error: '', view: null });
     live.page = 'viewer';
     loadGcode(state.machine, file.name, file);
@@ -2183,6 +2210,9 @@ function logEventLabel(event) {
     'mqtt-command-timeout': ['Aucune réponse corrélée dans le délai', 'No correlated response within deadline'],
     'mqtt-error': ['Erreur de connexion MQTT', 'MQTT connection error'], 'mqtt-subscribe': ['Abonnement MQTT', 'MQTT subscription'],
     'ray5-connecting': ['Connexion Wi-Fi Ray5', 'Ray5 Wi-Fi connection'],
+    'ray5-command-send': ['Commande GRBL envoyée','GRBL command sent'],
+    'ray5-command-response': ['Réponse GRBL','GRBL response'],
+    'ray5-sd-http': ['Échange HTTP carte SD','SD card HTTP exchange'],
     'ray5-connected': ['Transport Ray5 connecté', 'Ray5 transport connected'],
     'ray5-disconnected': ['Liaison Ray5 interrompue', 'Ray5 connection interrupted'],
     'ray5-report': ['État GRBL reçu', 'GRBL status received'],
@@ -2275,3 +2305,14 @@ new MutationObserver(records => {
 document.addEventListener('submit', event => concealSecretInputs(event.target), true);
 document.addEventListener('visibilitychange', () => { if (document.hidden) concealSecretInputs(); });
 dialog.addEventListener('close', () => concealSecretInputs(dialog));
+
+app.addEventListener('click',event => {
+  const action = event.target.closest('[data-action]')?.dataset.action;
+  if (action?.startsWith('ray5-control:')) sendManualControl(state.machine,{action:action.split(':')[1]});
+});
+app.addEventListener('submit',event => {
+  if (!event.target.matches('[data-ray5-pulse]')) return;
+  event.preventDefault();
+  const form = new FormData(event.target);
+  sendManualControl(state.machine,{action:'laser-pulse',value:Number(form.get('value')),duration:Number(form.get('duration')),operatorPresent:true});
+});

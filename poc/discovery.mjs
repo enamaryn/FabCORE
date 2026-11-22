@@ -5,6 +5,7 @@ import { createConnection } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { connect } from 'node:tls';
 import { privateIPv4, readResponse } from './connector-http.mjs';
+import { createRay5Monitor } from './longer-ray5.mjs';
 import { discoverXTool } from './xtool-discovery.mjs';
 
 const ca = readFileSync(new URL('./certs/bambu-p2s.pem', import.meta.url));
@@ -222,23 +223,47 @@ export async function detectMoonraker(host, signal, fetcher = fetch, knownOrigin
   return devices.sort((a, b) => Number(new URL(a.origin).port) - Number(new URL(b.origin).port));
 }
 
-async function detectHost(host, signal, cc2, knownMoonraker) {
-  const [moonraker, elegoo, bambu, octoprint, xtool] = await Promise.all([
+// A valid GRBL report identifies a protocol family, not manufacturer or optical power.
+export async function detectRay5(host,signal,{known = [],read,makeMonitor = createRay5Monitor} = {}) {
+  if (!privateIPv4(host) || signal.aborted) return [];
+  if (known.length) {
+    if (!read) return [];
+    return (await Promise.all(known.map(async machine => {
+      try {
+        const report = await read(machine);
+        return report?.nativeState ? {kind:'longer-ray5',host,origin:machine.origin,transport:machine.transport ?? (machine.origin.startsWith('tcp:') ? 'tcp' : 'esp3d'),httpPort:machine.httpPort,wsPort:machine.wsPort,name:machine.name} : null;
+      } catch { return null; }
+    }))).filter(Boolean);
+  }
+  for (const transport of ['tcp','esp3d']) {
+    if (signal.aborted) return [];
+    const monitor = makeMonitor({probeMs:750});
+    const machine = {id:'discovery-'+host,origin:transport === 'tcp' ? `tcp://${host}:8080` : `http://${host}:8848`,transport,wsPort:8849,httpPort:transport === 'tcp' ? 80 : 8848};
+    try {
+      if ((await monitor.probe(machine,{signal})).ok) return [{...machine,id:undefined,kind:'longer-ray5',host,candidate:true,name:'GRBL Wi-Fi · Ray5 à confirmer'}];
+    } finally { monitor.close(); }
+  }
+  return [];
+}
+
+async function detectHost(host, signal, cc2, knownMoonraker, ray5Options) {
+  const [moonraker, elegoo, bambu, octoprint, xtool, ray5] = await Promise.all([
     detectMoonraker(host, signal, undefined, knownMoonraker),
     detectCC2(host, signal, cc2),
     detectBambu(host, signal),
     detectOctoPrint(host, signal),
-    detectXTool(host, signal)
+    detectXTool(host, signal),
+    detectRay5(host, signal, ray5Options)
   ]);
   const found = [];
-  found.push(...moonraker);
+  found.push(...moonraker, ...ray5);
   if (elegoo) found.push(elegoo);
   if (bambu) found.push(bambu);
   if (xtool) found.push(xtool);
   return [...found, ...octoprint];
 }
 
-export async function scanNetwork(network, signal, { inspectHost = detectHost, broadcast = detectCC1, xtoolDiscovery = discoverXTool, machines = [] } = {}) {
+export async function scanNetwork(network, signal, { inspectHost = detectHost, broadcast = detectCC1, xtoolDiscovery = discoverXTool, machines = [], readRay5 } = {}) {
   setMaxListeners(128, signal);
   const cc2 = new Map(machines.filter(machine => machine.kind === 'elegoo' && machine.accessCode)
     .map(machine => [URL.parse(machine.origin)?.hostname, machine]));
@@ -262,7 +287,7 @@ export async function scanNetwork(network, signal, { inspectHost = detectHost, b
   async function worker() {
     while (!signal.aborted && cursor < hosts.length) {
       const host = hosts[cursor++];
-      found.push(...await inspectHost(host, signal, cc2.get(host), knownMoonraker.get(host)));
+      found.push(...await inspectHost(host, signal, cc2.get(host), knownMoonraker.get(host), {known:machines.filter(m => m.kind === 'longer-ray5' && URL.parse(m.origin)?.hostname === host),read:readRay5}));
     }
   }
   await Promise.all(Array.from({ length: 20 }, worker));

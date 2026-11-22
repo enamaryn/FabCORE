@@ -18,6 +18,7 @@ import { internalNtfy, notificationSettings, publicNotifications, sendNotificati
 import { openStore } from './store.mjs';
 import { createCloudAccounts, CloudError } from './cloud-accounts.mjs';
 import { validateControl } from './manual-controls.mjs';
+import { ray5Path } from './longer-ray5-files.mjs';
 import { filePath } from './connector-http.mjs';
 import { productionPath } from './production-files.mjs';
 import { transferMachineFile } from './file-transfer.mjs';
@@ -100,7 +101,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -116,7 +117,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const machineLogs = createMachineLogs({ directory, machines: () => store.state.machines });
   const diagnostics = createDiagnostics({ journal: machineLogs });
   diagnostics.record('server', 'started');
-  const connectors = createConnectorRegistry({ directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, diagnostics, openCamera, cloud });
+  const connectors = createConnectorRegistry({ directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, diagnostics, openCamera, cloud });
   const snapshot = monitor(async (machine) => {
     const connector = await connectors.get(machine.kind ?? 'klipper');
     const { serial, fingerprint, ...telemetry } = await connector.read(machine);
@@ -396,7 +397,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       res.once('close', stop);
       discoveryActive = true;
       try {
-        const found = await scan(network, abort.signal, { machines: store.state.machines });
+        const found = await scan(network, abort.signal, { machines: store.state.machines, readRay5: async machine => (await connectors.get('longer-ray5')).read(machine) });
         if (abort.signal.aborted) return;
         const devices = reconcileDiscovery(network, found, store.state.machines);
         return answer(res, 200, { devices });
@@ -472,8 +473,8 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         try {
           if (!(await connector.command(machine, action))) return error(res, 502, 'command-rejected');
           for (let attempt = 0; attempt < 4; attempt++) {
-            const status = (await connector.read(machine)).status;
-            if (after.includes(status)) return answer(res, 200, { status });
+            const report = await connector.read(machine), status = report.status;
+            if (after.includes(status) || (machine.kind === 'longer-ray5' && action === 'stop' && status === 'error' && report.nativeState === 'Alarm' && report.spindle === 0 && report.feedRate === 0)) return answer(res, 200, { status });
             if (attempt < 3) await delay(350);
           }
         } catch { /* The request may have reached the printer. Never retry it automatically. */ }
@@ -504,12 +505,12 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       try {
         const connector = await connectors.get(machine.kind ?? 'klipper');
         const status = (await connector.read(machine)).status;
-        if (req.method === 'POST' && !['ready', 'done', 'printing', 'paused'].includes(status)) return error(res, 409, 'command-state');
+        if (req.method === 'POST' && !(machine.kind === 'longer-ray5' && ['reset','unlock','jog-cancel'].includes(data.action)) && !['ready', 'done', 'printing', 'paused'].includes(status)) return error(res, 409, 'command-state');
         const controls = await connector.control.read(machine);
         if (req.method === 'GET') return answer(res, 200, { ...controls, status });
         const command = validateControl(data, controls);
         if (!command) return error(res, 400, 'control-invalid');
-        if (['move', 'home'].includes(command.action) && !['ready', 'done'].includes(status)) return error(res, 409, 'command-state');
+        if (['move', 'home', 'zero', 'laser-pulse'].includes(command.action) && !['ready', 'done'].includes(status)) return error(res, 409, 'command-state');
         if (['printing', 'paused'].includes(status) && ['heat', 'fan'].includes(command.action) && data.duringPrint !== true) return error(res, 409, 'control-confirm');
         if (res.destroyed) return;
         if (!session(req)) return error(res, 401, 'sign-in');
@@ -570,7 +571,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const machine = store.state.machines.find(entry => entry.id === id);
       if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.files) return error(res, 404, 'missing');
       const files = (await connectors.get(machine.kind ?? 'klipper')).files;
-      const validPath = connectorDefinition(machine.kind ?? 'klipper').projects ? productionPath : filePath;
+      const validPath = machine.kind === 'longer-ray5' ? ray5Path : connectorDefinition(machine.kind ?? 'klipper').projects ? productionPath : filePath;
       const params = new URLSearchParams(query);
       if (req.method === 'GET' && route === 'files') {
         try {
@@ -620,10 +621,10 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         const sourcePath = validPath(data.path);
         const destination = store.state.machines.find(entry => entry.id === data.destination);
         const definition = destination && connectorDefinition(destination.kind ?? 'klipper');
-        const destinationPath = definition?.projects ? productionPath : filePath;
+        const destinationPath = destination?.kind === 'longer-ray5' ? ray5Path : definition?.projects ? productionPath : filePath;
         const name = data.name;
         if (!sourcePath || data.confirm !== true || !destination || destination.id === machine.id || !definition?.files ||
-          !destinationPath(name) || name.includes('/') || /\.3mf$/i.test(sourcePath) !== /\.3mf$/i.test(name)) return error(res, 400, 'invalid');
+          (definition.fileFamily ?? 'fdm') !== (connectorDefinition(machine.kind ?? 'klipper').fileFamily ?? 'fdm') || !destinationPath(name) || name.includes('/') || /\.3mf$/i.test(sourcePath) !== /\.3mf$/i.test(name)) return error(res, 400, 'invalid');
         if ([machine.id, destination.id].some(id => pendingUploads.has(id) || pendingCommands.has(id))) return error(res, 409, 'upload-busy');
         pendingUploads.add(machine.id);
         pendingUploads.add(destination.id);
@@ -649,7 +650,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         const size = Number(req.headers['content-length']);
         if (req.headers['content-type'] !== 'application/octet-stream' || !validPath(name) || name.includes('/')) return error(res, 400, 'invalid');
         if (!Number.isSafeInteger(size) || size < 1) return error(res, 411, 'invalid');
-        if (size > fileLimit) return error(res, 413, 'file-too-large');
+        if (size > (machine.kind === 'longer-ray5' ? 16 * 1024 * 1024 : fileLimit)) return error(res, 413, 'file-too-large');
         if (pendingUploads.has(machine.id) || pendingCommands.has(machine.id)) return error(res, 409, 'upload-busy');
         pendingUploads.add(machine.id);
         try {
@@ -670,6 +671,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
         const target = validPath(data.path);
         if (!target || data.confirm !== true) return error(res, 400, 'invalid');
+        if (machine.kind === 'longer-ray5' && data.operatorPresent !== true) return error(res, 400, 'laser-confirm');
         if (connectorDefinition(machine.kind ?? 'klipper').externalFilament && data.filamentMode !== 'external') return error(res, 400, 'filament-confirm');
         if (pendingCommands.has(machine.id) || pendingUploads.has(machine.id)) return error(res, 409, 'command-busy');
         pendingCommands.add(machine.id);

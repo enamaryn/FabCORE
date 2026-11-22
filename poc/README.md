@@ -207,6 +207,10 @@ La [matrice du POC](../docs/POC.md#contrôles-manuels--19-novembre-2026) précis
 
 Consulter le [guide des comptes cloud et journaux](../docs/CLOUD-ACCOUNTS.md) pour le pilote Bambu, les comptes créés via Google, les logs par compte et les sauvegardes de la clé de chiffrement. Ce pilote lit la liste des machines ; il ne commande pas les imprimantes.
 
-## Longer Ray5 en Wi-Fi · essai en lecture seule
+## Longer Ray5 en Wi-Fi · pilote expérimental
 
-Ajouter manuellement le type **Longer · Ray5 Wi-Fi (lecture seule)** avec l’IPv4 privée de la machine. Choisir GRBL TCP (8080 par défaut) ou ESP3D (HTTP 8848 et WebSocket 8849) selon son firmware, puis tester et ajouter. Le scan automatique n’est pas étendu à cette famille. La fiche présente les rapports GRBL réellement reçus et les journaux ; aucune commande laser, déplacement ou gestion SD n’est disponible dans ce premier pilote. Voir la [recherche et la recette matérielle](../docs/protocols/LONGER-RAY5-LAN.md).
+Le scan interroge les interfaces GRBL TCP 8080 et ESP3D 8848/8849. Une réponse GRBL générique reste une famille à confirmer. Pour une Ray5 déjà ajoutée, la session de supervision est réutilisée. L’ajout manuel reste disponible : **Longer · Ray5 Wi-Fi**, IPv4 privée, TCP 8080 et port SD HTTP 80 sur le firmware observé ; ports configurables.
+
+La fiche propose les déplacements XY, zéro G54, origine si activée dans le firmware, M5, impulsion de test bornée, annulation de jog, Reset et déverrouillage séparé. Pause/Reprise/Stop utilisent la session TCP et un rapport d’état récent. Le mode ESP3D reste sans contrôles manuels dans cette livraison. La carte SD native est listée via `/upload`, les originaux lus via `/SD/`, les uploads vérifiés sans lancement et le démarrage reste confirmé séparément, avec présence opérateur. Formats `.gc/.nc/.gcode/.gco/.g`, 16 Mio par fichier ; limites d’inventaire affichées. Transferts laser/FDM bloqués.
+
+**Recette matérielle du pilotage encore à faire.** Aucun tir, déplacement, upload ou lancement réel effectué pendant le développement. Source des commandes, différences de firmware, lectures réellement constatées, limites et ordre des essais : [dossier Longer Ray5](../docs/protocols/LONGER-RAY5-LAN.md).

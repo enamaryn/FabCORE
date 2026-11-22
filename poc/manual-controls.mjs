@@ -49,9 +49,14 @@ export function validateControl(data, controls) {
     if (item && data.value >= 0 && data.value <= item.max) return { action: 'heat', id: data.id, value: data.value };
   }
   if (data.action === 'fan' && Number.isInteger(data.value) && data.value >= 0 && data.value <= 100 && controls.fans.some(item => item.id === data.id && item.writable)) return { action: 'fan', id: data.id, value: data.value };
-  if (data.action === 'home' && controls.motion) return { action: 'home' };
+  if (controls.laser?.writable) {
+    if (['laser-off','zero','unlock','reset','jog-cancel'].includes(data.action)) return { action: data.action };
+    if (data.action === 'laser-pulse' && data.operatorPresent === true && controls.laser.mode && controls.laser.max > 0 && Number.isInteger(data.value) && data.value >= 1 && data.value <= 5 && [100,250,500].includes(data.duration)) return { action: data.action, value: data.value, duration: data.duration, operatorPresent: true };
+  }
+  if (data.action === 'home' && controls.motion && controls.motion.home !== false) return { action: 'home' };
   if (data.action === 'move' && controls.motion && ['X', 'Y', 'Z'].includes(data.axis) && [0.1, 1, 10].includes(Math.abs(data.distance))) {
     const motion = controls.motion;
+    if (motion.axes && !motion.axes.includes(data.axis)) return null;
     const index = ['X', 'Y', 'Z'].indexOf(data.axis);
     if (motion.homed !== null) {
       if (!['x', 'y', 'z'].every(axis => motion.homed?.includes(axis))) return null;
