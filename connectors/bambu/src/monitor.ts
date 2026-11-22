@@ -44,6 +44,8 @@ interface Printer {
 /** Une seule implémentation P2S LAN : session MQTT persistante, corrélation par sequence_id, aucun rejeu. */
 export function createP2SMonitor({ ca, reportedControls, bambuFilaments, connectPrinter = connect, diagnostics }: P2SMonitorOptions) {
   const printers = new Map<string, Printer>();
+  // Après close(), plus aucune session n'est ouverte : un appel tardif ne doit pas recréer de connexion.
+  let closed = false;
 
   function open(machine: P2SConnection, tracked = false): Printer {
     const reportTopic = `device/${machine.serial}/report`;
@@ -200,6 +202,7 @@ export function createP2SMonitor({ ca, reportedControls, bambuFilaments, connect
   }
 
   const session = (machine: P2SConnection): Printer => {
+    if (closed) throw new Error('bambu-connection');
     let printer = printers.get(machine.id);
     if (!printer) printers.set(machine.id, printer = open(machine, true));
     return printer;
@@ -212,17 +215,21 @@ export function createP2SMonitor({ ca, reportedControls, bambuFilaments, connect
       return printer.controls;
     },
     send(machine: P2SConnection, command: string, params: Record<string, unknown> = {}, channel: P2SChannel = 'print') {
+      if (closed) return Promise.reject(new Error('bambu-connection'));
       return session(machine).send(command, params, channel);
     },
     command(machine: P2SConnection, action: string) {
       if (!['pause', 'resume', 'stop'].includes(action)) return false;
+      if (closed) return Promise.reject(new Error('bambu-connection'));
       return session(machine).send(action, { param: '' });
     },
     read(machine: P2SConnection) {
+      if (closed) return { ...empty('offline', 'bambu-connection'), checkedAt: null };
       const { current, lastReport, authorizationDenied } = session(machine);
       return { ...current, ...(authorizationDenied ? { controlIssue: 'bambu-authorization' } : {}), checkedAt: lastReport ? new Date(lastReport).toISOString() : null };
     },
     async probe(machine: P2SConnection, signal?: AbortSignal) {
+      if (closed) return { ok: false, issue: 'bambu-connection' };
       const printer = open(machine);
       try {
         const until = Date.now() + 14000;
@@ -239,6 +246,7 @@ export function createP2SMonitor({ ca, reportedControls, bambuFilaments, connect
       printers.delete(id);
     },
     close() {
+      closed = true;
       for (const printer of printers.values()) printer.close();
       printers.clear();
     },

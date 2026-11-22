@@ -249,12 +249,15 @@ export function createXToolServices({ privateIPv4, Socket: DefaultSocket, snapsh
 
   function createXToolMonitor({ Socket = DefaultSocket }: Pick<XToolReadOptions, 'Socket'> = {}) {
     const sessions = new Map<string, MonitorEntry>();
+    // Après close(), plus aucune session n'est ouverte : un appel tardif ne doit pas recréer de connexion.
+    let closed = false;
     function forget(id: string) {
       const entry = sessions.get(id);
       sessions.delete(id);
       entry?.controller.abort();
     }
     function read(machine: XToolMachine): XToolReadResult {
+      if (closed) return result('offline', 'xtool-connection');
       let entry = sessions.get(machine.id);
       if (!entry) {
         entry = { controller: new AbortController(), current: result('connecting'), retryAt: 0 };
@@ -299,6 +302,7 @@ export function createXToolServices({ privateIPv4, Socket: DefaultSocket, snapsh
       },
       forget,
       close() {
+        closed = true;
         for (const id of sessions.keys()) forget(id);
       }
     };

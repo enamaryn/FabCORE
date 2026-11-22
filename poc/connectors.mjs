@@ -180,6 +180,14 @@ export function createConnectorRegistry(options, definition = connectorDefinitio
       }
       return pending.get(kind);
     },
+    // Lecture de supervision : une machine supprimée ou modifiée pendant le chargement
+    // du connecteur n'est pas lue, pour ne pas rouvrir une session périmée que plus rien ne fermerait.
+    async read(kind, machine, ...args) {
+      const connector = await this.get(kind);
+      if (!connector) return null;
+      if (options.isCurrent && !options.isCurrent(machine)) throw new Error('machine-removed');
+      return connector.read(machine, ...args);
+    },
     forget(kind, id, changed) { loaded.get(kind)?.forget?.(id, changed); },
     close() {
       closed = true;

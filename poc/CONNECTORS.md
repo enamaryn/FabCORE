@@ -105,3 +105,12 @@ Les points d’entrée POC restent compatibles mais composent les protocoles typ
 | Bambu Cloud | `connectors/bambu/src/cloud-http.ts`, `cloud-monitor.ts` | Authentification, inventaire et télémétrie uniquement ; aucune commande, caméra distante ou bascule LAN/cloud ajoutée |
 
 Les projections partagées, validation IPv4, transport WebSocket et observation d’images sont injectés par composition ; les modules typés n’importent ni le POC ni le cœur. Comptes cloud, chiffrement, persistance, droits, limitation des tentatives et coordination restent applicatifs dans `cloud-accounts.mjs`. Les adaptateurs réexportent aussi les mêmes `CloudError` et `safeCloudPayload`, sans deuxième définition. Une migration de types ne vaut pas recette matérielle et ne clôt pas les vérifications transversales MIG-02.2.3.
+
+## Cycle de vie des sessions · MIG-02.2.3
+
+- **Une session par machine**, indexée par identifiant ; `forget(id)` ne ferme que celle-ci. Aucune commande ni rapport ne traverse d'une machine à l'autre.
+- **Fermeture** : `close()` rejette les commandes en attente en `command-unconfirmed`, ferme les clients et interdit toute réouverture ; un appel tardif (`read`, `command`, `send`, `probe`) répond hors ligne ou échoue sans créer de connexion.
+- **Reconnexion** : l'état repart de `connecting` sans valeur de la session précédente ; une commande en attente n'est jamais republiée ; aucune commande sans rapport frais.
+- **Supervision** : le serveur lit par `registry.read(kind, machine)`, qui refuse une machine supprimée ou remplacée pendant le chargement du connecteur (`machine-removed`) pour ne jamais rouvrir une session avec une configuration périmée.
+
+Tout nouveau connecteur à session persistante doit fournir les mêmes tests (voir `connectors/bambu/test/lifecycle.test.ts`).

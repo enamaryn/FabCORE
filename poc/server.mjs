@@ -88,7 +88,10 @@ function monitor(readPrinter) {
     if (!entry.pending && Date.now() >= entry.next) {
       entry.pending = Promise.resolve().then(() => readPrinter(machine)).then(
         (result) => { entry.current = result; },
-        () => { entry.current = { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' }; }
+        (error) => {
+          // Machine remplacée pendant le chargement (édition, bobine) : garder le dernier état plutôt qu'un faux hors ligne.
+          if (error?.message !== 'machine-removed') entry.current = { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' };
+        }
       ).finally(() => {
         entry.checkedAt = new Date().toISOString();
         entry.next = Date.now() + (connectorDefinition(machine.kind ?? 'klipper')?.interval ?? 1000);
@@ -117,10 +120,9 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const machineLogs = createMachineLogs({ directory, machines: () => store.state.machines });
   const diagnostics = createDiagnostics({ journal: machineLogs });
   diagnostics.record('server', 'started');
-  const connectors = createConnectorRegistry({ directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, diagnostics, openCamera, cloud });
+  const connectors = createConnectorRegistry({ isCurrent: machine => store.state.machines.includes(machine), directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, diagnostics, openCamera, cloud });
   const snapshot = monitor(async (machine) => {
-    const connector = await connectors.get(machine.kind ?? 'klipper');
-    const { serial, fingerprint, ...telemetry } = await connector.read(machine);
+    const { serial, fingerprint, ...telemetry } = await connectors.read(machine.kind ?? 'klipper', machine);
     return telemetry;
   });
   const pendingCommands = new Set();
@@ -412,8 +414,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         const definition = connectorDefinition(machine.kind ?? 'klipper');
         let telemetry;
         try {
-          const connector = definition?.live ? await connectors.get(machine.kind) : null;
-          telemetry = connector ? await connector.read(machine) : snapshot(machine);
+          telemetry = (definition?.live ? await connectors.read(machine.kind, machine) : null) ?? snapshot(machine);
           if (!['connecting', 'ready', 'printing', 'paused', 'done', 'offline', 'error'].includes(telemetry?.status)) throw new Error('invalid-telemetry');
         } catch {
           // One failed connector must not hide the rest of the fleet.
