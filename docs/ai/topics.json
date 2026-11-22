@@ -186,25 +186,32 @@
   },
   {
     "id": "http",
-    "title": "Socle HTTP Fastify, routes migrées et OpenAPI",
+    "title": "Socle HTTP Fastify, routes migrées (session, diagnostic, parc, notifications, journaux) et OpenAPI",
     "files": [
       "src/http/app.ts",
       "src/http/errors.ts",
       "src/http/routes/index.ts",
       "src/http/routes/session.ts",
       "src/http/routes/diagnostics.ts",
+      "src/http/routes/fleet.ts",
+      "src/http/routes/notifications.ts",
+      "src/http/routes/logs.ts",
       "src/http/openapi.ts",
       "poc/server.mjs"
     ],
     "symbols": [
       "createHttpApp",
+      "routePattern",
       "migratedRoutes",
       "openApiDocument",
-      "HttpError"
+      "HttpError",
+      "listFleet"
     ],
     "tests": [
       "src/http/app.test.ts",
-      "poc/server.test.mjs"
+      "src/http/read-routes.test.ts",
+      "poc/server.test.mjs",
+      "poc/cloud-accounts.test.mjs"
     ],
     "docs": [
       "docs/api/openapi.json",

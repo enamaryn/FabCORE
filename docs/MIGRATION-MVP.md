@@ -1,6 +1,6 @@
 # Migration du POC vers le socle MVP
 
-**État : migration engagée. MIG-01 et MIG-02 fusionnés ; MIG-03 engagé (socle HTTP en revue).** Référence : [bilan POC v0](POC-BILAN.md). Ce plan détaille MVP-00/01/02/03/12/13 ; il ne remplace pas le périmètre produit du [MVP](MVP.md).
+**État : migration engagée. MIG-01 et MIG-02 fusionnés ; MIG-03 engagé (socle HTTP fusionné, routes de lecture en revue).** Référence : [bilan POC v0](POC-BILAN.md). Ce plan détaille MVP-00/01/02/03/12/13 ; il ne remplace pas le périmètre produit du [MVP](MVP.md).
 
 ## Règles de passage
 
@@ -13,7 +13,7 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 | MIG-00 | Référence et recette de non-régression | Clôture POC | POC v0 publié ; bilan accepté |
 | MIG-01 | Architecture, contrats et outillage | MIG-00 | Fusionné : PR #100 et #101 ([ADR](adr/README.md)) |
 | MIG-02 | Domaine et connecteurs TypeScript | MIG-01 | Fusionné (#102 à #107, #109) ; recette physique à faire |
-| MIG-03 | Services backend et API | MIG-02 | En cours : socle HTTP en revue |
+| MIG-03 | Services backend et API | MIG-02 | En cours : socle HTTP fusionné (#110), routes de lecture en revue |
 | MIG-04 | PostgreSQL et reprise des données | MIG-03 | À faire |
 | MIG-05 | Événements et SSE | MIG-03/04 | À faire |
 | MIG-06 | Interface React par parcours | MIG-05 | À faire |
@@ -92,7 +92,9 @@ Validation locale Node 24 : types, lint, **154 tests**, licences et navigation. 
 
 ### MIG-03.1 · Services et routes
 
-**Socle HTTP en revue** (première étape) : `src/http/app.ts` → `createHttpApp`, Fastify 5 en étrangleur (ADR 0002). Le serveur public reste `node:http` du POC ; il délègue à Fastify uniquement les routes migrées (méthode et chemin exacts), le reste passe par le routeur POC sans changement. Centralisé dans le socle : en-têtes de sécurité, refus d'hôte (421), gardes `signedIn`/`admin` (401 `sign-in`, 403 `forbidden`), format `{ error: code }`, erreur interne sans détail (500 `internal`), validation (400 `invalid`). Premières routes migrées, contrats inchangés : `GET /api/session` et `GET /api/diagnostics` (`src/http/routes/`), une seule implémentation. OpenAPI 3.1 générée depuis les schémas TypeBox : `GET /api/openapi.json` (session requise) et [`docs/api/openapi.json`](api/openapi.json) versionné, vérifié par `npm run check` et la CI (`npm run openapi` pour le régénérer). Dépendances ajoutées : `fastify`, `@fastify/swagger` (MIT). Prochaines étapes : routes de lecture (machines, notifications, journaux), puis écritures avec validation de corps, origine et limitation centralisées, puis commandes (MIG-03.2).
+**Socle HTTP fusionné (#110)** (première étape) : `src/http/app.ts` → `createHttpApp`, Fastify 5 en étrangleur (ADR 0002). Le serveur public reste `node:http` du POC ; il délègue à Fastify uniquement les routes migrées (méthode et chemin exacts), le reste passe par le routeur POC sans changement. Centralisé dans le socle : en-têtes de sécurité, refus d'hôte (421), gardes `signedIn`/`admin` (401 `sign-in`, 403 `forbidden`), format `{ error: code }`, erreur interne sans détail (500 `internal`), validation (400 `invalid`). Premières routes migrées, contrats inchangés : `GET /api/session` et `GET /api/diagnostics` (`src/http/routes/`), une seule implémentation. OpenAPI 3.1 générée depuis les schémas TypeBox : `GET /api/openapi.json` (session requise) et [`docs/api/openapi.json`](api/openapi.json) versionné, vérifié par `npm run check` et la CI (`npm run openapi` pour le régénérer). Dépendances ajoutées : `fastify`, `@fastify/swagger` (MIT). Prochaines étapes : routes de lecture (machines, notifications, journaux), puis écritures avec validation de corps, origine et limitation centralisées, puis commandes (MIG-03.2).
+
+**Routes de lecture en revue** (deuxième étape) : `GET /api/machines` (`routes/fleet.ts`), `GET /api/notifications` (`routes/notifications.ts`), `GET /api/machines/{id}/logs` et `logs-download`, `GET /api/cloud-accounts`, `GET /api/cloud-accounts/{id}/logs` et `logs-download` (`routes/logs.ts`). Contrats inchangés, anciens blocs retirés du routeur POC. La délégation reconnaît maintenant les identifiants contraints (`:id([a-f0-9-]{36})`, même expression que le POC) : un identifiant invalide reste servi par le POC et répond comme avant. Pendant la migration, la logique métier reste dans le POC et est injectée : `listFleet` (registre de connecteurs, cache de supervision, flux caméra par session), réglages publics des notifications, journaux et module cloud (`cloudFailure` traduit `CloudError` ou `cloud-storage`). Extraction de ces services vers `src/application/` à l'étape « services ». OpenAPI : 9 chemins.
 
 - MIG-03.1.1 Extraire authentification/utilisateurs, parc/connexions, télémétrie, commandes, fichiers/caméras, notifications et administration.
 - MIG-03.1.2 Conserver les contrats HTTP existants pendant le remplacement progressif ; documenter REST en OpenAPI.

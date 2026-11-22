@@ -42,6 +42,25 @@ export interface HttpApp {
   close(): Promise<void>;
 }
 
+/**
+ * Expression du chemin complet d'une route Fastify. Un paramètre `:id(regex)` reprend sa contrainte
+ * (Fastify l'ancre au segment) ; la requête n'est jamais acceptée, comme dans le routeur du POC.
+ */
+export function routePattern(url: string): RegExp {
+  let source = '';
+  for (let index = 0; index < url.length;) {
+    const parameter = /^:[A-Za-z_][A-Za-z0-9_]*(?:\(((?:[^()\\]|\\.)+)\))?/.exec(url.slice(index));
+    if (parameter) {
+      source += parameter[1] ? `(?:${parameter[1].replace(/^\^/, '').replace(/\$$/, '')})` : '[^/?#]+';
+      index += parameter[0].length;
+    } else {
+      source += url[index]!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      index += 1;
+    }
+  }
+  return new RegExp(`^${source}$`);
+}
+
 export function createHttpApp(dependencies: HttpDependencies, routes: RouteModule[]): HttpApp {
   let handler: ((request: IncomingMessage, response: ServerResponse) => void) | undefined;
   const app = fastify({
@@ -51,9 +70,9 @@ export function createHttpApp(dependencies: HttpDependencies, routes: RouteModul
     exposeHeadRoutes: false,
     return503OnClosing: false,
   });
-  const migrated = new Set<string>();
+  const migrated: { method: string; pattern: RegExp }[] = [];
   app.addHook('onRoute', route => {
-    for (const method of [route.method].flat()) migrated.add(`${method} ${route.url}`);
+    for (const method of [route.method].flat()) migrated.push({ method, pattern: routePattern(route.url) });
   });
 
   void app.register(swagger, {
@@ -106,7 +125,7 @@ export function createHttpApp(dependencies: HttpDependencies, routes: RouteModul
   return {
     app,
     ready,
-    handles: request => migrated.has(`${request.method} ${request.url}`),
+    handles: request => migrated.some(({ method, pattern }) => method === request.method && pattern.test(request.url ?? '')),
     dispatch(request, response) {
       ready.then(() => handler!(request, response), () => {
         response.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });

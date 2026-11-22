@@ -16,6 +16,9 @@ function build(view: () => Record<string, unknown> = () => ({ events: [] })) {
   return createHttpApp({ allowedHost: host, viewer, onFailure: () => { failures += 1; } }, migratedRoutes({
     session: { installed: () => true, oidcEnabled: () => false, viewer },
     diagnostics: { view, fleet: () => [{ id: 'm1', name: 'P2S' }] },
+    fleet: { list: async () => [] },
+    notifications: { view: () => ({ ntfy: { mode: 'off' }, smtp: { enabled: false }, internal: null }) },
+    logs: { machine: () => null, machineLog: () => '', cloudAccounts: () => ({ providers: [], accounts: [] }), cloudLog: () => '', cloudFailure: () => { throw new Error('unused'); } },
   }));
 }
 const get = (http: ReturnType<typeof build>, url: string, cookie?: string, requestHost = host) =>
@@ -64,7 +67,7 @@ test('socle HTTP : le diagnostic conserve tout le contenu produit et la liste du
   await http.close();
 });
 
-test('socle HTTP : seules les routes migrées exactes sont déléguées', async () => {
+test('socle HTTP : seules les routes migrées sont déléguées, identifiants contraints comme le POC', async () => {
   const http = build();
   await http.ready;
   const request = (method: string, url: string) => ({ method, url }) as IncomingMessage;
@@ -74,7 +77,16 @@ test('socle HTTP : seules les routes migrées exactes sont déléguées', async 
   assert.equal(http.handles(request('POST', '/api/session')), false, 'autre méthode : routeur POC');
   assert.equal(http.handles(request('HEAD', '/api/session')), false);
   assert.equal(http.handles(request('GET', '/api/session?x=1')), false, 'chemin exact uniquement, comme le POC');
-  assert.equal(http.handles(request('GET', '/api/machines')), false);
+  const id = '3f1c2b9e-4d5a-4b6c-8d7e-9f0a1b2c3d4e';
+  assert.equal(http.handles(request('GET', '/api/machines')), true);
+  assert.equal(http.handles(request('GET', `/api/machines/${id}/logs`)), true);
+  assert.equal(http.handles(request('GET', `/api/machines/${id}/logs-download`)), true);
+  assert.equal(http.handles(request('GET', `/api/cloud-accounts/${id}/logs`)), true);
+  assert.equal(http.handles(request('GET', '/api/machines/not-a-uuid/logs')), false, 'identifiant invalide : réponse POC inchangée');
+  assert.equal(http.handles(request('GET', `/api/machines/${id}/camera`)), false);
+  assert.equal(http.handles(request('POST', '/api/machines')), false, 'écritures encore servies par le POC');
+  assert.equal(http.handles(request('POST', `/api/cloud-accounts/${id}/login`)), false);
+  assert.equal(http.handles(request('GET', `/api/cloud-accounts/${id}/login`)), false);
   await http.close();
 });
 
@@ -83,7 +95,8 @@ test('OpenAPI : servi aux sessions valides et identique au document versionné',
   await http.ready;
   assert.equal((await get(http, '/api/openapi.json')).statusCode, 401);
   const served = (await get(http, '/api/openapi.json', 'observer')).json() as { paths: Record<string, unknown> };
-  assert.deepEqual(Object.keys(served.paths), ['/api/session', '/api/diagnostics']);
+  assert.ok(['/api/session', '/api/diagnostics', '/api/machines'].every(path => path in served.paths));
+  assert.equal('/api/openapi.json' in served.paths, false, 'route interne masquée');
   await http.close();
   const document = await openApiDocument() as { openapi: string; components: { schemas: Record<string, unknown> } };
   assert.equal(document.openapi, '3.1.0');

@@ -7,6 +7,9 @@ export async function openApiDocument(): Promise<unknown> {
   const http = createHttpApp({ allowedHost: 'fabcore.invalid', viewer: () => null }, migratedRoutes({
     session: { installed: unused, oidcEnabled: unused, viewer: () => null },
     diagnostics: { view: unused, fleet: unused },
+    fleet: { list: unused },
+    notifications: { view: unused },
+    logs: { machine: unused, machineLog: unused, cloudAccounts: unused, cloudLog: unused, cloudFailure: unused },
   }));
   await http.ready;
   const document = http.app.swagger();
