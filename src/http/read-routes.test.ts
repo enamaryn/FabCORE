@@ -16,10 +16,11 @@ class CloudError extends Error { status = 404; }
 function build(overrides: Partial<RouteDependencies> = {}) {
   const sessions: string[] = [];
   const dependencies: RouteDependencies = {
+    accounts: { installed: () => true, setup: async () => { throw new Error('unused'); }, login: async () => { throw new Error('unused'); }, logout: () => ({ body: { authenticated: false as const }, cookie: '' }), addObserver: async () => ({ username: 'x' }) },
     session: { installed: () => true, oidcEnabled: () => false, viewer },
     diagnostics: { view: () => ({}), fleet: () => [] },
     fleet: { list: async current => { sessions.push(current.session); return [{ id, name: 'P2S', kind: 'bambu', status: 'printing', cameraOpen: false, nozzle: null, filaments: [{ slots: [] }] }]; } },
-    notifications: { view: () => ({ ntfy: { mode: 'external', url: 'https://ntfy.example.test', topic: 'fabcore' }, smtp: { enabled: false }, internal: null }) },
+    notifications: { view: () => ({ ntfy: { mode: 'external', url: 'https://ntfy.example.test', topic: 'fabcore' }, smtp: { enabled: false }, internal: null }), save: () => { throw new Error('unused'); }, test: async () => ({ accepted: true as const }) },
     logs: {
       machine: machineId => machineId === id ? { id, name: 'P2S', kind: 'bambu' } : null,
       machineLog: () => '{"event":"a"}\n{"event":"b"}\n',
@@ -29,7 +30,7 @@ function build(overrides: Partial<RouteDependencies> = {}) {
     },
     ...overrides,
   };
-  return { http: createHttpApp({ allowedHost: host, viewer }, migratedRoutes(dependencies)), sessions };
+  return { http: createHttpApp({ allowedHost: host, origin: 'http://fabcore.test', limit: () => true, viewer }, migratedRoutes(dependencies)), sessions };
 }
 const get = (http: ReturnType<typeof build>['http'], url: string, cookie?: string) =>
   http.app.inject({ method: 'GET', url, headers: { host, ...(cookie ? { cookie } : {}) } });

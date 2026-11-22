@@ -13,11 +13,12 @@ const viewers: Record<string, Viewer> = {
 const viewer = (request: IncomingMessage) => viewers[String(request.headers.cookie ?? '')] ?? null;
 let failures = 0;
 function build(view: () => Record<string, unknown> = () => ({ events: [] })) {
-  return createHttpApp({ allowedHost: host, viewer, onFailure: () => { failures += 1; } }, migratedRoutes({
+  return createHttpApp({ allowedHost: host, origin: 'http://fabcore.test', limit: () => true, viewer, onFailure: () => { failures += 1; } }, migratedRoutes({
+    accounts: { installed: () => true, setup: async () => { throw new Error('unused'); }, login: async () => { throw new Error('unused'); }, logout: () => ({ body: { authenticated: false as const }, cookie: '' }), addObserver: async () => ({ username: 'x' }) },
     session: { installed: () => true, oidcEnabled: () => false, viewer },
     diagnostics: { view, fleet: () => [{ id: 'm1', name: 'P2S' }] },
     fleet: { list: async () => [] },
-    notifications: { view: () => ({ ntfy: { mode: 'off' }, smtp: { enabled: false }, internal: null }) },
+    notifications: { view: () => ({ ntfy: { mode: 'off' }, smtp: { enabled: false }, internal: null }), save: () => { throw new Error('unused'); }, test: async () => ({ accepted: true as const }) },
     logs: { machine: () => null, machineLog: () => '', cloudAccounts: () => ({ providers: [], accounts: [] }), cloudLog: () => '', cloudFailure: () => { throw new Error('unused'); } },
   }));
 }
