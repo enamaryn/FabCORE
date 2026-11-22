@@ -1,0 +1,8 @@
+{
+  "name": "@fabcore/connector-longer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0",
+  "dependencies": { "@fabcore/connector-sdk": "0.0.0" }
+}

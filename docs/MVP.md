@@ -1,6 +1,6 @@
 # Phase 2 · MVP — produit utilisable au quotidien
 
-**État : cadrage actif après clôture du POC le 22 novembre 2026.** Migration technique engagée : MIG-01, MIG-02.1 et CC2/P2S LAN/Moonraker fusionnés ; OctoPrint/PrusaLink en revue. Voir le [bilan technique](POC-BILAN.md) et le [plan détaillé MIG-00 à MIG-08](MIGRATION-MVP.md).
+**État : cadrage actif après clôture du POC le 22 novembre 2026.** Migration technique engagée : MIG-01, MIG-02.1 et CC2/P2S LAN/Moonraker/OctoPrint/PrusaLink fusionnés ; CC1/xTool/Ray5/Bambu Cloud en revue. Voir le [bilan technique](POC-BILAN.md) et le [plan détaillé MIG-00 à MIG-08](MIGRATION-MVP.md).
 Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-mvp--produit-utilisable)) : un produit assez fiable pour un usage réel, sans repousser la sécurité ni les autorisations.
 
 Le découpage suit la même convention que le [POC](POC.md#lire-ce-plan) : étapes `MVP-xx`, sous-étapes `MVP-xx.y`, états `À faire` · `En cours` · `Ouvert` · `Fusionné` · `Déployé` · `Testé matériel` · `Reporté`. L’ordre des étapes est l’ordre de travail recommandé. MVP-00 est un préalable bloquant.

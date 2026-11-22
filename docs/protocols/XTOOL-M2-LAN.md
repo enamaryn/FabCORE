@@ -31,3 +31,11 @@ Transfert natif de projet M2 non implémenté dans FabCore. Un G-code génériqu
 Code : [xtool.mjs](../../poc/xtool.mjs), [découverte](../../poc/xtool-discovery.mjs), [média](../../poc/xtool-media.mjs), [caméras](../../poc/xtool-camera.mjs).
 
 Sources : [ha-xtool](https://github.com/thecodingdad/ha-xtool), [PROTOCOL.md](https://github.com/thecodingdad/ha-xtool/blob/main/docs/PROTOCOL.md), recoupés avec les essais FabCore. Les ports REST historiques de ce dépôt concernent d’autres familles : ne pas les appliquer à JS002 V2 par défaut.
+
+## Migration TypeScript · MIG-02.2.2
+
+En revue le 22 novembre 2026 : `connectors/xtool/src/monitor.ts` (`createXToolServices`), `camera.ts` (`createXToolCamera`), `media.ts` (`subscribeXToolVideo`) et `discovery.ts` (`discoverXTool`) portent les protocoles auparavant dans `poc/xtool*.mjs`. Les quatre adaptateurs POC injectent transport WebSocket, validation IPv4 et observation d’images ; aucune dépendance au cœur depuis le connecteur. Les sources de protocole et commandes ci-dessus restent la référence ; il ne s’agit pas d’une nouvelle intégration firmware.
+
+Identité/empreinte TLS, appairage, jeton, décodage et CRC, session instruction persistante, heartbeat et reconnexion différée sont conservés. Fabrication : `POST /v1/project/device/control`, actions `START`, `PAUSE`, `RESUME`, `CANCEL`, sans utilisation de l’arrêt de cadrage pour annuler un travail. Les accusés de refus restent distincts d’un résultat inconnu ; aucune commande rejouée. Caméra : même capture authentifiée vérifiée par MD5, partage/démultiplexage média par identifiant réel, contrôle de l’empreinte sur chaque canal et libération des abonnements. UDP : corrélation requestId, modèle JS002 et hôtes ciblés exigés, délai 1,7 s. Aucun transfert natif M2 ajouté.
+
+Tests existants `poc/xtool{,-camera,-media}.test.mjs` et découverte conservés ; tests directs dans `connectors/xtool/test/`. Pas de commande matérielle ni déploiement pendant cette migration. Recette supervisée après mise à jour demandée : identité/session, aperçu et flux, puis commandes du projet déjà préparé sur machine disponible. Les succès simulés ne prouvent pas les effets physiques.

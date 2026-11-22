@@ -92,3 +92,16 @@ Adresses par origine complète (IP + port), clés API, endpoints, délais et `re
 ## Migration OctoPrint et PrusaLink TypeScript · MIG-02.2.2
 
 `connectors/octoprint/src/index.ts` et `connectors/prusalink/src/index.ts` sont les uniques implémentations de la lecture, des commandes, des fichiers et, pour OctoPrint, du terminal. `poc/octoprint.mjs` et `poc/prusalink.mjs` injectent le décodage JSON borné, la validation d'origine et les helpers de chemin/multipart, et conservent leurs exports. Endpoints, délais, `redirect:error`, intervalle 5 s, tolérances de sonde du registre et absence de rejeu inchangés ; aucune capacité ajoutée. Terminal OctoPrint : `accepted` (mise en file), jamais `executed`.
+
+## Migration CC1, xTool M2, Ray5 et Bambu Cloud · MIG-02.2.2
+
+Les points d’entrée POC restent compatibles mais composent les protocoles typés :
+
+| Famille | Implémentation canonique | Limites conservées |
+| --- | --- | --- |
+| CC1 | `connectors/elegoo/src/cc1.ts` ; transfert partagé CC1/CC2 dans `upload.ts` | Lecture SDCP ponctuelle ; copies FabCore seulement ; ACK corrélé, aucun rejeu |
+| xTool M2 | `connectors/xtool/src/monitor.ts`, `camera.ts`, `media.ts`, `discovery.ts` | Session/appairage et canaux authentifiés conservés ; transfert natif de projet non implémenté |
+| Longer Ray5 | `connectors/longer/src/monitor.ts`, `files.ts` | Même session TCP pour les contrôles ; ESP3D sans contrôles manuels ; originaux SD relus pour vérifier l’envoi |
+| Bambu Cloud | `connectors/bambu/src/cloud-http.ts`, `cloud-monitor.ts` | Authentification, inventaire et télémétrie uniquement ; aucune commande, caméra distante ou bascule LAN/cloud ajoutée |
+
+Les projections partagées, validation IPv4, transport WebSocket et observation d’images sont injectés par composition ; les modules typés n’importent ni le POC ni le cœur. Comptes cloud, chiffrement, persistance, droits, limitation des tentatives et coordination restent applicatifs dans `cloud-accounts.mjs`. Les adaptateurs réexportent aussi les mêmes `CloudError` et `safeCloudPayload`, sans deuxième définition. Une migration de types ne vaut pas recette matérielle et ne clôt pas les vérifications transversales MIG-02.2.3.

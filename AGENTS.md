@@ -12,12 +12,15 @@ Ce fichier est la référence commune pour les assistants. Choisir le sujet ci-d
 | P2S LAN / autorisations | `connectors/bambu/src/monitor.ts` → `createP2SMonitor`, `files.ts` → `createP2SFiles` ; adaptateur `poc/bambu.mjs` ; `poc/manual-controls.mjs` | `connectors/bambu/test/monitor.test.ts`, `poc/bambu-auth-http.test.mjs` |
 | Moonraker : états, fichiers, commandes et terminal | `connectors/moonraker/src/index.ts` → `createMoonrakerServices` ; adaptateur `poc/moonraker.mjs` | `connectors/moonraker/test/connector.test.ts`, `poc/files.test.mjs`, `poc/terminal.test.mjs` |
 | OctoPrint / PrusaLink | `connectors/octoprint/src/index.ts` → `createOctoPrintServices` ; `connectors/prusalink/src/index.ts` → `createPrusaLinkServices` ; adaptateurs `poc/octoprint.mjs`, `poc/prusalink.mjs` | `connectors/octoprint/test/connector.test.ts`, `connectors/prusalink/test/connector.test.ts`, `poc/octoprint.test.mjs` |
+| CC1 : SDCP et transfert | `connectors/elegoo/src/cc1.ts` → `readElegooCC1`, `requestElegooCC1` ; `upload.ts` → `createElegooFileServices` | `connectors/elegoo/test/cc1.test.ts`, `poc/elegoo.test.mjs` |
+| xTool M2 : session, caméra et découverte | `connectors/xtool/src/monitor.ts` → `createXToolServices` ; `camera.ts`, `media.ts`, `discovery.ts` | `connectors/xtool/test/monitor.test.ts`, `poc/xtool.test.mjs` |
+| Longer Ray5 : GRBL et carte SD | `connectors/longer/src/monitor.ts` → `createRay5Services` ; `files.ts` → `createRay5FileServices` | `connectors/longer/test/connector.test.ts`, `poc/longer-ray5-controls.test.mjs` |
 | Droits et authentification | `poc/server.mjs` → `createFabCore` ; `poc/oidc.mjs` | `poc/oidc.test.mjs` |
 | Parc / fiche machine | `poc/live.js` → `liveFleet`, `liveDetail`, `filesPanel` | `poc/machine-cockpit.test.mjs` |
 | Commandes et chauffe | `poc/manual-controls.mjs` → `createManualControls` | `poc/manual-controls-http.test.mjs` |
 | Découverte / multi-instance | `poc/discovery.mjs` → `scanNetwork`, `detectMoonraker` | `poc/discovery.test.mjs` |
 | Contrats du domaine (MIG) | `src/domain/` → `mergeOutcome` (`command.ts`), `restrictCapabilities` (`capabilities.ts`) ; adaptateur `src/application/connectors.ts` → `createTypedConnectorRegistry` | `src/domain/contracts.test.ts`, `src/application/connectors.test.ts` |
-| Comptes cloud / logs | `poc/cloud-accounts.mjs` → `createCloudAccounts` ; `poc/machine-logs.mjs` | `poc/cloud-accounts.test.mjs` |
+| Comptes cloud / logs | `connectors/bambu/src/cloud-http.ts` → `createCloudHttp` ; `cloud-monitor.ts` → `createCloudMonitor` ; orchestration `poc/cloud-accounts.mjs` | `poc/cloud-accounts.test.mjs` |
 
 Autre sujet ou références actuelles avec lignes/empreintes : `node scripts/ai-context.mjs --list`, puis `node scripts/ai-context.mjs <sujet>`. Pas de numéro de ligne figé dans ce fichier. Lors d'un déplacement ou renommage, actualiser cette table et la carte détaillée.
 
