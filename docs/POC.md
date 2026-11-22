@@ -1,21 +1,12 @@
 # Phase 1 · POC — preuve de concept
 
-**État : recette finale en cours, centrée sur Elegoo CC2 et Bambu P2S.**
-Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-concept)) : vérifier les risques techniques sur du matériel réel avant le [MVP](MVP.md).
+**État : clôturé le 22 novembre 2026 à la demande de Valentin.** Le périmètre bloquant CC2/P2S est accepté après les derniers essais matériels : P2S entièrement pilotée, inventaires internes des deux CC2 et lancement depuis fichier interne confirmés.
 
-**Prochaine action :** mettre à jour après fusion du correctif d’inventaire CC2 et de diagnostic Bambu, puis tester les fichiers internes CC2 et le pilotage P2S en mode développeur. Le critère de clôture demandé le 22 novembre est la réussite des essais **CC2 et P2S**. Klipper, xTool, Longer et les autres extensions gardent leurs résultats et limites, mais leurs essais supplémentaires ne bloquent pas cette clôture. Le POC n’est pas encore déclaré validé.
+Le [bilan technique faisant foi](POC-BILAN.md) distingue les acquis des essais reportés. La release **POC v0** est préparée en brouillon pour validation ; publication distincte. Prochaine phase : [cadrage MVP](MVP.md) selon le [plan de migration détaillé](MIGRATION-MVP.md). Aucune migration de code ou de données n'est lancée par cette clôture.
 
+## Lecture du journal historique
 
-## Recette utilisateur · 22 novembre 2026 — état faisant foi
-
-- **CC2 : Pause et Stop validés sur matériel** selon le retour de Valentin ; chauffe buse/plateau et coupure déjà confirmées. La reprise CC2 et l’urgence 1007 ne sont pas validées par extension.
-- **Parc : non-duplication d’une machine déjà connectée validée.** Ne pas relancer tous les essais de découverte déjà acquis ; le parcours test → ajout reste distingué des autres scénarios.
-- **P2S : refus explicites Pause/Stop**, journal `mqtt message verify failed` ; même motif pour un lancement. Mode développeur depuis activé par Valentin, **nouveaux essais après mise à jour**, aucun succès matériel annoncé avant ceux-ci.
-- **CC2 : inventaire interne manquant identifié dans FabCore**, ancien mode copies uniquement. Correctif proposé : lecture native MQTT 1044, téléchargement HTTP et lancement 1020 d’un fichier préexistant ; recette sur firmware personnel à faire.
-- **Longer : homing validé** selon le retour du 22 novembre, autres fonctions non validées par extension.
-- Le bilan POC-11 portera sur CC2 et P2S, leurs droits et erreurs ; les défauts encore ouverts sur ce périmètre restent à résoudre ou à décider explicitement. Les mentions historiques « en revue/non déployé » ci-dessous ne remplacent pas ces observations datées.
-
-Commandes, sources et portée : [CC2](protocols/ELEGOO-LAN.md), [P2S LAN](protocols/BAMBU-LAN.md), [Longer](protocols/LONGER-RAY5-LAN.md). Aucune commande matérielle relancée par ce correctif.
+Les sections datées ci-dessous conservent les résultats au moment de chaque changement. Les mentions « en revue », « non déployé », « à retester » et anciens nombres de tests décrivent cet historique ; elles ne remplacent pas le bilan final. Les essais non réalisés restent reportés et ne sont pas déclarés réussis.
 
 ## Grille de parc orientée ferme · 20 novembre 2026
 
@@ -183,8 +174,8 @@ Vérifications locales : 54 tests réussis, `npm audit` sans vulnérabilité sig
 | POC-08 | ntfy et SMTP | Fusionné |
 | POC-08b | Connecteurs supplémentaires et parc | Fusionné · recette en cours |
 | POC-09 | Fichiers, visualiseur et terminal G-code | Fusionné · recette à faire |
-| POC-10 | Recette matérielle sur le LXC | En cours |
-| POC-11 | Clôture du POC et passage au MVP | À faire |
+| POC-10 | Recette matérielle sur le LXC | Clôturée sur CC2/P2S ; réserves au bilan |
+| POC-11 | Clôture du POC et passage au MVP | Clôturé le 22 novembre 2026 |
 
 ## POC-00 · Design UX/UI et identité
 
@@ -332,18 +323,20 @@ En cours. Chaque sous-étape passe à `Testé matériel` une fois vérifiée sur
 
 ## POC-11 · Clôture du POC et passage au MVP
 
-À faire. Critères du [prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-poc--preuve-de-concept) :
+**Clôturé sur décision utilisateur du 22 novembre 2026.** Le [bilan final](POC-BILAN.md) remplace les statuts intermédiaires.
 
-- [x] POC-11.1 Une Bambu P2S connectée · **Testé matériel** : impression de 9 heures suivie dans FabCore, confirmation utilisateur du 18 novembre 2026.
-- [ ] POC-11.2 Deux Elegoo CC2 distinctes, sans confusion entre machines.
-- [ ] POC-11.3 **Non bloquant / reporté pour la clôture à la demande du 22 novembre.** Une machine Klipper : **lecture partiellement testée sur matériel le 20 novembre 2026** (deux instances, températures, liste et téléchargement). Parcours navigateur et production à terminer ; ne pas assimiler à une validation complète.
-- [ ] POC-11.4 Permissions vérifiées (administrateur, observateur, routes et flux). Séparation de l’interface constatée fonctionnelle à priori par Valentin le 18 novembre 2026 ; contrôles directs des autorisations serveur et des flux encore à vérifier.
-- [ ] POC-11.5 Commandes fiables sur le périmètre CC2/P2S : Pause/Stop CC2 validés ; P2S à retester après activation du mode développeur. Lancement et parcours fichier à terminer. Reprise CC2 indisponible et documentée ; aucun renvoi automatique.
-- [ ] POC-11.6 Erreurs détectables : état hors ligne **testé sur matériel** en éteignant les deux CC2 (confirmation utilisateur du 18 novembre 2026). Restent l’accès refusé et le firmware en erreur.
-- [x] POC-11.7 Authentification locale et Pocket ID/OIDC fonctionnelles · **Testé matériel** : les deux parcours ont été essayés et confirmés par Valentin le 18 novembre 2026.
-- [ ] POC-11.8 Limites documentées dans le [guide](../poc/README.md) et la [matrice de compatibilité](MVP.md#mvp-05--connecteurs-p0-validés-modèle-par-modèle).
-- [x] POC-11.9 Simulateurs et connecteurs des autres marques : **décidé**, reportés au [MVP-05](MVP.md#mvp-05--connecteurs-p0-validés-modèle-par-modèle) (17 novembre 2026).
-- [ ] POC-11.10 Bilan technique et décisions d’architecture pour [MVP-00](MVP.md#mvp-00--cadrage).
+| Critère | Bilan |
+| --- | --- |
+| POC-11.1 P2S | Connexion, suivi prolongé et pilotage confirmés sur matériel |
+| POC-11.2 Deux CC2 | Machines distinctes et fichiers internes remontés ; pilotage confirmé |
+| POC-11.3 Klipper | Lecture partiellement validée ; production reportée, non bloquante sur décision utilisateur |
+| POC-11.4 Permissions | Séparation UI constatée et tests serveur ; audit manuel complet reporté au MVP-12 |
+| POC-11.5 Commandes/fichiers | Pilotage CC2/P2S et lancement interne confirmés ; reprise CC2 non prise en charge |
+| POC-11.6 Erreurs | Hors ligne CC2 et refus P2S diagnostiqués ; matrice exhaustive reportée |
+| POC-11.7 Authentification | Local et Pocket ID/OIDC confirmés |
+| POC-11.8 Limites | Consignées dans le bilan et les guides fabricant/modèle |
+| POC-11.9 Autres connecteurs/simulateurs | Acquis conservés ; validation complète reportée au MVP-05 |
+| POC-11.10 Bilan/migration | Bilan rédigé et plan en phases, étapes et sous-étapes formalisé |
 
 [Guide d’exploitation et de configuration](../poc/README.md)
 

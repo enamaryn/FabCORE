@@ -1,6 +1,6 @@
 # Phase 2 · MVP — produit utilisable au quotidien
 
-**État : planifié.** Démarre après la clôture du [POC](POC.md#poc-11--clôture-du-poc-et-passage-au-mvp).
+**État : cadrage actif après clôture du POC le 22 novembre 2026.** Implémentation de la migration non commencée. Voir le [bilan technique](POC-BILAN.md) et le [plan détaillé MIG-00 à MIG-08](MIGRATION-MVP.md).
 Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-mvp--produit-utilisable)) : un produit assez fiable pour un usage réel, sans repousser la sécurité ni les autorisations.
 
 Le découpage suit la même convention que le [POC](POC.md#lire-ce-plan) : étapes `MVP-xx`, sous-étapes `MVP-xx.y`, états `À faire` · `En cours` · `Ouvert` · `Fusionné` · `Déployé` · `Testé matériel` · `Reporté`. L’ordre des étapes est l’ordre de travail recommandé. MVP-00 est un préalable bloquant.
@@ -30,9 +30,9 @@ Recherche initiale : [Bambu Cloud et comptes multiples](protocols/BAMBU-CLOUD.md
 
 ## MVP-00 · Cadrage
 
-En cours. Décisions prises le 17 novembre 2026, à consigner dans `docs/DECISIONS.md` lors de la création du socle. Restent le bilan du POC et la liste du matériel de recette.
+En cours. Décisions acquises synthétisées dans le [bilan](POC-BILAN.md) ; les choix d’outillage encore ouverts seront consignés en décisions d’architecture pendant MIG-01. Matériel prioritaire : P2S LAN et deux CC2 ; versions firmware exactes à relever.
 
-- [ ] MVP-00.1 Bilan du POC ([POC-11](POC.md#poc-11--clôture-du-poc-et-passage-au-mvp)) : ce qui est conservé, réécrit ou abandonné.
+- [x] MVP-00.1 Bilan du POC ([POC-11](POC.md#poc-11--clôture-du-poc-et-passage-au-mvp)) : [conservé, migré et différé](POC-BILAN.md#conserver-migrer-différer).
 - [x] MVP-00.2 Architecture · **décidé** : TypeScript strict sur Node.js LTS, monolithe modulaire, migration progressive module par module depuis le POC (pas de réécriture), tests verts à chaque étape. Les connecteurs du POC sont repris, pas réécrits.
 - [x] MVP-00.3 Persistance · **décidé** : PostgreSQL en auto-hébergement comme en cloud (un seul chemin de code), installé par l’installateur, avec reprise du `state.json` du POC.
 - [x] MVP-00.4 Interface et temps réel · **décidé** : React pour l’interface définitive ([MVP-02](#mvp-02--interface-complète-de-la-maquette-uxui)), SSE à la place de l’interrogation toutes les deux secondes.
