@@ -30,7 +30,7 @@ Recherche initiale : [Bambu Cloud et comptes multiples](protocols/BAMBU-CLOUD.md
 
 ## MVP-00 · Cadrage
 
-En cours. Décisions acquises synthétisées dans le [bilan](POC-BILAN.md) ; les choix d’outillage encore ouverts seront consignés en décisions d’architecture pendant MIG-01. Matériel prioritaire : P2S LAN et deux CC2 ; versions firmware exactes à relever.
+En cours. Décisions acquises synthétisées dans le [bilan](POC-BILAN.md) ; choix d’outillage proposés dans les [décisions d’architecture](adr/README.md) (MIG-01.1, en revue). Matériel prioritaire : P2S LAN et deux CC2 ; versions firmware exactes à relever.
 
 - [x] MVP-00.1 Bilan du POC ([POC-11](POC.md#poc-11--clôture-du-poc-et-passage-au-mvp)) : [conservé, migré et différé](POC-BILAN.md#conserver-migrer-différer).
 - [x] MVP-00.2 Architecture · **décidé** : TypeScript strict sur Node.js LTS, monolithe modulaire, migration progressive module par module depuis le POC (pas de réécriture), tests verts à chaque étape. Les connecteurs du POC sont repris, pas réécrits.
