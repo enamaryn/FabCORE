@@ -167,9 +167,6 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     sessions.set(digest(id).toString('hex'), { expires: Date.now() + sessionAge, username, role });
     return cookie(id, sessionAge / 1000);
   }
-  function signIn(res, username, role) {
-    answer(res, 200, { authenticated: true, username, role }, { 'Set-Cookie': newSession(username, role) });
-  }
   function withinLimit(route) {
     const now = Date.now();
     let bucket = attempts.get(route);
@@ -326,29 +323,8 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     if (path === '/api/notifications' || path === '/api/notifications/test') {
       if (!viewer) return error(res, 401, 'sign-in');
       if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
-      const internal = internalNtfy(directory);
-      const current = store.state.notifications ?? {};
-      // Lecture des réglages (GET) : src/http/routes/notifications.ts.
-      if (req.method !== 'POST') return error(res, 405, 'missing');
-      if (!requireJson(req, res)) return;
-      let data;
-      try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
-      if (path === '/api/notifications') {
-        let settings;
-        try { settings = notificationSettings(data, store.state.notifications, internal); }
-        catch (failure) { return error(res, 400, failure.message === 'ntfy-install-required' ? failure.message : 'notifications-invalid'); }
-        store.save({ ...store.state, notifications: settings });
-        return answer(res, 200, publicNotifications(settings, internal));
-      }
-      const channel = data.channel;
-      if (channel !== 'ntfy' && channel !== 'smtp') return error(res, 400, 'invalid');
-      if (notificationTests.has(channel) || !withinLimit(path + '/' + channel)) return error(res, 429, 'rate');
-      notificationTests.add(channel);
-      try {
-        if (await notify(channel, store.state.notifications ?? {}, internal)) return answer(res, 200, { accepted: true });
-      } catch { /* Avoid returning provider responses that may contain secrets. */ }
-      finally { notificationTests.delete(channel); }
-      return error(res, 502, 'notifications-failed');
+      // GET et POST : src/http/routes/notifications.ts ; autres méthodes refusées comme avant.
+      return error(res, 405, 'missing');
     }
     if (path === '/api/discovery') {
       if (!viewer) return error(res, 401, 'sign-in');
@@ -654,20 +630,10 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       return error(res, 404, 'missing');
     }
     if (!requireJson(req, res)) return;
-    if (path === '/api/logout') {
-      if (activeSession) {
-        sessions.delete(activeSession);
-        stopCameraStreams(activeSession);
-        cloud.forgetOwner(activeSession);
-      }
-      return answer(res, 200, { authenticated: false }, { 'Set-Cookie': cookie('', 0) });
-    }
     if (path.startsWith('/api/machines') || path === '/api/observers') {
       if (!viewer) return error(res, 401, 'sign-in');
       if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
     }
-    if (path === '/api/setup' && store.state.admin) return error(res, 409, 'installed');
-    if ((path === '/api/setup' || path === '/api/login') && !withinLimit(path)) return error(res, 429, 'rate');
     let data;
     try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
     if (path.startsWith('/api/machines')) {
@@ -765,44 +731,86 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       }
       return answer(res, existing ? 200 : 201, { id: machine.id });
     }
-    const username = value(data, 'username', 40).trim();
-    const password = value(data, 'password', 128);
-    if (path === '/api/setup') {
-      if (!activation || activation.expires <= Date.now()) return error(res, 410, 'expired');
-      if (!timingSafeEqual(digest(value(data, 'token', 128).trim()), activation.hash)) return error(res, 403, 'token');
-      if (username.length < 3 || password.length < 12) return error(res, 400, 'credentials');
+    // Comptes (setup, login, logout, observers) : src/http/routes/accounts.ts, service accounts ci-dessous.
+    return error(res, 404, 'missing');
+  }
+  // Services des comptes, appelés par src/http/routes/accounts.ts. Erreurs : HttpError (code stable).
+  const grant = (username, role) => ({ body: { authenticated: true, username, role }, cookie: newSession(username, role) });
+  const credentials = data => ({ username: value(data, 'username', 40).trim(), password: value(data, 'password', 128) });
+  const accounts = {
+    installed: () => Boolean(store.state.admin),
+    async setup(data) {
+      const { username, password } = credentials(data);
+      if (!activation || activation.expires <= Date.now()) throw new HttpError(410, 'expired');
+      if (!timingSafeEqual(digest(value(data, 'token', 128).trim()), activation.hash)) throw new HttpError(403, 'token');
+      if (username.length < 3 || password.length < 12) throw new HttpError(400, 'credentials');
       const salt = randomBytes(16).toString('hex');
       const hash = (await derive(password, salt, 64)).toString('hex');
-      if (store.state.admin) return error(res, 409, 'installed');
-      if (activation.expires <= Date.now()) return error(res, 410, 'expired');
+      if (store.state.admin) throw new HttpError(409, 'installed');
+      if (activation.expires <= Date.now()) throw new HttpError(410, 'expired');
       store.save({ ...store.state, admin: { username, salt, hash } });
-      return signIn(res, username, 'admin');
-    }
-    const admin = store.state.admin;
-    const observers = store.state.observers ?? [];
-    if (path === '/api/observers') {
-      if (username.length < 3 || password.length < 12) return error(res, 400, 'credentials');
+      return grant(username, 'admin');
+    },
+    async login(data, activeSession) {
+      const { username, password } = credentials(data);
+      const admin = store.state.admin;
+      const observers = store.state.observers ?? [];
+      if (!admin || !password) throw new HttpError(401, 'credentials');
+      const role = username === admin.username ? 'admin' : 'observer';
+      const account = role === 'admin' ? admin : observers.find((entry) => entry.username === username);
+      const hash = await derive(password, account?.salt ?? admin.salt, 64);
+      if (!account || !timingSafeEqual(hash, Buffer.from(account.hash, 'hex'))) throw new HttpError(401, 'credentials');
+      if (activeSession) {
+        sessions.delete(activeSession);
+        stopCameraStreams(activeSession);
+      }
+      return grant(username, role);
+    },
+    logout(activeSession) {
+      if (activeSession) {
+        sessions.delete(activeSession);
+        stopCameraStreams(activeSession);
+        cloud.forgetOwner(activeSession);
+      }
+      return { body: { authenticated: false }, cookie: cookie('', 0) };
+    },
+    async addObserver(data) {
+      const { username, password } = credentials(data);
+      if (username.length < 3 || password.length < 12) throw new HttpError(400, 'credentials');
       const salt = randomBytes(16).toString('hex');
       const hash = (await derive(password, salt, 64)).toString('hex');
       const latest = store.state.observers ?? [];
-      if (admin.username === username || latest.some((entry) => entry.username === username)) {
-        return error(res, 409, 'observer-duplicate');
+      if (store.state.admin.username === username || latest.some((entry) => entry.username === username)) {
+        throw new HttpError(409, 'observer-duplicate');
       }
-      if (latest.length >= 16) return error(res, 409, 'observer-limit');
+      if (latest.length >= 16) throw new HttpError(409, 'observer-limit');
       store.save({ ...store.state, observers: [...latest, { username, salt, hash }] });
-      return answer(res, 201, { username });
+      return { username };
     }
-    if (!admin || !password) return error(res, 401, 'credentials');
-    const role = username === admin.username ? 'admin' : 'observer';
-    const account = role === 'admin' ? admin : observers.find((entry) => entry.username === username);
-    const hash = await derive(password, account?.salt ?? admin.salt, 64);
-    if (!account || !timingSafeEqual(hash, Buffer.from(account.hash, 'hex'))) return error(res, 401, 'credentials');
-    if (activeSession) {
-      sessions.delete(activeSession);
-      stopCameraStreams(activeSession);
+  };
+  // Services des notifications, appelés par src/http/routes/notifications.ts.
+  const notificationService = {
+    view: () => publicNotifications(store.state.notifications ?? {}, internalNtfy(directory)),
+    save(data) {
+      const internal = internalNtfy(directory);
+      let settings;
+      try { settings = notificationSettings(data, store.state.notifications, internal); }
+      catch (failure) { throw new HttpError(400, failure.message === 'ntfy-install-required' ? failure.message : 'notifications-invalid'); }
+      store.save({ ...store.state, notifications: settings });
+      return publicNotifications(settings, internal);
+    },
+    async test(data) {
+      const channel = data.channel;
+      if (channel !== 'ntfy' && channel !== 'smtp') throw new HttpError(400, 'invalid');
+      if (notificationTests.has(channel) || !withinLimit('/api/notifications/test/' + channel)) throw new HttpError(429, 'rate');
+      notificationTests.add(channel);
+      try {
+        if (await notify(channel, store.state.notifications ?? {}, internalNtfy(directory))) return { accepted: true };
+      } catch { /* Avoid returning provider responses that may contain secrets. */ }
+      finally { notificationTests.delete(channel); }
+      throw new HttpError(502, 'notifications-failed');
     }
-    return signIn(res, username, role);
-  }
+  };
   // Service de lecture du parc, appelé par la route typée GET /api/machines.
   async function listFleet(activeSession) {
     const machines = await Promise.all(store.state.machines.map(async (machine) => {
@@ -833,11 +841,12 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     const entry = key ? sessions.get(key) : null;
     return entry ? { session: key, username: entry.username, role: entry.role } : null;
   };
-  const http = createHttpApp({ allowedHost, viewer: viewerOf, onFailure: () => diagnostics.record('server', 'request-failed') }, migratedRoutes({
+  const http = createHttpApp({ allowedHost, origin: publicUrl.origin, limit: withinLimit, viewer: viewerOf, onFailure: () => diagnostics.record('server', 'request-failed') }, migratedRoutes({
+    accounts,
     session: { installed: () => Boolean(store.state.admin), oidcEnabled: () => Boolean(secure && oidc && store.state.admin), viewer: viewerOf },
     diagnostics: { view: () => diagnostics.view(), fleet: () => store.state.machines.map(({ id, name }) => ({ id, name })) },
     fleet: { list: viewer => listFleet(viewer.session) },
-    notifications: { view: () => publicNotifications(store.state.notifications ?? {}, internalNtfy(directory)) },
+    notifications: notificationService,
     logs: {
       machine: id => store.state.machines.find(item => item.id === id) ?? null,
       machineLog: id => machineLogs.read(id),

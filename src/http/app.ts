@@ -3,6 +3,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import swagger from '@fastify/swagger';
+import Type from 'typebox';
 import { ErrorBody, HttpError, errorResponses } from './errors.ts';
 
 export type Role = 'admin' | 'observer';
@@ -11,6 +12,10 @@ export interface Viewer { session: string; username: string; role: Role }
 export interface HttpDependencies {
   /** Hôte public attendu ; toute autre valeur répond 421, comme le POC. */
   allowedHost: string;
+  /** Origine publique exacte exigée sur les écritures (`Origin`), sinon 403 `origin`. */
+  origin: string;
+  /** Limiteur de tentatives partagé avec le POC (même compteur par clé) ; faux = 429 `rate`. */
+  limit(key: string): boolean;
   /** Session de la requête, résolue par le POC pendant la migration. */
   viewer(request: IncomingMessage): Viewer | null;
   /** Appelé pour toute erreur interne (500), comme `request-failed` dans le diagnostic du POC. */
@@ -20,11 +25,20 @@ export interface HttpDependencies {
 export type RouteModule = (app: FastifyInstance, guards: Guards) => void;
 
 export interface Guards {
+  /** Session éventuelle, sans exigence. */
+  current(request: FastifyRequest): Viewer | null;
   /** Exige une session valide : 401 `sign-in` sinon. */
   signedIn(request: FastifyRequest): Viewer;
   /** Exige un administrateur : 401 `sign-in` sans session, 403 `forbidden` pour un observateur. */
   admin(request: FastifyRequest): Viewer;
+  /** Écriture JSON : origine exacte (403 `origin`) puis `Content-Type: application/json` (415 `invalid`). Vérifié avant la lecture du corps. */
+  json(request: FastifyRequest): void;
+  /** Limite de tentatives par clé : 429 `rate`. */
+  rate(key: string): void;
 }
+
+/** Corps JSON attendu par une écriture : un objet, jamais un tableau ni `null` (400 `invalid`). */
+export const JsonBody = Type.Object({}, { additionalProperties: true });
 
 const securityHeaders = {
   'Cache-Control': 'no-store',
@@ -89,15 +103,22 @@ export function createHttpApp(dependencies: HttpDependencies, routes: RouteModul
     void reply.headers(securityHeaders);
     if (request.headers.host !== dependencies.allowedHost) throw new HttpError(421, 'host');
   });
-  app.setErrorHandler((failure: Error & { statusCode?: number; validation?: unknown }, _request, reply) => {
+  // Corps JSON comme le POC : 4 Kio au plus ; corps vide toléré (déconnexion), validé ensuite par le schéma de la route.
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string', bodyLimit: 4096 }, (_request, body, done) => {
+    if (body === '') { done(null, undefined); return; }
+    try { done(null, JSON.parse(body as string) as unknown); } catch { done(new HttpError(400, 'invalid'), undefined); }
+  });
+  app.setErrorHandler((failure: Error & { statusCode?: number; validation?: unknown; code?: string }, _request, reply) => {
     if (failure instanceof HttpError) return reply.code(failure.statusCode).send({ error: failure.message });
-    if (failure.validation) return reply.code(400).send({ error: 'invalid' });
+    if (failure.validation || failure.code?.startsWith('FST_ERR_CTP_')) return reply.code(400).send({ error: 'invalid' });
     dependencies.onFailure?.();
     return reply.code(500).send({ error: 'internal' });
   });
   app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'missing' }));
 
   const guards: Guards = {
+    current: request => dependencies.viewer(request.raw),
     signedIn(request) {
       const viewer = dependencies.viewer(request.raw);
       if (!viewer) throw new HttpError(401, 'sign-in');
@@ -107,6 +128,13 @@ export function createHttpApp(dependencies: HttpDependencies, routes: RouteModul
       const viewer = guards.signedIn(request);
       if (viewer.role !== 'admin') throw new HttpError(403, 'forbidden');
       return viewer;
+    },
+    json(request) {
+      if (request.headers.origin !== dependencies.origin) throw new HttpError(403, 'origin');
+      if (request.headers['content-type']?.split(';')[0] !== 'application/json') throw new HttpError(415, 'invalid');
+    },
+    rate(key) {
+      if (!dependencies.limit(key)) throw new HttpError(429, 'rate');
     },
   };
 
