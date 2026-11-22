@@ -1,6 +1,6 @@
 # Phase 2 · MVP — produit utilisable au quotidien
 
-**État : cadrage actif après clôture du POC le 22 novembre 2026.** Migration technique engagée : MIG-01, MIG-02.1 et migration de tous les connecteurs fusionnés ; fiabilisation du cycle de vie (MIG-02.2.3) en revue. Voir le [bilan technique](POC-BILAN.md) et le [plan détaillé MIG-00 à MIG-08](MIGRATION-MVP.md).
+**État : cadrage actif après clôture du POC le 22 novembre 2026.** Migration technique engagée : MIG-01 et MIG-02 (connecteurs typés et cycle de vie) fusionnés ; socle HTTP et OpenAPI (MIG-03) en revue. Voir le [bilan technique](POC-BILAN.md) et le [plan détaillé MIG-00 à MIG-08](MIGRATION-MVP.md).
 Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-mvp--produit-utilisable)) : un produit assez fiable pour un usage réel, sans repousser la sécurité ni les autorisations.
 
 Le découpage suit la même convention que le [POC](POC.md#lire-ce-plan) : étapes `MVP-xx`, sous-étapes `MVP-xx.y`, états `À faire` · `En cours` · `Ouvert` · `Fusionné` · `Déployé` · `Testé matériel` · `Reporté`. L’ordre des étapes est l’ordre de travail recommandé. MVP-00 est un préalable bloquant.
@@ -45,7 +45,7 @@ En cours. Décisions acquises synthétisées dans le [bilan](POC-BILAN.md) ; cho
 
 ## MVP-01 · Socle technique et migration TypeScript
 
-En cours. MIG-01 et MIG-02.1 fusionnés ; le POC reste fonctionnel pendant toute la migration.
+En cours. MIG-01 et MIG-02 fusionnés, MIG-03 engagé ; le POC reste fonctionnel pendant toute la migration.
 
 - [ ] MVP-01.0 Migration vers TypeScript :
   - [x] Outillage : Node.js LTS, `tsconfig` strict, lint, formatage limité aux fichiers migrés.

@@ -1,0 +1,193 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FabCore API",
+    "version": "0.1.0",
+    "description": "Routes REST migrées vers le socle typé (MIG-03). Les autres routes restent servies par le POC jusqu’à leur migration."
+  },
+  "components": {
+    "securitySchemes": {
+      "session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "fabcore_session"
+      }
+    },
+    "schemas": {
+      "ErrorBody": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)*$",
+            "maxLength": 120
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "paths": {
+    "/api/session": {
+      "get": {
+        "summary": "État de l’installation et de la session courante",
+        "tags": [
+          "session"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "installed",
+                    "authenticated",
+                    "username"
+                  ],
+                  "properties": {
+                    "installed": {
+                      "type": "boolean",
+                      "description": "Un administrateur a été créé."
+                    },
+                    "authenticated": {
+                      "type": "boolean"
+                    },
+                    "username": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "role": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "admin"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "observer"
+                          ]
+                        }
+                      ]
+                    },
+                    "oidcEnabled": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "421": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diagnostics": {
+      "get": {
+        "summary": "Diagnostic du serveur et du parc",
+        "tags": [
+          "administration"
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compteurs et journaux de diagnostic du serveur, et liste des machines (identifiant, nom).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "fleet"
+                  ],
+                  "properties": {
+                    "fleet": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": true,
+                  "description": "Compteurs et journaux de diagnostic du serveur, et liste des machines (identifiant, nom)."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "421": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
