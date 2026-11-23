@@ -1,0 +1,74 @@
+{
+  "refresh": "Refresh",
+  "loading": "Loading…",
+  "diagnostics": {
+    "title": "Diagnostics",
+    "unavailable": "The diagnostic log is unavailable.",
+    "scopeHelp": "Up to 300 events since the last startup.",
+    "scope": "Show events for",
+    "all": "All machines and FabCore",
+    "lastReport": "Last MQTT report · {date}",
+    "lastFrame": "Last image received · {date}",
+    "removed": "Removed machine",
+    "empty": "No events.",
+    "area": {
+      "server": "FabCore",
+      "mqtt": "MQTT",
+      "camera": "Camera",
+      "status": "Status",
+      "files": "Files",
+      "controls": "Controls",
+      "terminal": "Terminal",
+      "command": "Command",
+      "cloud": "Cloud"
+    }
+  },
+  "access": {
+    "title": "Add observer",
+    "help": "An observer sees the fleet, machine pages, files and cameras, without any command or administration.",
+    "username": "Username",
+    "password": "Password",
+    "passwordHelp": "At least 12 characters.",
+    "confirm": "Confirm password",
+    "create": "Create account",
+    "mismatch": "Passwords do not match.",
+    "created": "Observer account “{username}” created. Share the password through a secure channel.",
+    "error": {
+      "credentials": "Username of at least 3 characters and password of at least 12.",
+      "observer-duplicate": "This username already exists.",
+      "observer-limit": "Limit of 16 observers reached.",
+      "storage-unavailable": "Storage unavailable: account not created.",
+      "forbidden": "Administrators only.",
+      "sign-in": "Session expired: sign in again.",
+      "network": "FabCore server unreachable."
+    }
+  },
+  "logs": {
+    "title": "Machine logs",
+    "download": "Download log file",
+    "cloud": "Cloud connection: MQTT exchanges are in the account log.",
+    "help": "Requests, filtered responses and timings; no passwords, tokens or LAN access codes. Periodic MQTT reports are sampled every ten seconds; all command responses are retained.",
+    "search": "Search logs",
+    "searchPlaceholder": "heating, gcode_line, reason, MQTT…",
+    "unavailable": "Log unavailable. Check storage or sign in again.",
+    "count": "{count, plural, =0 {No entries shown} one {# entry shown} other {# entries shown}} · last 500 retained",
+    "empty": "No retained entries for this machine.",
+    "noMatch": "No entries match this search."
+  },
+  "setup": {
+    "title": "First setup",
+    "help": "Retrieve the activation token from the FabCore terminal to create the local administrator.",
+    "token": "Activation token",
+    "submit": "Activate FabCore",
+    "error": {
+      "token": "Invalid token.",
+      "expired": "Token expired: restart FabCore to get a new one.",
+      "installed": "FabCore is already activated: sign in.",
+      "credentials": "Username of at least 3 characters and password of at least 12.",
+      "mismatch": "Passwords do not match.",
+      "rate": "Too many attempts: wait a minute.",
+      "storage-unavailable": "Storage unavailable: activation not saved.",
+      "network": "FabCore server unreachable."
+    }
+  }
+}

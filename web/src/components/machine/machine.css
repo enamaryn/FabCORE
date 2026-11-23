@@ -2,3 +2,4 @@
 @media(max-width:1150px){.react-cockpit-bottom{grid-template-columns:1fr}}
 @media(max-width:900px){.react-cockpit{grid-template-columns:1fr}.react-filament-modules{grid-template-columns:repeat(2,minmax(0,1fr))}.react-camera-image{max-height:280px}}
 @media(max-width:560px){.react-filament-modules{grid-template-columns:1fr}.react-filament-modules:has(>.react-filament-module:only-child){grid-template-columns:minmax(0,250px)}.react-detail dialog{max-width:calc(100vw - 24px)}}
+.react-log-entries{max-height:60vh;overflow:auto;min-width:0}.react-log-entries details{padding:8px 0;border-bottom:1px solid var(--line)}.react-log-entries pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;margin:6px 0}.react-log-entries summary{cursor:pointer;overflow-wrap:anywhere;font-size:13px}
