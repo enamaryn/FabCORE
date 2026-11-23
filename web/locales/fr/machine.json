@@ -100,5 +100,6 @@
     "forbidden": "Droits insuffisants pour cette action.",
     "spool-invalid": "Information de bobine invalide.",
     "storage-unavailable": "Enregistrement indisponible. Réessayez plus tard."
-  }
+  },
+  "machineSettings": "Paramètres de la machine"
 }

@@ -32,7 +32,7 @@ test('Cockpit : six blocs stables, aucun flux automatique ni fabrication invent�
 });
 test('Cockpit : pause/stop selon état et capacités, aucun bouton d’écriture pour observateur ou cloud', () => {
   assert.match(render(), />Pause<\/button>/); assert.match(render(), />Stop<\/button>/); assert.doesNotMatch(render(), />Reprendre<\/button>/);
-  const observer = render(machine, 'observer'); assert.doesNotMatch(observer, />Pause<\/button>|>Stop<\/button>|tab=logs|Renseigner la bobine/);
+  const observer = render(machine, 'observer'); assert.doesNotMatch(observer, />Pause<\/button>|>Stop<\/button>|tab=logs|Renseigner la bobine|Paramètres de la machine/);
   const paused = render({ ...machine, status: 'paused' }); assert.match(paused, />Reprendre<\/button>/); assert.doesNotMatch(paused, />Pause<\/button>/);
   const cloud = render({ ...machine, kind: 'bambu-cloud', capabilities: { filaments: 'AMS' } }); assert.match(cloud, /lecture seule/); assert.doesNotMatch(cloud, />Pause<\/button>|>Stop<\/button>/);
   assert.doesNotMatch(render({ ...machine, status: 'offline' }), />Pause<\/button>|>Stop<\/button>/);

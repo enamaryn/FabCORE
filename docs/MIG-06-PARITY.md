@@ -4,7 +4,7 @@ Premier lot fusionné dans #126 ; cockpit en revue, 23 novembre 2026. Branche `m
 
 ## Accès et limites
 
-Après fusion et mise à jour habituelle, ouvrir **`/app`** ou le lien **Vue atelier** de l’interface existante. La session serveur est commune ; aucune connexion aux machines depuis le navigateur. `/` conserve les parcours qui n’ont pas encore été migrés. Les cartes ouvrent le cockpit React exact (`/app#machine/<id>`). Fichiers, logs et console ouvrent directement leur onglet dans l’interface conservée ; ajout, comptes cloud, diagnostics, notifications et observateurs y restent disponibles avec leurs droits et confirmations. Les paramètres des liens entrants sont limités aux valeurs prévues, jamais utilisés comme HTML ni chemin de fichier.
+Après fusion et mise à jour habituelle, ouvrir **`/app`** ou le lien **Vue atelier** de l’interface existante. La session serveur est commune ; aucune connexion aux machines depuis le navigateur. `/` conserve les parcours qui n’ont pas encore été migrés. Les cartes ouvrent le cockpit React exact (`/app#machine/<id>`). Les paramètres machine restent accessibles à l’administrateur via l’en-tête. Fichiers, logs et console ouvrent directement leur onglet dans l’interface conservée ; ajout, comptes cloud, diagnostics, notifications et observateurs y restent disponibles avec leurs droits et confirmations. Les paramètres des liens entrants sont limités aux valeurs prévues, jamais utilisés comme HTML ni chemin de fichier.
 
 | Étape | État de ce lot | Suite |
 | --- | --- | --- |

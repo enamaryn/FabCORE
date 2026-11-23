@@ -100,5 +100,6 @@
     "forbidden": "Insufficient permission for this action.",
     "spool-invalid": "Invalid spool information.",
     "storage-unavailable": "Storage unavailable. Retry later."
-  }
+  },
+  "machineSettings": "Machine settings"
 }
