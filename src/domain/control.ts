@@ -40,4 +40,3 @@ export function validateControl(data: ControlCommand | null | undefined, control
   }
   return null;
 }
-
