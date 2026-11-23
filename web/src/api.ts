@@ -4,6 +4,12 @@ import { safeFilePath } from './files.ts';
 import type { FileInventory } from './files.ts';
 import type { MachineData } from './types.js';
 
+/** Réglages publics des notifications : jamais de secret. */
+export type NotificationView = {
+  ntfy: { mode: 'off' | 'internal' | 'external'; url?: string; topic?: string; auth?: 'none' | 'basic' | 'bearer'; username?: string };
+  smtp: { enabled: boolean; host?: string; port?: number; tls?: 'tls' | 'starttls'; from?: string; to?: string; auth?: boolean; username?: string };
+  internal: { url: string; topic: string } | null;
+};
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -105,6 +111,18 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
       if (!response.ok || !response.headers.get('Content-Type')?.startsWith('image/jpeg')) throw new ApiError('camera-unavailable', response.status);
       return response.blob();
     },
+    async notifications(signal?: AbortSignal): Promise<NotificationView> {
+      const value = await request('notifications', undefined, signal);
+      if (!value || typeof value !== 'object' || !('ntfy' in value) || !('smtp' in value) || !('internal' in value)) throw new ApiError('response', 502);
+      return value as NotificationView;
+    },
+    /** Un seul canal à la fois : `{ ntfy }` ou `{ smtp }` ; l'autre garde sa configuration (#121). */
+    async saveNotifications(channel: Partial<Record<'ntfy' | 'smtp', Record<string, unknown>>>, signal?: AbortSignal): Promise<NotificationView> {
+      const value = await request('notifications', channel, signal, 15000);
+      if (!value || typeof value !== 'object' || !('ntfy' in value) || !('smtp' in value)) throw new ApiError('response', 502);
+      return value as NotificationView;
+    },
+    testNotification(channel: 'ntfy' | 'smtp', signal?: AbortSignal) { return request('notifications/test', { channel }, signal, 20000); },
     login(username: string, password: string) { return request('login', { username, password }); },
     logout() { return request('logout', {}); },
   };

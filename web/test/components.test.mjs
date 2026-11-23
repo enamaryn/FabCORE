@@ -49,5 +49,5 @@ test('React navigation : rôle observateur sans administration et interface cons
   const observer = render(Shell, { ...props, role: 'observer' });
   assert.doesNotMatch(observer, /screen=cloud|screen=observer|screen=diagnostics/);
   assert.match(observer, /Navigation mobile/); assert.match(observer, /aria-current="page"/);
-  const admin = render(Shell, { ...props, role: 'admin' }); assert.match(admin, /screen=cloud/); assert.match(admin, /screen=notifications/);
+  const admin = render(Shell, { ...props, role: 'admin' }); assert.match(admin, /screen=cloud/); assert.match(admin, /href="#notifications"/, "notifications : écran React (#121)");
 });
