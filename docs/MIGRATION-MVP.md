@@ -15,7 +15,7 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 | MIG-02 | Domaine et connecteurs TypeScript | MIG-01 | Fusionné (#102 à #107, #109) ; recette physique à faire |
 | MIG-03 | Services backend et API | MIG-02 | Fusionné jusqu'à #114 ; dernière étape (routage complet, corrélation, niveaux) en revue |
 | MIG-04 | PostgreSQL et reprise des données | MIG-03 | En revue (04.1, 04.2, services, configuration et mise en place) |
-| MIG-05 | Événements et SSE | MIG-03/04 | À faire |
+| MIG-05 | Événements et SSE | MIG-03/04 | En revue |
 | MIG-06 | Interface React par parcours | MIG-05 | À faire |
 | MIG-07 | Documentation et extensibilité | MIG-02 à 06 | À faire |
 | MIG-08 | Installation, recette et bascule | MIG-04 à 07 | À faire |
@@ -162,11 +162,13 @@ Validation locale Node 24 : types, lint, **154 tests**, licences et navigation. 
 - MIG-05.2.2 Remplacer les interrogations navigateur périodiques ; conserver les lectures initiales et actualisations explicites utiles.
 - MIG-05.2.3 Mesurer connexions, charge et fraîcheur sur un parc simulé ; ne pas ouvrir de caméra en arrière-plan.
 
-**MIG-05.1 en revue** :
+**MIG-05 en revue** :
 - **05.1.1** : bus `src/application/events.ts` (`createEventHub`) : identifiant `<démarrage>:<numéro>` croissant, horodatage, données validées par le schéma `DomainEvent` (ajout de `fleet.changed`), portée `all` (toute session) ou `admin`, filtrée avant émission. Sources : `observeFleet` publie `fleet.changed` après chaque écriture d'état durable (ajout, édition, suppression, bobine, import cloud) ; `createFleetWatcher` lit le parc toutes les 2 s **tant qu'un flux est ouvert** (une seule boucle pour tous les navigateurs, mêmes lectures que `GET /api/machines`) et publie `machine.telemetry` au changement (horodatage exclu), au format du domaine (`connecting` → `unknown`, fichier vide → `null`).
 - **05.1.2** : tampon de 500 événements, message de 16 Kio au plus, abonné lent (256 trames non écrites) fermé ; il se reconnecte avec reprise ou resync.
 - **05.1.3** : `Last-Event-ID` du même démarrage encore couvert par le tampon → suite seulement ; sinon un `resync` unique (recharger par REST). `retry: 3000`.
 - **05.2.1 (serveur)** : `GET /api/events` (session requise, 401 sinon), `X-Accel-Buffering: no`, maintien toutes les 15 s, fermeture à l'expiration de session, à la déconnexion, à la nouvelle connexion ou à l'éviction ; quatre flux au plus par session (les plus anciens fermés).
+- **05.2.2** : `poc/live.js` remplace l'interrogation de `GET /api/machines` toutes les 2 s par `EventSource('/api/events')` : `machine.telemetry` et `fleet.changed` déclenchent une relecture REST regroupée (une par seconde au plus), `resync` une relecture immédiate ; lecture initiale, boutons d'actualisation et relecture de sécurité toutes les 30 s conservés. Flux indisponible (proxy, erreur, navigateur sans SSE) : retour automatique au rafraîchissement de 2 s jusqu'à la reconnexion (retour arrière prévu), sans double abonnement ; flux fermé (session expirée) : la lecture REST ramène à l'écran de connexion.
+- **05.2.3** (mesure locale, Chromium, 8 machines simulées, 3 navigateurs SSE + 1 navigateur au flux bloqué) : parc stable pendant 10 s → **0** lecture `GET /api/machines` par les navigateurs SSE (15 auparavant), 5 pour le navigateur de secours ; lectures machine bornées par la boucle serveur (8 machines toutes les 2 s, indépendamment du nombre de navigateurs) ; changement de température affiché en ≈ 3,4 s (boucle 2 s + instantané en cache + regroupement 1 s, comparable à l'interrogation précédente). Aucune caméra ouverte en arrière-plan : la boucle ne lit que la télémétrie.
 
 **Sortie :** reconnexions sans fuite, parité des états et charge mesurée. **Retour arrière :** réactiver temporairement le rafraîchissement existant, sans doubler les abonnements machine.
 
