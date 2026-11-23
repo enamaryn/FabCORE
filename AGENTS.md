@@ -19,6 +19,7 @@ Ce fichier est la référence commune pour les assistants. Choisir le sujet ci-d
 | Droits et authentification | `src/application/accounts.ts` → `createAccountService` ; sessions dans `poc/server.mjs` → `createFabCore` ; `poc/oidc.mjs` | `src/application/services.test.ts`, `poc/write-routes.test.mjs`, `poc/oidc.test.mjs` |
 | Notifications / bobine manuelle | `src/application/notifications.ts` → `createNotificationService` ; `machines.ts` → `createMachineMetadata` ; envoi `poc/notifications.mjs` → `sendNotification` | `src/application/services.test.ts`, `poc/notifications.test.mjs` |
 | Temps réel SSE (MIG-05) | `src/application/events.ts` → `createEventHub` ; `fleet-events.ts` → `createFleetWatcher`, `observeFleet` ; route `src/http/routes/events.ts` ; flux `handleEvents` dans `poc/server.mjs` | `src/application/events.test.ts`, `poc/events-http.test.mjs` |
+| Interface React (MIG-06) | `web/src/App.tsx` → `App` ; composants `web/src/components/` ; SSE `web/src/events.ts` ; build/ressources `src/http/web-build.ts` | `web/test/`, `poc/react-pages.test.mjs` ; [parité](docs/MIG-06-PARITY.md) |
 | Parc / fiche machine | `poc/live.js` → `liveFleet`, `liveDetail`, `filesPanel` | `poc/machine-cockpit.test.mjs` |
 | Commandes et chauffe | `poc/manual-controls.mjs` → `createManualControls` | `poc/manual-controls-http.test.mjs` |
 | Découverte / multi-instance | `poc/discovery.mjs` → `scanNetwork`, `detectMoonraker` | `poc/discovery.test.mjs` |

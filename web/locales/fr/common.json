@@ -1,0 +1,32 @@
+{
+  "skip": "Aller au contenu",
+  "navigation": "Navigation principale",
+  "mobileNavigation": "Navigation mobile",
+  "account": "Compte et paramètres",
+  "logout": "Déconnexion",
+  "changeLanguage": "Changer de langue",
+  "language": "Langue : {language}",
+  "themeLabel": "Thème : {theme}",
+  "theme": {
+    "dark": "sombre",
+    "light": "clair",
+    "system": "système"
+  },
+  "role": {
+    "admin": "Administrateur",
+    "observer": "Observateur"
+  },
+  "nav": {
+    "home": "Vue d’ensemble",
+    "machines": "Machines",
+    "history": "Activité récente",
+    "cloud": "Comptes cloud",
+    "diagnostics": "Diagnostics",
+    "notifications": "Notifications",
+    "observer": "Ajouter un observateur"
+  },
+  "languageName": {
+    "fr": "Français",
+    "en": "Anglais"
+  }
+}
