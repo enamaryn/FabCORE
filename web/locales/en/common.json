@@ -28,5 +28,25 @@
   "languageName": {
     "fr": "French",
     "en": "English"
+  },
+  "version": {
+    "installed": "Version {version}",
+    "unknown": "Unknown version",
+    "upToDate": "up to date",
+    "unchecked": "check unavailable",
+    "checked": "Checked on {date}",
+    "available": "Update available"
+  },
+  "update": {
+    "title": "FabCore update available",
+    "text": "Installed version: {current}. New version: {latest}.",
+    "never": "Don’t remind me",
+    "later": "Remind me later",
+    "now": "Update now",
+    "how": "On the FabCore server (as root), run the following command. It backs up the data, updates and restarts FabCore; this page reconnects by itself.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "after": "The interface does not run the update itself: it requires server administration rights.",
+    "close": "Close"
   }
 }

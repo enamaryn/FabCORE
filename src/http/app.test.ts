@@ -21,6 +21,7 @@ function build(view: () => Record<string, unknown> = () => ({ events: [] })) {
     machines: { write: async () => null, spool: () => ({ manualSpool: null }), networks: () => ({ networks: [] }), discover: async () => null },
     notifications: { view: () => ({ ntfy: { mode: 'off' }, smtp: { enabled: false }, internal: null }), save: () => { throw new Error('unused'); }, test: async () => ({ accepted: true as const }) },
     events: { stream: () => undefined },
+    version: { status: async () => ({ current: null, latest: null, updateAvailable: false, checkedAt: null }) },
     operations: { cloudAction: () => undefined, camera: () => undefined, command: () => undefined, controls: () => undefined, terminal: () => undefined, files: () => undefined },
     pages: { asset: () => undefined, oidc: () => undefined },
     logs: { machine: () => null, machineLog: () => '', cloudAccounts: () => ({ providers: [], accounts: [] }), cloudLog: () => '', cloudFailure: () => { throw new Error('unused'); } },

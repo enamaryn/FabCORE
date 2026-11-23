@@ -9,7 +9,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { readWebAssets } from '../src/http/web-build.ts';
 import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { discoveryNetworks, reconcileDiscovery, scanNetwork } from './discovery.mjs';
 import { connectorCatalog, connectorDefinition, createConnectorRegistry } from './connectors.mjs';
@@ -24,6 +24,7 @@ import { createMachineMetadata } from '../src/application/machines.ts';
 import { createNotificationService } from '../src/application/notifications.ts';
 import { createPersist } from '../src/application/state-store.ts';
 import { createEventHub } from '../src/application/events.ts';
+import { createVersionService } from '../src/application/version.ts';
 import { createFleetWatcher, observeFleet } from '../src/application/fleet-events.ts';
 import { openStore } from './store.mjs';
 import { createCloudAccounts, CloudError } from './cloud-accounts.mjs';
@@ -114,7 +115,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, store: storage = openStore(directory), origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification, logLevel = 'debug', eventHeartbeatMs = 15_000 } = {}) {
+export function createFabCore({ directory, store: storage = openStore(directory), origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification, logLevel = 'debug', eventHeartbeatMs = 15_000, versionFetch } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -822,6 +823,8 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     }
   }
   // Une seule boucle de lecture pour tous les navigateurs abonnés ; arrêtée sans abonné (MIG-05).
+  // Version installée et mise à jour disponible (cache 10 min) ; `versionFetch` remplaçable par les tests.
+  const versionService = createVersionService({ root: fileURLToPath(new URL('..', import.meta.url)), ...(versionFetch ? { fetcher: versionFetch } : {}) });
   const fleetWatcher = createFleetWatcher({ hub: events, machines: () => store.state.machines, read: telemetryOf });
   async function listFleet(activeSession) {
     const machines = await Promise.all(store.state.machines.map(async (machine) => {
@@ -869,6 +872,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       cloudFailure: failure => new HttpError(failure instanceof CloudError ? failure.status : 500, failure instanceof CloudError ? failure.message : 'cloud-storage')
     },
     events: { stream: handleEvents },
+    version: { status: () => versionService.status() },
     operations: { cloudAction: handleCloudAction, camera: handleCamera, command: handleCommand, controls: handleControls, terminal: handleTerminal, files: handleFiles },
     pages: { asset: handleAsset, oidc: handleOidc }
   }));
