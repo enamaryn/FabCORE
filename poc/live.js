@@ -674,7 +674,8 @@ function renderLive() {
     title(t('Activité récente','Recent activity')) + `<section class="panel">${listEvents()}</section>` };
   const compact = signedIn && live.page === 'detail';
   const fleet = signedIn && ['home', 'machines'].includes(live.page);
-  const accountActions = `      ${btn('lang',state.lang==='fr'?'EN':'FR','','ghost',`aria-label="${state.lang==='fr'?'Switch to English':'Passer en français'}"`)}
+  const accountActions = `
+      ${signedIn ? `<a class="button ghost" href="/app">${t('Vue atelier','Workshop view')}</a>` : ''}      ${btn('lang',state.lang==='fr'?'EN':'FR','','ghost',`aria-label="${state.lang==='fr'?'Switch to English':'Passer en français'}"`)}
       ${btn('theme','','sun','ghost',`aria-label="${t('Basculer le thème','Toggle theme')}"`)}
       ${signedIn && state.role === 'admin' ? btn('diagnostics',t('Diagnostics','Diagnostics'),'activity') : ''}
       ${signedIn && state.role === 'admin' ? btn('notifications',t('Notifications','Notifications')) : ''}
@@ -705,6 +706,7 @@ const statusLabels = {
 };
 let telemetryTimer;
 let fleetRevision = 0;
+let workshopEpoch = 0;
 // Temps réel (MIG-05) : le flux SSE signale les changements, le parc est relu par REST (ADR 0004).
 // Actualisation regroupée (une lecture par seconde au plus), relecture de sécurité toutes les 30 s, et retour
 // au rafraîchissement périodique de 2 s tant que le flux est indisponible.
@@ -825,6 +827,7 @@ async function refresh() {
 }
 
 function openWorkshop(username, role) {
+  const epoch = ++workshopEpoch;
   state.role = role === 'admin' ? 'admin' : 'viewer';
   live.username = username;
   cloudUI.data = null; cloudUI.error = '';
@@ -840,7 +843,21 @@ function openWorkshop(username, role) {
   state.events = [];
   state.machines = [];
   renderLive();
-  refresh();
+  refresh().then(() => {
+    if (live.phase !== 'workshop' || workshopEpoch !== epoch) return;
+    const params = new URLSearchParams(location.search);
+    const id = params.get('machine');
+    const screen = params.get('screen');
+    if (id && state.machines.some(m => m.id === id)) { state.machine = id; live.page = 'detail'; renderLive(); }
+    else if (state.role === 'admin' && screen) {
+      if (screen === 'cloud') openCloudAccounts();
+      if (screen === 'diagnostics') openDiagnostics();
+      if (screen === 'notifications') openNotifications();
+      if (screen === 'add') openDiscovery();
+      if (screen === 'observer') document.querySelector('[data-action="observer"]')?.click();
+    }
+    if (id || screen) history.replaceState(null, '', '/');
+  });
   startLiveUpdates();
 }
 

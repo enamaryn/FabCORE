@@ -73,7 +73,7 @@ if ! command -v node >/dev/null || ! command -v npm >/dev/null ||
   export PATH="$cache/$node_dist/bin:$PATH"
 fi
 
-npm ci --no-audit --no-fund
+npm ci --include=dev --no-audit --no-fund
 ffmpeg -version >/dev/null
 if (( EUID == 0 )); then
   update_bin=/usr/local/bin

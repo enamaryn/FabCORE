@@ -41,7 +41,7 @@ stage=$(mktemp -d "$git_dir/fabcore-update.XXXXXXXX")
 trap 'if [[ ! -e "$stage/previous" ]]; then rm -rf -- "$stage"; fi' EXIT
 git show "$target:package.json" > "$stage/package.json"
 git show "$target:package-lock.json" > "$stage/package-lock.json"
-npm ci --prefix "$stage" --no-audit --no-fund
+npm ci --include=dev --prefix "$stage" --no-audit --no-fund
 
 restart=false
 if command -v systemctl >/dev/null &&

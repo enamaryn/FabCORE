@@ -1,0 +1,32 @@
+{
+  "skip": "Skip to content",
+  "navigation": "Main navigation",
+  "mobileNavigation": "Mobile navigation",
+  "account": "Account and settings",
+  "logout": "Sign out",
+  "changeLanguage": "Change language",
+  "language": "Language: {language}",
+  "themeLabel": "Theme: {theme}",
+  "theme": {
+    "dark": "dark",
+    "light": "light",
+    "system": "system"
+  },
+  "role": {
+    "admin": "Administrator",
+    "observer": "Observer"
+  },
+  "nav": {
+    "home": "Overview",
+    "machines": "Machines",
+    "history": "Recent activity",
+    "cloud": "Cloud accounts",
+    "diagnostics": "Diagnostics",
+    "notifications": "Notifications",
+    "observer": "Add observer"
+  },
+  "languageName": {
+    "fr": "French",
+    "en": "English"
+  }
+}

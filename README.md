@@ -14,7 +14,7 @@ Gardez un œil sur vos fabrications, ouvrez les caméras en direct et voyez quel
 
 ![Tableau de bord FabCore avec le parc et l’activité récente](docs/screenshots/vue-ensemble.webp)
 
-**POC clôturé le 22 novembre 2026 sur P2S et deux CC2.** [Bilan et limites](docs/POC-BILAN.md) · [Migration vers le MVP](docs/MIGRATION-MVP.md). [Release « POC v0 » publiée](https://github.com/enamaryn/FabCORE/releases/tag/poc-v0). Le cadrage du MVP est engagé ; la migration technique n’a pas encore commencé.
+**POC clôturé le 22 novembre 2026 sur P2S et deux CC2.** [Bilan et limites](docs/POC-BILAN.md) · [Migration vers le MVP](docs/MIGRATION-MVP.md). [Release « POC v0 » publiée](https://github.com/enamaryn/FabCORE/releases/tag/poc-v0). La migration technique du MVP est engagée. Le premier lot de l’interface React est en revue : vue d’ensemble et parc sur `/app`, les fiches et commandes restent dans l’interface actuelle.
 
 ## Ce que vous pouvez faire
 

@@ -7,6 +7,7 @@ import { migratedRoutes } from '../src/http/routes/index.ts';
 import { once } from 'node:events';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { readWebAssets } from '../src/http/web-build.ts';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -43,6 +44,7 @@ const liveHtml = shared
   .replace('<html lang="fr">', '<html lang="fr" data-live>')
   .replace('href="brand/favicon.svg"', 'href="/favicon.svg"')
   .replace(/<script>[\s\S]+<\/script>/, '<script src="/shared.js"></script><script src="/cloud.js"></script><script src="/live.js"></script>');
+let reactAssets;
 const assets = new Map([
   ['/', ['text/html; charset=utf-8', liveHtml]],
   ['/shared.js', ['text/javascript; charset=utf-8', sharedScript]],
@@ -201,10 +203,19 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     return true;
   }
   // Gestionnaires HTTP bruts, branchés par src/http/routes/operations.ts et pages.ts derrière les gardes du socle.
-  // Pages et scripts de l'interface : chemin exact, seule la page d'accueil accepte `?auth=oidc-failed`.
-  function handleAsset(req, res) {
+  // Pages et scripts de l'interface : chemin exact, liens directs contrôlés vers les écrans conservés pendant MIG-06.
+  async function handleAsset(req, res) {
     const path = req.url;
-    const asset = path === '/?auth=oidc-failed' ? '/' : path;
+    if (path === '/app' || path === '/app/' || /^\/app\/assets\/[A-Za-z0-9_.-]+\.(js|css)$/.test(path)) {
+      const asset = (await (reactAssets ??= readWebAssets())).get(path);
+      if (!asset) return error(res, 404, 'missing');
+      res.writeHead(200, { 'Content-Type': asset.type });
+      return res.end(asset.body);
+    }
+    const url = new URL(path, publicUrl);
+    const deepLink = url.pathname === '/' && [...url.searchParams.keys()].length === 1 &&
+      (['cloud', 'diagnostics', 'notifications', 'observer', 'add'].includes(url.searchParams.get('screen')) || /^[a-f0-9-]{36}$/.test(url.searchParams.get('machine') ?? ''));
+    const asset = path === '/?auth=oidc-failed' || deepLink ? '/' : path;
     if (req.method === 'GET' && assets.has(asset)) {
       const [type, body] = assets.get(asset);
       res.writeHead(200, { 'Content-Type': type });

@@ -45,6 +45,7 @@ jobs:
           /usr/lib/postgresql/16/bin/pg_dump --version
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run build:web
       - run: npm test
       - run: npm run check:licenses
       - run: node scripts/openapi.mjs --check

@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   { ignores: ['node_modules/**', 'poc/**', 'design/**', 'scripts/**'] },
   {
-    files: ['src/**/*.ts', 'connectors/**/*.ts', 'packages/connector-sdk/**/*.ts'],
+    files: ['src/**/*.ts', 'connectors/**/*.ts', 'packages/connector-sdk/**/*.ts', 'web/src/**/*.ts', 'web/src/**/*.tsx'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
     rules: {

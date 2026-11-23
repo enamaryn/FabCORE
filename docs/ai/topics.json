@@ -566,5 +566,39 @@
       "docs/adr/0004-sse.md",
       "docs/MIGRATION-MVP.md"
     ]
+  },
+  {
+    "id": "react",
+    "title": "Interface React : sessions, parc, i18n et SSE",
+    "files": [
+      "web/src/App.tsx",
+      "web/src/main.tsx",
+      "web/src/api.ts",
+      "web/src/events.ts",
+      "web/src/i18n.ts",
+      "web/src/components/FleetPage.tsx",
+      "web/src/components/FilamentDots.tsx",
+      "src/http/web-build.ts",
+      "src/http/routes/pages.ts"
+    ],
+    "symbols": [
+      "App",
+      "createApi",
+      "subscribeFleet",
+      "ensureWebBuild",
+      "readWebAssets"
+    ],
+    "tests": [
+      "web/test/api.test.ts",
+      "web/test/events.test.ts",
+      "web/test/components.test.mjs",
+      "poc/react-pages.test.mjs"
+    ],
+    "docs": [
+      "docs/MIG-06-PARITY.md",
+      "docs/PRODUCT.md",
+      "docs/adr/0002-outillage.md",
+      "docs/adr/0005-i18n.md"
+    ]
   }
 ]
