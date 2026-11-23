@@ -5,12 +5,11 @@ import { currentRequestId } from '../src/http/correlation.ts';
 import { HttpError } from '../src/http/errors.ts';
 import { migratedRoutes } from '../src/http/routes/index.ts';
 import { once } from 'node:events';
-import { randomBytes, randomUUID, createHash, scrypt, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { promisify } from 'node:util';
 import { discoveryNetworks, reconcileDiscovery, scanNetwork } from './discovery.mjs';
 import { connectorCatalog, connectorDefinition, createConnectorRegistry } from './connectors.mjs';
 import { createMachineLogs } from './machine-logs.mjs';
@@ -18,7 +17,11 @@ import { createDiagnostics } from './diagnostics.mjs';
 import { cameraRelay } from './camera-viewers.mjs';
 import { cameraPreview } from './camera-preview.mjs';
 import { createOidc } from './oidc.mjs';
-import { internalNtfy, notificationSettings, publicNotifications, sendNotification } from './notifications.mjs';
+import { internalNtfy, sendNotification } from './notifications.mjs';
+import { createAccountService } from '../src/application/accounts.ts';
+import { createMachineMetadata } from '../src/application/machines.ts';
+import { createNotificationService } from '../src/application/notifications.ts';
+import { createPersist } from '../src/application/state-store.ts';
 import { openStore } from './store.mjs';
 import { createCloudAccounts, CloudError } from './cloud-accounts.mjs';
 import { validateControl } from './manual-controls.mjs';
@@ -27,8 +30,7 @@ import { filePath } from './connector-http.mjs';
 import { productionPath } from './production-files.mjs';
 import { transferMachineFile } from './file-transfer.mjs';
 
-const derive = promisify(scrypt);
-const digest = (secret) => createHash('sha256').update(secret).digest();
+import { digest } from '../src/application/accounts.ts';
 const sessionAge = 8 * 60 * 60 * 1000;
 const activationAge = 15 * 60 * 1000;
 const minute = 60_000;
@@ -116,13 +118,13 @@ export function createFabCore({ directory, store = openStore(directory), origin,
   const secure = publicUrl.protocol === 'https:';
   const allowedHost = publicUrl.host;
   // Écriture attendue avant toute réponse ; base indisponible : 503, état précédent conservé (PostgreSQL, MIG-04).
-  const persist = async next => {
-    try { await store.save(next); }
-    catch (failure) { if (failure.message === 'storage-unavailable') throw new HttpError(503, 'storage-unavailable'); throw failure; }
-  };
+  const persist = createPersist(store);
   const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt, context: currentRequestId });
   const token = store.state.admin ? null : (activationToken ?? randomBytes(24).toString('base64url'));
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
+  // Cas d'usage migrés en TypeScript (MIG-04) : comptes, notifications, bobine manuelle.
+  const accountService = createAccountService({ store, persist, activation });
+  const metadata = createMachineMetadata({ store, persist });
   const sessions = new Map();
   const attempts = new Map();
   const machineLogs = createMachineLogs({ directory, machines: () => store.state.machines, context: currentRequestId, minLevel: logLevel });
@@ -140,7 +142,6 @@ export function createFabCore({ directory, store = openStore(directory), origin,
   const terminalUse = new Map();
   let probes = 0;
   let discoveryActive = false;
-  const notificationTests = new Set();
   const cameraStreams = new Map();
   const stopCameraStreams = (sessionId) => {
     for (const relay of cameraStreams.values()) {
@@ -711,17 +712,6 @@ export function createFabCore({ directory, store = openStore(directory), origin,
       }
       return { status: existing ? 200 : 201, body: { id: machine.id } };
     },
-    async spool(id, data) {
-      const machine = store.state.machines.find(item => item.id === id);
-      if (!machine) throw new HttpError(404, 'missing');
-      if (!supportsManualSpool(machine.kind ?? 'klipper')) throw new HttpError(400, 'spool-unsupported');
-      const spool = data.spool === null ? null : manualSpool(data.spool);
-      if (data.spool !== null && !spool) throw new HttpError(400, 'spool-invalid');
-      // Notes can be edited offline. Reported modules retain display priority.
-      const machines = store.state.machines.map(item => item === machine ? { ...item, manualSpool: spool } : item);
-      await persist({ ...store.state, machines });
-      return { manualSpool: spool };
-    },
     networks: () => ({ networks: networks().map(({ cidr }) => cidr) }),
     async discover(data, signal) {
       const network = networks().find(({ cidr }) => cidr === data.network);
@@ -739,30 +729,14 @@ export function createFabCore({ directory, store = openStore(directory), origin,
   };
   // Services des comptes, appelés par src/http/routes/accounts.ts. Erreurs : HttpError (code stable).
   const grant = (username, role) => ({ body: { authenticated: true, username, role }, cookie: newSession(username, role) });
-  const credentials = data => ({ username: value(data, 'username', 40).trim(), password: value(data, 'password', 128) });
   const accounts = {
-    installed: () => Boolean(store.state.admin),
+    installed: accountService.installed,
     async setup(data) {
-      const { username, password } = credentials(data);
-      if (!activation || activation.expires <= Date.now()) throw new HttpError(410, 'expired');
-      if (!timingSafeEqual(digest(value(data, 'token', 128).trim()), activation.hash)) throw new HttpError(403, 'token');
-      if (username.length < 3 || password.length < 12) throw new HttpError(400, 'credentials');
-      const salt = randomBytes(16).toString('hex');
-      const hash = (await derive(password, salt, 64)).toString('hex');
-      if (store.state.admin) throw new HttpError(409, 'installed');
-      if (activation.expires <= Date.now()) throw new HttpError(410, 'expired');
-      await persist({ ...store.state, admin: { username, salt, hash } });
-      return grant(username, 'admin');
+      const { username, role } = await accountService.setup(data);
+      return grant(username, role);
     },
     async login(data, activeSession) {
-      const { username, password } = credentials(data);
-      const admin = store.state.admin;
-      const observers = store.state.observers ?? [];
-      if (!admin || !password) throw new HttpError(401, 'credentials');
-      const role = username === admin.username ? 'admin' : 'observer';
-      const account = role === 'admin' ? admin : observers.find((entry) => entry.username === username);
-      const hash = await derive(password, account?.salt ?? admin.salt, 64);
-      if (!account || !timingSafeEqual(hash, Buffer.from(account.hash, 'hex'))) throw new HttpError(401, 'credentials');
+      const { username, role } = await accountService.authenticate(data);
       if (activeSession) {
         sessions.delete(activeSession);
         stopCameraStreams(activeSession);
@@ -777,43 +751,10 @@ export function createFabCore({ directory, store = openStore(directory), origin,
       }
       return { body: { authenticated: false }, cookie: cookie('', 0) };
     },
-    async addObserver(data) {
-      const { username, password } = credentials(data);
-      if (username.length < 3 || password.length < 12) throw new HttpError(400, 'credentials');
-      const salt = randomBytes(16).toString('hex');
-      const hash = (await derive(password, salt, 64)).toString('hex');
-      const latest = store.state.observers ?? [];
-      if (store.state.admin.username === username || latest.some((entry) => entry.username === username)) {
-        throw new HttpError(409, 'observer-duplicate');
-      }
-      if (latest.length >= 16) throw new HttpError(409, 'observer-limit');
-      await persist({ ...store.state, observers: [...latest, { username, salt, hash }] });
-      return { username };
-    }
+    addObserver: data => accountService.addObserver(data)
   };
   // Services des notifications, appelés par src/http/routes/notifications.ts.
-  const notificationService = {
-    view: () => publicNotifications(store.state.notifications ?? {}, internalNtfy(directory)),
-    async save(data) {
-      const internal = internalNtfy(directory);
-      let settings;
-      try { settings = notificationSettings(data, store.state.notifications, internal); }
-      catch (failure) { throw new HttpError(400, failure.message === 'ntfy-install-required' ? failure.message : 'notifications-invalid'); }
-      await persist({ ...store.state, notifications: settings });
-      return publicNotifications(settings, internal);
-    },
-    async test(data) {
-      const channel = data.channel;
-      if (channel !== 'ntfy' && channel !== 'smtp') throw new HttpError(400, 'invalid');
-      if (notificationTests.has(channel) || !withinLimit('/api/notifications/test/' + channel)) throw new HttpError(429, 'rate');
-      notificationTests.add(channel);
-      try {
-        if (await notify(channel, store.state.notifications ?? {}, internalNtfy(directory))) return { accepted: true };
-      } catch { /* Avoid returning provider responses that may contain secrets. */ }
-      finally { notificationTests.delete(channel); }
-      throw new HttpError(502, 'notifications-failed');
-    }
-  };
+  const notificationService = createNotificationService({ store, persist, internal: () => internalNtfy(directory), send: notify, withinLimit });
   // Service de lecture du parc, appelé par la route typée GET /api/machines.
   async function listFleet(activeSession) {
     const machines = await Promise.all(store.state.machines.map(async (machine) => {
@@ -851,7 +792,7 @@ export function createFabCore({ directory, store = openStore(directory), origin,
     fleet: { list: viewer => listFleet(viewer.session) },
     machines: {
       write: (action, data, { viewer, signal, stillSignedIn }) => machineAdmin.write(action, data, { viewer: sessions.get(viewer.session), signal, stillSignedIn }),
-      spool: (id, data) => machineAdmin.spool(id, data),
+      spool: (id, data) => metadata.setManualSpool(id, data),
       networks: () => machineAdmin.networks(),
       discover: (data, signal) => machineAdmin.discover(data, signal)
     },

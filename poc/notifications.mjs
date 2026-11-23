@@ -3,9 +3,6 @@ import { join } from 'node:path';
 import nodemailer from 'nodemailer';
 
 const topicPattern = /^[a-zA-Z0-9_-]{1,64}$/;
-const mailAddress = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
-const text = (input, limit) => typeof input === 'string' && input.length <= limit && !/[\x00-\x1f\x7f]/.test(input) ? input : '';
-const invalid = () => { throw new Error('notifications-invalid'); };
 
 export function internalNtfy(directory) {
   try {
@@ -15,52 +12,8 @@ export function internalNtfy(directory) {
   return null;
 }
 
-export function notificationSettings(input, previous = {}, internal) {
-  const config = {};
-  const ntfy = input.ntfy ?? {};
-  const smtp = input.smtp ?? {};
-  if (!['off', 'internal', 'external'].includes(ntfy.mode) || typeof smtp.enabled !== 'boolean') invalid();
-  config.ntfy = { mode: ntfy.mode };
-  if (ntfy.mode === 'internal' && !internal) throw new Error('ntfy-install-required');
-  if (ntfy.mode === 'external') {
-    let url;
-    try { url = new URL(text(ntfy.url, 256)); } catch { invalid(); }
-    const auth = ntfy.auth;
-    const username = auth === 'basic' ? text(ntfy.username, 128) : '';
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash ||
-        !topicPattern.test(ntfy.topic) || typeof ntfy.topic !== 'string' ||
-        !['none', 'basic', 'bearer'].includes(auth) || (auth === 'basic' && (!username || username.includes(':')))) invalid();
-    const destination = url.href.replace(/\/+$/, '');
-    const old = previous.ntfy;
-    const keep = old?.mode === 'external' && old.url === destination && old.topic === ntfy.topic && old.auth === auth && old.username === username;
-    const secret = text(ntfy.secret, 512) || (ntfy.secret === '' && keep ? old.secret : '');
-    if (auth !== 'none' && !secret) invalid();
-    config.ntfy = { mode: 'external', url: destination, topic: ntfy.topic, auth, username, secret: auth === 'none' ? '' : secret };
-  }
-  config.smtp = { enabled: smtp.enabled };
-  if (smtp.enabled) {
-    const host = text(smtp.host, 253).trim().toLowerCase();
-    const port = Number(smtp.port);
-    const tls = smtp.tls;
-    const from = text(smtp.from, 254);
-    const to = text(smtp.to, 254);
-    const username = text(smtp.username, 128);
-    if (!/^[a-z0-9][a-z0-9.-]*$/i.test(host) || !Number.isInteger(port) || port < 1 || port > 65535 ||
-        !['tls', 'starttls'].includes(tls) || !mailAddress.test(from) || !mailAddress.test(to) || typeof smtp.auth !== 'boolean') invalid();
-    const old = previous.smtp;
-    const keep = old?.host === host && old.port === port && old.tls === tls && old.auth === smtp.auth && old.username === username;
-    const secret = text(smtp.secret, 512) || (smtp.secret === '' && keep ? old.secret : '');
-    if (smtp.auth && (!username || !secret)) invalid();
-    config.smtp = { enabled: true, host, port, tls, from, to, auth: smtp.auth, username: smtp.auth ? username : '', secret: smtp.auth ? secret : '' };
-  }
-  return config;
-}
-
-export function publicNotifications(config = {}, internal) {
-  const { secret: _ntfy, ...ntfy } = config.ntfy ?? { mode: 'off' };
-  const { secret: _smtp, ...smtp } = config.smtp ?? { enabled: false };
-  return { ntfy, smtp, internal: internal ? { url: internal.url, topic: internal.topic } : null };
-}
+// Validation et forme publique : implémentation unique dans src/application/notifications.ts (MIG-04).
+export { notificationSettings, publicNotifications } from '../src/application/notifications.ts';
 
 const message = 'Notification de test envoyée par FabCore.';
 export async function sendNotification(channel, config, internal, { fetcher = fetch, transport = nodemailer.createTransport } = {}) {
