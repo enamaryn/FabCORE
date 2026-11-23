@@ -18,3 +18,10 @@
 .filament-active{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent);color:var(--card)}
 .filament-manual{display:flex;align-items:center;gap:16px}.filament-manual .react-filament-slot{padding:0}
 .react-log-entries{max-height:60vh;overflow:auto;min-width:0}.react-log-entries details{padding:8px 0;border-bottom:1px solid var(--line)}.react-log-entries pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;margin:6px 0}.react-log-entries summary{cursor:pointer;overflow-wrap:anywhere;font-size:13px}
+/* Illustrations AMS / CANVAS : fond sombre façon écran de machine, texte du dessin à taille fixe. */
+.filament-art-module{background:#1f2224;border-color:#3a3e41;color:#f2f3f4;display:grid;gap:8px}.filament-art-module>strong{font-size:14px}
+.filament-art{width:100%;height:auto;display:block;margin:0 auto}.ams-art{max-width:620px}.canvas-art{max-width:380px}
+.filament-art .art-material{font:700 15px/1 system-ui,sans-serif;fill:#f2f3f4}.canvas-art .art-material{font-size:14px}
+.filament-art .art-slot{font:700 15px/1 system-ui,sans-serif}.filament-art .art-unknown{font:700 22px/1 system-ui,sans-serif;fill:#f2f3f4}
+.filament-art .art-humidity{font:700 17px/1 system-ui,sans-serif;fill:#f2f3f4}.filament-art .art-humidity-small{font:600 12px/1 system-ui,sans-serif;fill:#c4c8cb}
+.filament-art .art-badge{font:700 16px/1 system-ui,sans-serif;fill:#f2f3f4}

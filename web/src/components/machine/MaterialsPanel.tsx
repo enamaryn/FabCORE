@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { MachineData } from '../../types.js';
 import { manualSpool, supportsManualSpool } from '../../../../src/domain/spool.ts';
 import { Unavailable } from './Unavailable.tsx';
+import { AmsUnit, CanvasUnit } from './FilamentArt.tsx';
 
 export function MaterialsPanel({ machine, role, busy, save }: { machine: MachineData; role: 'admin' | 'observer'; busy: boolean; save(spool: Record<string, unknown> | null): Promise<boolean> }) {
   const { t } = useTranslation('machine'); const [editing, setEditing] = useState(false);
@@ -13,6 +14,11 @@ export function MaterialsPanel({ machine, role, busy, save }: { machine: Machine
     {!fdm ? <Unavailable message={t('notApplicable')} /> : units.length ? <div className="react-filament-modules">{units.map(unit => {
       const slots = unit.slots.filter(slot => slot && Number.isFinite(slot.id));
       const humidity = typeof unit.humidity === 'number' && Number.isFinite(unit.humidity) && unit.humidity >= 0 && unit.humidity <= 100 ? unit.humidity : null;
+      const text = { empty: t('empty'), unknown: t('notReported'), active: t('active') };
+      const name = `${machine.capabilities?.filaments ?? t('module')} ${unit.variant === 'ht' ? 'HT ' + (unit.id - 3) : unit.id + 1}`;
+      // Illustration du module selon le fabricant (quatre emplacements au plus), sinon présentation générique.
+      if (slots.length <= 4 && unit.variant !== 'ht' && (machine.kind === 'bambu' || machine.kind === 'bambu-cloud')) return <div className="react-filament-module filament-art-module" key={unit.id}><strong>{name}</strong><AmsUnit slots={slots} letter={String.fromCharCode(65 + Math.max(0, Math.min(unit.id, 25)))} humidity={humidity} text={text} /></div>;
+      if (slots.length <= 4 && (machine.kind === 'elegoo' || machine.kind === 'elegoo-cc1')) return <div className="react-filament-module filament-art-module" key={unit.id}><strong>{name}</strong><CanvasUnit slots={slots} humidity={humidity} text={text} /></div>;
       return <div className="react-filament-module" key={unit.id}>
         <div className="row between wrap filament-module-head"><strong>{machine.capabilities?.filaments ?? t('module')} {unit.variant === 'ht' ? 'HT ' + (unit.id - 3) : unit.id + 1}</strong>
           {humidity !== null && <span className="filament-humidity" data-level={humidity >= 60 ? 'high' : humidity >= 40 ? 'medium' : 'low'} title={t('humidity')} aria-label={t('humidityValue', { value: humidity })}><svg className="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 2S5 10 5 15a7 7 0 0 0 14 0c0-5-7-13-7-13Z" /></svg>{humidity} %</span>}</div>

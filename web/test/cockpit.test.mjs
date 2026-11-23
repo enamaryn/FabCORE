@@ -39,7 +39,11 @@ test('Cockpit : pause/stop selon état et capacités, aucun bouton d’écriture
 });
 test('Cockpit : quatre modules compacts, humidité bornée et priorité sur bobine manuelle', () => {
   const html = render({ ...machine, manualSpool: { material: 'ABS', color: '#AABBCC' }, filaments: Array.from({ length: 4 }, (_, i) => ({ id: i, humidity: i === 3 ? 120 : 28, slots: [{ id: 0, material: 'PETG', occupied: true, color: '#FFFFFF' }, { id: 1, occupied: false }] })) });
-  assert.equal((html.match(/class="react-filament-module"/g) ?? []).length, 4); assert.equal((html.match(/Humidité : 28 %/g) ?? []).length, 3);
+  // P2S : illustration AMS (A1…A4), humidité bornée affichée dans la capsule, valeur hors bornes ignorée.
+  assert.equal((html.match(/class="react-filament-module filament-art-module"/g) ?? []).length, 4); assert.equal((html.match(/>28%<\/text>/g) ?? []).length, 3);
+  assert.match(html, /aria-label="A1 : PETG, #FFFFFF · A2 : Vide/); assert.match(html, />A1<\/text>/);
+  // CC1/CC2 : illustration CANVAS (bobines rondes numérotées).
+  for (const kind of ['elegoo', 'elegoo-cc1']) { const canvas = render({ ...machine, kind, filaments: [{ id: 0, slots: [{ id: 0, material: 'TPU', occupied: true, color: '#E8455A', active: true }, { id: 3, material: 'PLA', occupied: true, color: '#111111' }] }] }); assert.match(canvas, /class="filament-art canvas-art"/); assert.match(canvas, /1 : TPU, #E8455A, Actif · 2 : Vide · 3 : Vide · 4 : PLA, #111111/); }
   assert.doesNotMatch(html, /120 %|#AABBCC|>ABS<|Modifier la bobine/); assert.match(html, /#machine\/11111111-1111-4111-8111-111111111111\/files/); assert.match(html, /#machine\/11111111-1111-4111-8111-111111111111\/logs/);
 });
 test('Températures : ruptures pointillées et historique vide explicite', () => {
