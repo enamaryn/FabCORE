@@ -64,7 +64,15 @@ test('fabcore import/backup/restore (PostgreSQL) : base restaurée en une transa
   t.after(async () => { await admin.query(`drop schema ${schema} cascade`); await admin.end(); });
   const url = new URL(base); url.searchParams.set('options', `-c search_path=${schema}`);
   const database = { FABCORE_DATABASE_URL: url.href };
-  assert.equal(run(['import', '--apply'], database).status, 0);
+  const check = run(['database', 'check'], database);
+  assert.equal(check.status, 0, check.stdout + check.stderr);
+  assert.match(check.stdout, /✓ Version : PostgreSQL 1[6-9]/);
+  assert.match(check.stdout, /✓ Création de tables/);
+  // Même configuration lue depuis un fichier FABCORE_CONFIG 0600, comme le serveur.
+  const configFile = join(env.FABCORE_BACKUPS, '..', 'database.env');
+  writeFileSync(configFile, `FABCORE_DATABASE_URL=${url.href}\n`, { mode: 0o600 });
+  assert.match(run(['status'], { FABCORE_CONFIG: configFile }).stdout, /Stockage : PostgreSQL/);
+  assert.equal(run(['import', '--apply'], { FABCORE_CONFIG: configFile }).status, 0);
   const backup = run(['backup'], database);
   assert.equal(backup.status, 0, backup.stderr);
   assert.doesNotMatch(backup.stdout + backup.stderr, /postgres:\/\//, 'URL jamais affichée');

@@ -66,6 +66,8 @@ L’installation fournit la commande d’administration `fabcore` (`fabcore help
 | `fabcore backups` | Liste des sauvegardes (les 10 dernières sont conservées) |
 | `fabcore restore <archive>` | Remet une sauvegarde en place après confirmation et sauvegarde de l’état actuel (`--check` : vérifier sans rien modifier) |
 | `fabcore import` | Passage de `state.json` à PostgreSQL (simulation, puis `--apply`) |
+| `fabcore database check` | Vérifie la base configurée : connexion, TLS, version ≥ 16, droits de création |
+| `fabcore database setup` | Tout-en-un : installe PostgreSQL local, crée la base, importe `state.json` et bascule le service |
 | `fabcore status` | Version, service, stockage et dernière sauvegarde |
 
 Si FabCore tourne dans le terminal, arrêtez-le avec `Ctrl+C`, puis lancez `fabcore update` avec le compte utilisé pour l’installation. Relancez ensuite `bash scripts/install.sh` depuis le dossier FabCore. Un service systemd actif nommé `fabcore` est redémarré automatiquement si son dossier de travail correspond à cette installation, et arrêté le temps d’une restauration. `fabcore-update` reste disponible et équivaut à `fabcore update` ; une installation antérieure obtient la commande `fabcore` en relançant `bash scripts/install.sh`. Si la commande est absente du PATH, utilisez `/usr/local/bin/fabcore` (root) ou `~/.local/bin/fabcore` (utilisateur). Les sauvegardes sont dans `.fabcore-backups` du dossier FabCore ; copiez-les aussi hors de la machine.

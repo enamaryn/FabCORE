@@ -22,8 +22,8 @@ Ce fichier est la référence commune pour les assistants. Choisir le sujet ci-d
 | Commandes et chauffe | `poc/manual-controls.mjs` → `createManualControls` | `poc/manual-controls-http.test.mjs` |
 | Découverte / multi-instance | `poc/discovery.mjs` → `scanNetwork`, `detectMoonraker` | `poc/discovery.test.mjs` |
 | Contrats du domaine (MIG) | `src/domain/` → `mergeOutcome` (`command.ts`), `restrictCapabilities` (`capabilities.ts`) ; adaptateur `src/application/connectors.ts` → `createTypedConnectorRegistry` | `src/domain/contracts.test.ts`, `src/application/connectors.test.ts` |
-| PostgreSQL / import `state.json` (MIG-04) | `src/persistence/postgres-store.ts` → `openPostgresStore` ; `import.ts` → `importState` ; `mapping.ts` ; CLI `scripts/import-state.mjs` | `src/persistence/mapping.test.ts`, `src/persistence/postgres.test.ts` (`FABCORE_TEST_DATABASE_URL`) |
-| Commande `fabcore` (update, backup, restore) | `scripts/fabcore.sh` → `cmd_backup`, `cmd_restore` ; lanceurs `scripts/install.sh` | `scripts/fabcore-cli.test.mjs` |
+| PostgreSQL / import `state.json` (MIG-04) | configuration `src/config/database.ts` → `loadDatabaseConfig` ; `src/persistence/postgres-store.ts` → `openPostgresStore` ; `import.ts` → `importState` ; `mapping.ts` ; CLI `scripts/import-state.mjs` | `src/config/database.test.ts`, `src/persistence/mapping.test.ts`, `src/persistence/postgres.test.ts` (`FABCORE_TEST_DATABASE_URL`) |
+| Commande `fabcore` (update, backup, restore, database) | `scripts/fabcore.sh` → `cmd_backup`, `cmd_restore`, `cmd_database_setup` ; `scripts/database.mjs` (check, env) ; lanceurs `scripts/install.sh` | `scripts/fabcore-cli.test.mjs` |
 | Comptes cloud / logs | `connectors/bambu/src/cloud-http.ts` → `createCloudHttp` ; `cloud-monitor.ts` → `createCloudMonitor` ; orchestration `poc/cloud-accounts.mjs` | `poc/cloud-accounts.test.mjs` |
 
 Autre sujet ou références actuelles avec lignes/empreintes : `node scripts/ai-context.mjs --list`, puis `node scripts/ai-context.mjs <sujet>`. Pas de numéro de ligne figé dans ce fichier. Lors d'un déplacement ou renommage, actualiser cette table et la carte détaillée.
