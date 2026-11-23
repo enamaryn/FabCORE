@@ -16,7 +16,8 @@ Ce fichier est la référence commune pour les assistants. Choisir le sujet ci-d
 | xTool M2 : session, caméra et découverte | `connectors/xtool/src/monitor.ts` → `createXToolServices` ; `camera.ts`, `media.ts`, `discovery.ts` | `connectors/xtool/test/monitor.test.ts`, `poc/xtool.test.mjs` |
 | Longer Ray5 : GRBL et carte SD | `connectors/longer/src/monitor.ts` → `createRay5Services` ; `files.ts` → `createRay5FileServices` | `connectors/longer/test/connector.test.ts`, `poc/longer-ray5-controls.test.mjs` |
 | Socle HTTP / OpenAPI (MIG-03) | `src/http/app.ts` → `createHttpApp` (gardes, mode brut, repli) ; toutes les routes `src/http/routes/index.ts` → `migratedRoutes` ; services et gestionnaires `handle*` dans `poc/server.mjs` ; corrélation `src/http/correlation.ts` | `src/http/app.test.ts`, `poc/routing-parity.test.mjs`, `poc/write-routes.test.mjs`, `poc/machine-writes.test.mjs`, `poc/correlation-http.test.mjs` |
-| Droits et authentification | `poc/server.mjs` → `createFabCore` ; `poc/oidc.mjs` | `poc/oidc.test.mjs` |
+| Droits et authentification | `src/application/accounts.ts` → `createAccountService` ; sessions dans `poc/server.mjs` → `createFabCore` ; `poc/oidc.mjs` | `src/application/services.test.ts`, `poc/write-routes.test.mjs`, `poc/oidc.test.mjs` |
+| Notifications / bobine manuelle | `src/application/notifications.ts` → `createNotificationService` ; `machines.ts` → `createMachineMetadata` ; envoi `poc/notifications.mjs` → `sendNotification` | `src/application/services.test.ts`, `poc/notifications.test.mjs` |
 | Parc / fiche machine | `poc/live.js` → `liveFleet`, `liveDetail`, `filesPanel` | `poc/machine-cockpit.test.mjs` |
 | Commandes et chauffe | `poc/manual-controls.mjs` → `createManualControls` | `poc/manual-controls-http.test.mjs` |
 | Découverte / multi-instance | `poc/discovery.mjs` → `scanNetwork`, `detectMoonraker` | `poc/discovery.test.mjs` |
