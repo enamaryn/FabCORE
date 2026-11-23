@@ -155,6 +155,16 @@ FabCore lit le numéro de série et l’état de la M2. À l’ajout, il mémori
 | `FABCORE_LOG_LEVEL` | `debug` | Seuil des journaux machine : `debug` (échanges protocolaires), `info`, `warn` ou `error` |
 | `FABCORE_ORIGIN` | `http://127.0.0.1:3000` si port par défaut | Origine exacte utilisée par le navigateur |
 | `FABCORE_DATA` | `.fabcore` | Répertoire de stockage |
+| `FABCORE_DATABASE_URL` | absent | PostgreSQL ≥ 16 (`postgres://…`) : remplace `state.json` ; schéma migré au démarrage. Fichiers, journaux et `cloud-secret.key` restent dans `FABCORE_DATA` |
+
+### Passer de state.json à PostgreSQL (MIG-04)
+
+1. Arrêter FabCore et sauvegarder tout `FABCORE_DATA` (`state.json`, `cloud-secret.key`, fichiers, journaux).
+2. Simulation (écrit, vérifie les contraintes, relit et compare, puis annule) : `FABCORE_DATABASE_URL=… node scripts/import-state.mjs --data <dossier>`. Le rapport JSON donne les comptes et les anomalies (codes et chemins, jamais de valeur). Code de sortie 2 si une anomalie bloque.
+3. Import réel : même commande avec `--apply`. Relancer est sans effet (`already-imported`) ; une base contenant d’autres données est refusée (`database-not-empty`).
+4. Démarrer FabCore avec `FABCORE_DATABASE_URL`. Sans import, une base vide à côté d’un `state.json` refuse de démarrer (`database-import-required`) ; une seconde instance sur la même base aussi (`database-in-use`).
+
+`state.json` n’est plus modifié une fois PostgreSQL actif : un retour au JSON perdrait les changements ultérieurs. L’URL ne doit pas être passée en argument (liste des processus) ni journalisée. Base indisponible pendant une écriture : réponse 503 `storage-unavailable`, état précédent conservé.
 
 ### Limite des envois derrière un reverse proxy
 

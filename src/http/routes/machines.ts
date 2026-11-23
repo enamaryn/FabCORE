@@ -5,6 +5,8 @@ import { errorResponses } from '../errors.ts';
 
 type Body = Record<string, unknown>;
 export type MachineAction = 'add' | 'test' | 'edit' | 'pair' | 'delete';
+type SpoolResult = { manualSpool: Record<string, unknown> | null };
+
 export interface WriteContext {
   viewer: Viewer;
   /** Annulé quand le client ferme la requête : la sonde en cours s'arrête. */
@@ -16,7 +18,7 @@ export interface WriteContext {
 export interface MachineDependencies {
   /** `null` : requête annulée par le client, aucune réponse n'est due. */
   write(action: MachineAction, data: Body, context: WriteContext): Promise<{ status: number; body: Record<string, unknown> } | null>;
-  spool(id: string, data: Body): { manualSpool: Record<string, unknown> | null };
+  spool(id: string, data: Body): SpoolResult | Promise<SpoolResult>;
   networks(): { networks: string[] };
   discover(data: Body, signal: AbortSignal): Promise<{ devices: Record<string, unknown>[] } | null>;
 }

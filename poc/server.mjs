@@ -108,14 +108,18 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification, logLevel = 'debug' } = {}) {
+export function createFabCore({ directory, store = openStore(directory), origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification, logLevel = 'debug' } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
   }
   const secure = publicUrl.protocol === 'https:';
   const allowedHost = publicUrl.host;
-  const store = openStore(directory);
+  // Écriture attendue avant toute réponse ; base indisponible : 503, état précédent conservé (PostgreSQL, MIG-04).
+  const persist = async next => {
+    try { await store.save(next); }
+    catch (failure) { if (failure.message === 'storage-unavailable') throw new HttpError(503, 'storage-unavailable'); throw failure; }
+  };
   const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt, context: currentRequestId });
   const token = store.state.admin ? null : (activationToken ?? randomBytes(24).toString('base64url'));
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
@@ -246,13 +250,13 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const abort = new AbortController();
       res.once('close', () => { if (!res.writableEnded) abort.abort(); });
       let result;
-      if (!id) result = cloud.add(data);
+      if (!id) result = await cloud.add(data);
       else if (action === 'login') result = await cloud.login(id, data, activeSession, abort.signal);
       else if (action === 'verify') result = await cloud.verify(id, data, activeSession, abort.signal);
       else if (action === 'telemetry-start' || action === 'telemetry-stop') result = await cloud.telemetry(id, action === 'telemetry-start');
       else if (action === 'import') result = await cloud.importDevice(id, data.serial);
       else if (action === 'devices') result = await cloud.refresh(id, abort.signal);
-      else if (action === 'disconnect' || action === 'delete') result = cloud.disconnect(id, action === 'delete');
+      else if (action === 'disconnect' || action === 'delete') result = await cloud.disconnect(id, action === 'delete');
       else return error(res, 405, 'missing');
       return answer(res, 200, result);
     } catch (failure) {
@@ -620,7 +624,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (action === 'delete') {
         if (!existing) throw new HttpError(404, 'missing');
         const machines = store.state.machines.filter((machine) => machine !== existing);
-        store.save({ ...store.state, machines });
+        await persist({ ...store.state, machines });
         snapshot.forget(existing.id);
         machineLogs.forget(existing.id);
         connectors.forget(existing.kind ?? 'klipper', existing.id, true);
@@ -696,7 +700,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (!existing && store.state.machines.length >= 8) throw new HttpError(409, 'machine-limit');
       const machines = existing ? store.state.machines.map((entry) => entry.id === machine.id ? machine : entry)
         : [...store.state.machines, machine];
-      store.save({ ...store.state, machines });
+      await persist({ ...store.state, machines });
       if (verifiedCC2) cc2Tests.delete(viewer);
       if (existing) {
         snapshot.forget(machine.id);
@@ -707,7 +711,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       }
       return { status: existing ? 200 : 201, body: { id: machine.id } };
     },
-    spool(id, data) {
+    async spool(id, data) {
       const machine = store.state.machines.find(item => item.id === id);
       if (!machine) throw new HttpError(404, 'missing');
       if (!supportsManualSpool(machine.kind ?? 'klipper')) throw new HttpError(400, 'spool-unsupported');
@@ -715,7 +719,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       if (data.spool !== null && !spool) throw new HttpError(400, 'spool-invalid');
       // Notes can be edited offline. Reported modules retain display priority.
       const machines = store.state.machines.map(item => item === machine ? { ...item, manualSpool: spool } : item);
-      store.save({ ...store.state, machines });
+      await persist({ ...store.state, machines });
       return { manualSpool: spool };
     },
     networks: () => ({ networks: networks().map(({ cidr }) => cidr) }),
@@ -747,7 +751,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const hash = (await derive(password, salt, 64)).toString('hex');
       if (store.state.admin) throw new HttpError(409, 'installed');
       if (activation.expires <= Date.now()) throw new HttpError(410, 'expired');
-      store.save({ ...store.state, admin: { username, salt, hash } });
+      await persist({ ...store.state, admin: { username, salt, hash } });
       return grant(username, 'admin');
     },
     async login(data, activeSession) {
@@ -783,19 +787,19 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         throw new HttpError(409, 'observer-duplicate');
       }
       if (latest.length >= 16) throw new HttpError(409, 'observer-limit');
-      store.save({ ...store.state, observers: [...latest, { username, salt, hash }] });
+      await persist({ ...store.state, observers: [...latest, { username, salt, hash }] });
       return { username };
     }
   };
   // Services des notifications, appelés par src/http/routes/notifications.ts.
   const notificationService = {
     view: () => publicNotifications(store.state.notifications ?? {}, internalNtfy(directory)),
-    save(data) {
+    async save(data) {
       const internal = internalNtfy(directory);
       let settings;
       try { settings = notificationSettings(data, store.state.notifications, internal); }
       catch (failure) { throw new HttpError(400, failure.message === 'ntfy-install-required' ? failure.message : 'notifications-invalid'); }
-      store.save({ ...store.state, notifications: settings });
+      await persist({ ...store.state, notifications: settings });
       return publicNotifications(settings, internal);
     },
     async test(data) {
@@ -877,7 +881,20 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   )) throw new Error('Une écoute réseau requiert FABCORE_ORIGIN en HTTPS et un reverse proxy.');
   const logLevel = process.env.FABCORE_LOG_LEVEL || 'debug';
   if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) throw new Error('FABCORE_LOG_LEVEL invalide (debug, info, warn, error).');
-  const { server, token } = createFabCore({ directory: resolve(process.env.FABCORE_DATA || '.fabcore'), origin, oidc: createOidc(origin), logLevel });
+  const directory = resolve(process.env.FABCORE_DATA || '.fabcore');
+  // PostgreSQL si FABCORE_DATABASE_URL est défini (MIG-04), sinon state.json comme avant. L'URL n'est jamais journalisée.
+  let store;
+  if (process.env.FABCORE_DATABASE_URL) {
+    const { openPostgresStore } = await import('../src/persistence/postgres-store.ts');
+    try { store = await openPostgresStore({ url: process.env.FABCORE_DATABASE_URL, directory }); }
+    catch (failure) {
+      const help = { 'database-import-required': 'base vide alors que state.json existe : lancer node scripts/import-state.mjs (simulation), puis --apply.', 'database-in-use': 'une autre instance FabCore utilise déjà cette base.', 'database-version': 'PostgreSQL 16 minimum requis.' };
+      console.error(`FabCore · stockage PostgreSQL indisponible : ${help[failure.message] ?? failure.message.split('\n')[0]}`);
+      process.exit(1);
+    }
+  }
+  const { server, token } = createFabCore({ directory, ...(store ? { store } : {}), origin, oidc: createOidc(origin), logLevel });
+  if (store) server.on('close', () => { void store.close(); });
   server.listen(port, host, () => {
     console.log(`FabCore · ${origin.origin}`);
     if (token) console.log(`Jeton d’activation (15 min, usage unique) : ${token}`);
