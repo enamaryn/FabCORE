@@ -36,6 +36,10 @@ jobs:
       # pg_dump/pg_restore de la version du serveur (16) pour les tests de `fabcore backup/restore`.
       - run: |
           if [ ! -x /usr/lib/postgresql/16/bin/pg_dump ]; then
+            # Dépôt officiel PostgreSQL (PGDG) : l'image du runner ne fournit pas le client 16.
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
             sudo apt-get update -q && sudo apt-get install -y -q postgresql-client-16
           fi
           /usr/lib/postgresql/16/bin/pg_dump --version
