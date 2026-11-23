@@ -264,7 +264,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
         return redirect('/', [oidc.clearCookie, newSession(account.username, account.role)]);
       }
     } catch { /* The local login page remains available when OIDC fails. */ }
-    return redirect('/?auth=oidc-failed', oidc.clearCookie);
+    return redirect('/app#oidc-failed', oidc.clearCookie);
   }
 
   async function handleCloudAction(req, res) {
