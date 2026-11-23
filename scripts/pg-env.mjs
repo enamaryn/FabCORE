@@ -12,7 +12,7 @@ const quote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
 const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 10_000 });
 try {
   await client.connect();
-  const { rows } = await client.query('select current_schema() as schema, current_database() as database');
+  const { rows } = await client.query('select current_schema() as schema, current_database() as database, current_setting(\'server_version_num\') as version');
   // Restauration : refusée tant qu'une instance FabCore tient le verrou de cette base (même clé que le magasin).
   if (process.argv.includes('--require-stopped')) {
     const lock = await client.query("select pg_try_advisory_lock(hashtext('fabcore:' || current_database() || '.' || current_schema())) as locked");
@@ -28,6 +28,7 @@ try {
     PGSSLROOTCERT: parsed.searchParams.get('sslrootcert') ?? '',
     PGOPTIONS: parsed.searchParams.get('options') ?? '',
     FABCORE_PG_SCHEMA: rows[0].schema,
+    FABCORE_PG_MAJOR: String(Math.floor(Number(rows[0].version) / 10000)),
   };
   for (const [name, value] of Object.entries(env)) if (value !== '') console.log(`export ${name}=${quote(value)}`);
 } catch (error) {

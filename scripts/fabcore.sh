@@ -70,10 +70,18 @@ with_database() {
   eval "$env"
 }
 
+# pg_dump/pg_restore de la version majeure du serveur : un client plus récent écrit des réglages (ex.
+# transaction_timeout en 17) que le serveur refuse à la restauration, et une archive qu'un outil plus ancien ne lit pas.
+# Appeler après with_database. Définit pg_dump_bin et pg_restore_bin.
 need_pg_tools() {
-  local tool
+  local tool dir="/usr/lib/postgresql/$FABCORE_PG_MAJOR/bin" path
   for tool in pg_dump pg_restore; do
-    command -v "$tool" >/dev/null || fail "$tool introuvable : installer le client PostgreSQL 16 (paquet postgresql-client)."
+    path=''
+    if [[ -x $dir/$tool ]]; then path=$dir/$tool
+    elif command -v "$tool" >/dev/null && [[ $("$tool" --version | grep -oE '[0-9]+' | head -n 1) == "$FABCORE_PG_MAJOR" ]]; then path=$(command -v "$tool")
+    fi
+    [[ -n $path ]] || fail "$tool $FABCORE_PG_MAJOR introuvable : installer postgresql-client-$FABCORE_PG_MAJOR (même version majeure que le serveur)."
+    printf -v "${tool}_bin" '%s' "$path"
   done
 }
 
@@ -103,10 +111,10 @@ cmd_backup() (
   # state.json est remplacé atomiquement : une copie à chaud reste cohérente. Un envoi de fichier en cours peut manquer.
   tar -C "$data" -cf "$work/data.tar" .
   if [[ -n $database_url ]]; then
-    need_pg_tools
     with_database
+    need_pg_tools
     storage=postgresql
-    pg_dump --format=custom --no-owner --no-privileges --schema="$FABCORE_PG_SCHEMA" --file="$work/database.dump"
+    "$pg_dump_bin" --format=custom --no-owner --no-privileges --schema="$FABCORE_PG_SCHEMA" --file="$work/database.dump"
   fi
   commit=$(git rev-parse HEAD 2>/dev/null || echo inconnu)
   printf '{\n  "format": 1,\n  "created": "%s",\n  "commit": "%s",\n  "storage": "%s",\n  "schema": "%s"\n}\n' \
@@ -159,9 +167,10 @@ cmd_restore() (
   fi
   if [[ $storage == postgresql ]]; then
     [[ -n $database_url ]] || fail 'sauvegarde PostgreSQL : configurer FABCORE_DATABASE_URL avant de restaurer.'
+    with_database
     need_pg_tools
     tar -C "$work" -xzf "$archive" database.dump || fail 'dump PostgreSQL absent de l’archive.'
-    pg_restore --list "$work/database.dump" >/dev/null || fail 'dump PostgreSQL illisible.'
+    "$pg_restore_bin" --list "$work/database.dump" >/dev/null || fail 'dump PostgreSQL illisible.'
   elif [[ -n $database_url ]]; then
     fail 'sauvegarde au format JSON alors que PostgreSQL est configuré : restaurer sans FABCORE_DATABASE_URL, puis réimporter avec fabcore import.'
   fi
@@ -199,7 +208,7 @@ cmd_restore() (
   if [[ $storage == postgresql ]]; then
     with_database
     # Une seule transaction : en cas d'échec, la base reste inchangée.
-    if ! pg_restore --clean --if-exists --no-owner --no-privileges --single-transaction --exit-on-error --dbname="$PGDATABASE" "$work/database.dump"; then
+    if ! "$pg_restore_bin" --clean --if-exists --no-owner --no-privileges --single-transaction --exit-on-error --dbname="$PGDATABASE" "$work/database.dump"; then
       rm -rf -- "$data"; [[ -e $previous ]] && mv -T -- "$previous" "$data"
       restart; fail 'restauration PostgreSQL refusée : base et données précédentes conservées.'
     fi

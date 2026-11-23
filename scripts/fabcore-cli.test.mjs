@@ -52,7 +52,8 @@ test('fabcore backup/restore (JSON) : empreinte, vérification sans effet, confi
 });
 
 const base = process.env.FABCORE_TEST_DATABASE_URL;
-const skip = base && spawnSync('pg_dump', ['--version']).status === 0 ? false : 'PostgreSQL de test ou pg_dump absent';
+// Outils de la version majeure du serveur de test (16) requis, comme en production.
+const skip = base ? false : 'FABCORE_TEST_DATABASE_URL absent : tests PostgreSQL ignorés';
 
 test('fabcore import/backup/restore (PostgreSQL) : base restaurée en une transaction, refus si FabCore tourne ou schéma différent', { skip }, async t => {
   const { run, archives, env } = sandbox(t);
