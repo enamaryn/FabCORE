@@ -480,5 +480,23 @@
       "docs/MIGRATION-MVP.md",
       "poc/README.md"
     ]
+  },
+  {
+    "id": "admin-cli",
+    "title": "Commande fabcore : mise à jour, sauvegarde, restauration",
+    "files": [
+      "scripts/fabcore.sh",
+      "scripts/update.sh",
+      "scripts/install.sh",
+      "scripts/pg-env.mjs"
+    ],
+    "symbols": [],
+    "tests": [
+      "scripts/fabcore-cli.test.mjs"
+    ],
+    "docs": [
+      "README.md",
+      "poc/README.md"
+    ]
   }
 ]
