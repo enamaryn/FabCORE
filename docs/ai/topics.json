@@ -643,5 +643,30 @@
       "docs/adr/0002-outillage.md",
       "docs/adr/0005-i18n.md"
     ]
+  },
+  {
+    "id": "viewer",
+    "title": "Visualiseur G-code React (MIG-06.2.2)",
+    "files": [
+      "web/src/components/viewer/ViewerPage.tsx",
+      "web/src/viewer/render.ts",
+      "web/src/viewer/load.ts",
+      "web/src/route.ts",
+      "poc/gcode.mjs",
+      "poc/gcode.d.mts"
+    ],
+    "symbols": [
+      "ViewerPage",
+      "loadGcode",
+      "createGcodeParser",
+      "parseRoute"
+    ],
+    "tests": [
+      "web/test/viewer.test.ts",
+      "poc/gcode.test.mjs"
+    ],
+    "docs": [
+      "docs/MIG-06-PARITY.md"
+    ]
   }
 ]

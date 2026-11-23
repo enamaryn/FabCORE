@@ -23,9 +23,10 @@ test('Fichiers : chemins sûrs, formats par machine, tailles et liens exacts apr
   assert.equal(uploadProblem({ ...machine, kind: 'longer-ray5' }, { name: 'part.nc', size: 16 * 1024 * 1024 + 1 }), 'file-too-large');
   assert.equal(uploadProblem({ ...machine, kind: 'longer-ray5' }, { name: '<part>.nc', size: 1 }), 'invalid-name');
   const path = files[23]!.path;
-  assert.equal(new URL(viewerHref('one', path), 'http://fabcore.test').searchParams.get('view'), path);
-  assert.equal(new URL(viewerHref('one', path), 'http://fabcore.test').searchParams.has('follow'), false);
-  assert.equal(new URL(viewerHref('one', path, true), 'http://fabcore.test').searchParams.get('follow'), '1');
+  // Visualiseur React : le lien du fichier exact repasse par parseRoute (chemin validé).
+  const id = '11111111-1111-4111-8111-111111111111';
+  assert.deepEqual(parseRoute(viewerHref(id, path)), { kind: 'viewer', id, source: { kind: 'machine', path, follow: false } });
+  assert.deepEqual(parseRoute(viewerHref(id, path, true)), { kind: 'viewer', id, source: { kind: 'machine', path, follow: true } });
   const download = new URL(downloadHref('one', 'usb/<part>& #.gcode'), 'http://fabcore.test'); assert.equal(download.searchParams.get('download'), '1'); assert.equal(download.searchParams.get('path'), 'usb/<part>& #.gcode');
   assert.deepEqual(parseRoute('#machine/11111111-1111-4111-8111-111111111111/files'), { kind: 'machine', id: '11111111-1111-4111-8111-111111111111', tab: 'files' });
 });

@@ -19,8 +19,9 @@ export function filePage(files: MachineFile[], query: string, sort: FileSort, pa
   return { rows: rows.slice(start, start + pageSize), count: rows.length, pages, start, page: current };
 }
 export const downloadHref = (id: string, path: string) => '/api/machines/' + encodeURIComponent(id) + '/file?download=1&path=' + encodeURIComponent(path);
-export const viewerHref = (id: string, path: string, follow = false) => '/?machine=' + encodeURIComponent(id) + '&view=' + encodeURIComponent(path) + (follow ? '&follow=1' : '');
-export const localViewerHref = (id: string) => '/?machine=' + encodeURIComponent(id) + '&tab=files';
+// Visualiseur React (MIG-06.2.2) : chemin encodé dans le fragment, validé par parseRoute.
+export const viewerHref = (id: string, path: string, follow = false) => '#machine/' + id + '/view/' + encodeURIComponent(path) + (follow ? '/follow' : '');
+export const localViewerHref = (id: string) => '#machine/' + id + '/view-local';
 export function uploadProblem(machine: MachineData, file: { name: string; size: number }): string | null {
   const name = file.name;
   if (name.length > 200 || !safeFilePath(name) || name.includes('/') || (machine.kind === 'longer-ray5' ? !/^[A-Za-z0-9 _.()-]+\.(gcode|gco|g|gc|nc)$/i.test(name) : !(machine.capabilities?.projects ? /\.(gcode|gco|g|3mf)$/i : /\.(gcode|gco|g)$/i).test(name))) return 'invalid-name';

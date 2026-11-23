@@ -1,0 +1,16 @@
+/* Visualiseur G-code : espace de travail en colonne, canvas extensible, repris du POC. */
+.react-viewer{display:flex;flex-direction:column;gap:8px;min-height:0}
+.react-viewer .viewer-head h2{margin:0;overflow-wrap:anywhere}
+.react-viewer .viewer-path{display:block;max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.react-viewer .viewer-body{display:flex;flex-direction:column;gap:8px;padding:12px;min-height:0}
+.react-viewer .viewer-tools{flex:none}
+.react-viewer button,.react-viewer select{min-height:32px;padding:5px 10px}
+.react-viewer input[type=checkbox]{min-height:0}
+.react-viewer .notice{max-height:80px;overflow:auto}
+.viewer-layer{flex:1 1 220px;min-width:0}
+.viewer-layer input{width:100%;min-height:0;padding:0}
+.viewer-canvas{position:relative;height:min(70vh,720px);min-height:260px;border:1px solid var(--line);border-radius:10px;background:var(--raised);overflow:hidden;touch-action:none;cursor:grab}
+.viewer-canvas.dragging{cursor:grabbing}
+.viewer-canvas canvas{display:block;width:100%;height:100%}
+.viewer-legend{display:inline-flex;align-items:center;gap:6px}
+.viewer-legend::before{content:"";width:16px;height:3px;border-radius:2px;background:currentColor}

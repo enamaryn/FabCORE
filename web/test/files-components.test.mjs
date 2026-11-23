@@ -27,7 +27,7 @@ function render(m = machine, role = 'admin', inventory = { files: Array.from({ l
 test('React fichiers : onglet exact sans caméra, cinq lignes, inconnus explicites et droits lecture/écriture', () => {
   const html = render(); assert.equal((html.match(/<tr>/g) ?? []).length, 6); assert.match(html, /Page 1 \/ 5/); assert.match(html, /300 fichiers chargés/); assert.match(html, /Non communiqué/);
   assert.match(html, /Envoyer un fichier/); assert.match(html, />Transférer<\/button>/); assert.match(html, />Lancer<\/button>/); assert.doesNotMatch(html, /data-machine-block|<img|<video/);
-  assert.match(html, /aria-current="page">Fichiers/); assert.match(html, /view=folder%2Fpart1.gcode/); assert.match(html, /download=1&amp;path=folder%2Fpart1.gcode/);
+  assert.match(html, /aria-current="page">Fichiers/); assert.match(html, /view\/folder%2Fpart1.gcode"/); assert.match(html, /download=1&amp;path=folder%2Fpart1.gcode/);
   const observer = render(machine, 'observer'); assert.doesNotMatch(observer, /type="file"|>Transférer<\/button>|>Lancer<\/button>/); assert.match(observer, />Télécharger<\/a>/); assert.match(observer, />Visualiser<\/a>/);
 });
 test('React fichiers : limites de stockage honnêtes et absence de fausse liste vide après erreur ou hors ligne', () => {
@@ -38,7 +38,7 @@ test('React fichiers : limites de stockage honnêtes et absence de fausse liste 
   const ray = render({ ...machine, kind: 'longer-ray5', status: 'printing' }); assert.match(ray, /uniquement à l’arrêt/); assert.doesNotMatch(ray, />Télécharger<\/a>|>Lancer<\/button>/);
 });
 test('React fichiers : chemins échappés, lancement exige confirmation, laser et externe explicites', () => {
-  const path = 'usb/<part>&.gcode', html = render(machine, 'admin', { files: [{ path, size: 12, modified: 0 }], truncated: false }); assert.match(html, /&lt;part&gt;&amp;.gcode/); assert.doesNotMatch(html, /<part>/); assert.match(html, /view=usb%2F%3Cpart%3E%26.gcode/);
+  const path = 'usb/<part>&.gcode', html = render(machine, 'admin', { files: [{ path, size: 12, modified: 0 }], truncated: false }); assert.match(html, /&lt;part&gt;&amp;.gcode/); assert.doesNotMatch(html, /<part>/); assert.match(html, /view\/usb%2F%3Cpart%3E%26.gcode"/);
   const dialog = m => renderToStaticMarkup(createElement(I18nextProvider, { i18n }, createElement(PrintFileDialog, { machine: m, path, role: 'admin', stale: false, api, close() {}, changed() {} })));
   assert.match(dialog(machine), /type="checkbox" required/); assert.match(dialog(machine), /type="submit"[^>]+disabled/);
   assert.match(dialog({ ...machine, kind: 'longer-ray5' }), /Je suis présent/);

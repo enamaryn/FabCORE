@@ -16,7 +16,7 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 | MIG-03 | Services backend et API | MIG-02 | Fusionné jusqu'à #114 ; dernière étape (routage complet, corrélation, niveaux) en revue |
 | MIG-04 | PostgreSQL et reprise des données | MIG-03 | En revue (04.1, 04.2, services, configuration et mise en place) |
 | MIG-05 | Événements et SSE | MIG-03/04 | En revue |
-| MIG-06 | Interface React par parcours | MIG-05 | Socle, parc et cockpit fusionnés (#126, #127) ; fichiers/transferts en revue |
+| MIG-06 | Interface React par parcours | MIG-05 | Socle, parc, cockpit, fichiers fusionnés (#126–#128) ; visualiseur en revue |
 | MIG-07 | Documentation et extensibilité | MIG-02 à 06 | À faire |
 | MIG-08 | Installation, recette et bascule | MIG-04 à 07 | À faire |
 
