@@ -213,8 +213,11 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       return res.end(asset.body);
     }
     const url = new URL(path, publicUrl);
-    const deepLink = url.pathname === '/' && [...url.searchParams.keys()].length === 1 &&
-      (['cloud', 'diagnostics', 'notifications', 'observer', 'add'].includes(url.searchParams.get('screen')) || /^[a-f0-9-]{36}$/.test(url.searchParams.get('machine') ?? ''));
+    const keys = [...url.searchParams.keys()];
+    const machineLink = /^[a-f0-9-]{36}$/.test(url.searchParams.get('machine') ?? '') &&
+      (keys.length === 1 || (keys.length === 2 && keys.includes('tab') && ['files', 'logs', 'console'].includes(url.searchParams.get('tab'))));
+    const deepLink = url.pathname === '/' && (machineLink || (keys.length === 1 &&
+      ['cloud', 'diagnostics', 'notifications', 'observer', 'add'].includes(url.searchParams.get('screen'))));
     const asset = path === '/?auth=oidc-failed' || deepLink ? '/' : path;
     if (req.method === 'GET' && assets.has(asset)) {
       const [type, body] = assets.get(asset);
@@ -821,6 +824,10 @@ export function createFabCore({ directory, store: storage = openStore(directory)
         model: machine.kind === 'bambu-cloud' ? machine.model : definition?.model ?? connectorCatalog.klipper.model,
         cameraOpen: [...cameraStreams.values()].some(stream => stream.machineId === machine.id && [...stream.viewers.values()].some(({ owner }) => owner === activeSession)),
         ...telemetry,
+        capabilities: machine.kind === 'longer-ray5' && machine.transport === 'esp3d'
+          ? { ...connectorCatalog[machine.kind], controls: false, commands: false, commandActions: [] }
+          : connectorCatalog[machine.kind ?? 'klipper'],
+        ...(machine.transport ? { transport: machine.transport } : {}),
         manualSpool: supportsManualSpool(machine.kind ?? 'klipper') ? manualSpool(machine.manualSpool) : null
       };
     }));

@@ -707,6 +707,56 @@
                               }
                             ]
                           },
+                          "capabilities": {
+                            "type": "object",
+                            "properties": {
+                              "camera": {
+                                "type": "boolean"
+                              },
+                              "controls": {
+                                "type": "boolean"
+                              },
+                              "commands": {
+                                "type": "boolean"
+                              },
+                              "commandActions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "files": {
+                                "type": "boolean"
+                              },
+                              "terminal": {
+                                "type": "boolean"
+                              },
+                              "filaments": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "temperatures": {
+                                "type": "boolean"
+                              },
+                              "printJob": {
+                                "type": "boolean"
+                              },
+                              "fileFamily": {
+                                "type": "string"
+                              },
+                              "externalFilament": {
+                                "type": "boolean"
+                              }
+                            },
+                            "additionalProperties": true,
+                            "description": "Capacités publiques configurées du connecteur, sans identifiants de connexion ; le serveur revalide chaque action."
+                          },
                           "cameraOpen": {
                             "type": "boolean",
                             "description": "Un flux caméra de cette session est ouvert pour la machine."

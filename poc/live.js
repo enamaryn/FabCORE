@@ -848,7 +848,11 @@ function openWorkshop(username, role) {
     const params = new URLSearchParams(location.search);
     const id = params.get('machine');
     const screen = params.get('screen');
-    if (id && state.machines.some(m => m.id === id)) { state.machine = id; live.page = 'detail'; renderLive(); }
+    if (id && state.machines.some(m => m.id === id)) {
+      const tab = params.get('tab');
+      if (['files', 'logs', 'console'].includes(tab)) machineTabs.set(id, tab);
+      state.machine = id; live.page = 'detail'; renderLive();
+    }
     else if (state.role === 'admin' && screen) {
       if (screen === 'cloud') openCloudAccounts();
       if (screen === 'diagnostics') openDiagnostics();

@@ -31,6 +31,8 @@ test('HTTP Ray5 : observateur, origine, impulsion, états, arrêt Alarm et trans
  native='Run';assert.equal((await call(path,{action:'move',axis:'X',distance:1,confirm:true},admin)).status,409);await delay(510);
  assert.equal((await call('/api/machines/'+id+'/command',{action:'stop',confirm:true},admin)).status,200);assert.equal(native,'Alarm');
  assert.equal((await call(path,{action:'unlock',confirm:true},admin)).status,200);assert.equal(sent.at(-1).action,'unlock');
+ const esp=await call('/api/machines',{kind:'longer-ray5',name:'ESP3D',host:'192.168.1.62',transport:'esp3d',port:8848,wsPort:8849},admin);assert.equal(esp.status,201);
+ const espPublic=(await call('/api/machines',undefined,viewer)).body.machines.find(m=>m.id===esp.body.id);assert.equal(espPublic.capabilities.controls,false);assert.equal(espPublic.capabilities.commands,false);assert.deepEqual(espPublic.capabilities.commandActions,[]);
  const klipper=(await call('/api/machines',{name:'FDM',origin:'http://192.168.1.61:7125'},admin)).body.id;
  assert.equal((await call('/api/machines/'+id+'/transfer',{path:'a.gc',destination:klipper,name:'a.gcode',confirm:true},admin)).status,400);
  assert.equal(sent.some(cmd=>cmd.action==='home'),false);
