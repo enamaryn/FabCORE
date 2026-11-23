@@ -1,5 +1,7 @@
 import type { SessionState } from '../../src/http/routes/session.ts';
 import type { ControlState } from '../../src/domain/control.ts';
+import { safeFilePath } from './files.ts';
+import type { FileInventory } from './files.ts';
 import type { MachineData } from './types.js';
 
 export class ApiError extends Error {
@@ -7,9 +9,9 @@ export class ApiError extends Error {
   readonly status: number;
   constructor(code: string, status: number) { super(code); this.code = code; this.status = status; }
 }
-export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void = () => {}) {
-  async function request(path: string, data?: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
-    const timeout = AbortSignal.timeout(path.endsWith('/controls') ? 30000 : path.startsWith('machines') ? 18000 : 5000);
+export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void = () => {}, makeXhr: () => XMLHttpRequest = () => new XMLHttpRequest()) {
+  async function request(path: string, data?: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number): Promise<unknown> {
+    const timeout = AbortSignal.timeout(timeoutMs ?? (path.endsWith('/controls') ? 30000 : path.startsWith('machines') ? 18000 : 5000));
     const response = await fetcher('/api/' + path, { credentials: 'same-origin', redirect: 'error',
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       ...(data ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) } : {}),
@@ -33,6 +35,51 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
       const statuses = ['connecting', 'ready', 'printing', 'paused', 'done', 'offline', 'error'];
       if (value.machines.some((m: unknown) => !m || typeof m !== 'object' || !('id' in m) || typeof m.id !== 'string' || !('name' in m) || typeof m.name !== 'string' || !('kind' in m) || typeof m.kind !== 'string' || !('status' in m) || !statuses.includes(String(m.status)))) throw new ApiError('response', 502);
       return value.machines as MachineData[];
+    },
+    async files(id: string, signal?: AbortSignal): Promise<FileInventory> {
+      const value = await request('machines/' + encodeURIComponent(id) + '/files', undefined, signal, 30000);
+      if (!value || typeof value !== 'object' || !('files' in value) || !Array.isArray(value.files) || value.files.length > 300) throw new ApiError('files-unavailable', 502);
+      const files = value.files.map((file: unknown) => {
+        if (!file || typeof file !== 'object' || !('path' in file) || !safeFilePath(file.path)) throw new ApiError('files-unavailable', 502);
+        const numeric = (key: string) => key in file && typeof file[key as keyof typeof file] === 'number' && Number.isFinite(file[key as keyof typeof file]) && Number(file[key as keyof typeof file]) >= 0 ? Number(file[key as keyof typeof file]) : null;
+        return { path: file.path, size: numeric('size'), modified: numeric('modified') };
+      });
+      return { files, truncated: 'truncated' in value && value.truncated === true };
+    },
+    async transfer(id: string, path: string, destination: string, name: string, signal?: AbortSignal): Promise<{ path: string; destination: string }> {
+      const value = await request('machines/' + encodeURIComponent(id) + '/transfer', { path, destination, name, confirm: true }, signal, 900000);
+      if (!value || typeof value !== 'object' || !('path' in value) || !safeFilePath(value.path) || !('destination' in value) || value.destination !== destination) throw new ApiError('upload-unknown', 504);
+      return { path: value.path, destination };
+    },
+    async print(id: string, path: string, options: { operatorPresent?: boolean; filamentMode?: 'external' }, signal?: AbortSignal): Promise<{ status: 'printing' }> {
+      const value = await request('machines/' + encodeURIComponent(id) + '/print', { path, confirm: true, ...options }, signal, 30000);
+      if (!value || typeof value !== 'object' || !('status' in value) || value.status !== 'printing') throw new ApiError('command-unconfirmed', 504);
+      return { status: 'printing' };
+    },
+    upload(id: string, file: Blob & { name: string }, progress: (percent: number) => void, signal?: AbortSignal): Promise<{ path: string }> {
+      return new Promise((resolve, reject) => {
+        if (signal?.aborted) { reject(new ApiError('upload-unknown', 0)); return; }
+        const xhr = makeXhr(); let finished = false;
+        const abort = () => xhr.abort();
+        const finish = (error?: ApiError, path?: string) => {
+          if (finished) return; finished = true; signal?.removeEventListener('abort', abort);
+          xhr.upload.onprogress = null; xhr.onload = null; xhr.onerror = null; xhr.onabort = null; xhr.ontimeout = null;
+          if (error) reject(error); else resolve({ path: path! });
+        };
+        xhr.open('POST', '/api/machines/' + encodeURIComponent(id) + '/files?name=' + encodeURIComponent(file.name));
+        xhr.timeout = 900000; xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+        xhr.upload.onprogress = event => { if (!finished && event.lengthComputable && event.total > 0) progress(Math.max(0, Math.min(100, Math.floor(event.loaded / event.total * 100)))); };
+        xhr.onload = () => {
+          if (xhr.status === 401) signedOut();
+          let payload: { path?: unknown; error?: unknown } = {};
+          try { payload = JSON.parse(xhr.responseText) ?? {}; } catch { /* A malformed success cannot prove that the upload failed. */ }
+          if (xhr.status === 201 && safeFilePath(payload.path)) finish(undefined, payload.path);
+          else finish(new ApiError(typeof payload.error === 'string' ? payload.error : xhr.status === 413 ? 'upload-proxy-limit' : 'upload-unknown', xhr.status));
+        };
+        xhr.onerror = xhr.onabort = xhr.ontimeout = () => finish(new ApiError('upload-unknown', xhr.status));
+        signal?.addEventListener('abort', abort, { once: true });
+        try { xhr.send(file); } catch { finish(new ApiError('upload-unknown', 0)); }
+      });
     },
     async controls(id: string, signal?: AbortSignal): Promise<ControlState> {
       const value = await request('machines/' + encodeURIComponent(id) + '/controls', undefined, signal);

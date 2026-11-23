@@ -725,6 +725,12 @@
                                   "type": "string"
                                 }
                               },
+                              "projects": {
+                                "type": "boolean"
+                              },
+                              "retainedOnly": {
+                                "type": "boolean"
+                              },
                               "files": {
                                 "type": "boolean"
                               },

@@ -851,7 +851,10 @@ function openWorkshop(username, role) {
     if (id && state.machines.some(m => m.id === id)) {
       const tab = params.get('tab');
       if (['files', 'logs', 'console'].includes(tab)) machineTabs.set(id, tab);
-      state.machine = id; live.page = 'detail'; renderLive();
+      state.machine = id; live.page = 'detail';
+      const view = params.get('view');
+      if (view) openViewer(id, view, params.get('follow') === '1' && liveFile(machine(id)) === view);
+      else renderLive();
     }
     else if (state.role === 'admin' && screen) {
       if (screen === 'cloud') openCloudAccounts();
