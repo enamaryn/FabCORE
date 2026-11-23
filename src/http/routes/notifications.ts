@@ -12,7 +12,7 @@ export interface NotificationDependencies {
   /** Réglages publics : les secrets ntfy et SMTP ne sont jamais renvoyés. */
   view(): Type.Static<typeof NotificationSettings>;
   /** Enregistre les réglages (secret conservé s'il n'est pas ressaisi) et renvoie leur forme publique. */
-  save(data: Record<string, unknown>): Type.Static<typeof NotificationSettings>;
+  save(data: Record<string, unknown>): Type.Static<typeof NotificationSettings> | Promise<Type.Static<typeof NotificationSettings>>;
   /** Envoie une notification de test ; aucune réponse du fournisseur n'est renvoyée. */
   test(data: Record<string, unknown>): Promise<{ accepted: true }>;
 }

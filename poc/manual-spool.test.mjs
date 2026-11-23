@@ -53,3 +53,32 @@ test('bobine HTTP : droits, origine, persistance, édition machine et suppressio
   assert.equal(openStore(directory).state.machines[0].manualSpool,null);
   assert.equal(commands,0);
 });
+
+test('stockage indisponible : 503 explicite, état précédent conservé, aucun faux succès', async ctx => {
+  const directory=await mkdtemp(join(tmpdir(),'fabcore-storage-'));
+  ctx.after(()=>rm(directory,{recursive:true,force:true}));
+  const json=openStore(directory);
+  let failing=false;
+  // Même contrat que le magasin PostgreSQL : écriture asynchrone, refus `storage-unavailable` et état intact.
+  const store={get state(){return json.state;},async save(next){if(failing)throw new Error('storage-unavailable');json.save(next);}};
+  const origin='http://fabcore.test';
+  const app=createFabCore({directory,store,origin,activationToken:'activation-for-test',readPrinter:async()=>({status:'ready',nozzle:21,bed:20,progress:0,file:''})});
+  ctx.after(()=>new Promise(resolve=>app.server.close(resolve)));
+  await new Promise(resolve=>app.server.listen(0,'127.0.0.1',resolve));
+  const call=(path,body,cookie)=>new Promise((resolve,reject)=>{
+    const payload=JSON.stringify(body);
+    const r=request({hostname:'127.0.0.1',port:app.server.address().port,path,method:'POST',headers:{Host:'fabcore.test',Origin:origin,...(cookie?{Cookie:cookie}:{}),'Content-Type':'application/json','Content-Length':Buffer.byteLength(payload)}},async res=>{
+      let text='';for await(const chunk of res)text+=chunk;
+      resolve({status:res.statusCode,json:JSON.parse(text),cookie:res.headers['set-cookie']?.[0].split(';')[0]});
+    });r.on('error',reject);r.end(payload);
+  });
+  const admin=(await call('/api/setup',{token:app.token,username:'atelier',password:'long-admin-password'})).cookie;
+  const id=(await call('/api/machines',{name:'Ender',origin:'http://192.168.1.176:7125'},admin)).json.id;
+  failing=true;
+  assert.deepEqual(await call('/api/machines/'+id+'/spool',{spool:{material:'PLA'}},admin),{status:503,json:{error:'storage-unavailable'},cookie:undefined});
+  assert.equal((await call('/api/observers',{username:'observateur',password:'long-viewer-password'},admin)).status,503);
+  assert.equal((await call('/api/cloud-accounts',{provider:'bambu',name:'Compte',region:'global'},admin)).status,503);
+  assert.equal(json.state.machines[0].manualSpool,undefined);
+  assert.equal(json.state.observers,undefined);
+  assert.equal(json.state.cloudAccounts,undefined);
+});

@@ -448,5 +448,37 @@
       "docs/adr/README.md",
       "docs/MIGRATION-MVP.md"
     ]
+  },
+  {
+    "id": "persistence",
+    "title": "PostgreSQL : schéma, magasin d'état et import state.json (MIG-04)",
+    "files": [
+      "src/application/state-store.ts",
+      "src/persistence/postgres-store.ts",
+      "src/persistence/mapping.ts",
+      "src/persistence/repository.ts",
+      "src/persistence/import.ts",
+      "src/persistence/migrations/0001-initial.ts",
+      "poc/store.mjs",
+      "scripts/import-state.mjs"
+    ],
+    "symbols": [
+      "openPostgresStore",
+      "stateToRows",
+      "rowsToState",
+      "writeRows",
+      "importState",
+      "inspectState",
+      "openStore"
+    ],
+    "tests": [
+      "src/persistence/mapping.test.ts",
+      "src/persistence/postgres.test.ts",
+      "poc/manual-spool.test.mjs"
+    ],
+    "docs": [
+      "docs/MIGRATION-MVP.md",
+      "poc/README.md"
+    ]
   }
 ]

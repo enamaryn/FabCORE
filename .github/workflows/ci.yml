@@ -13,6 +13,19 @@ jobs:
       fail-fast: false
       matrix:
         node: ['24', '26']
+    # PostgreSQL 16 (minimum de l'ADR 0001) pour les tests de persistance ; jetable, sans donnée réelle.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fabcore
+          POSTGRES_PASSWORD: fabcore-ci
+          POSTGRES_DB: fabcore_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U fabcore" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      FABCORE_TEST_DATABASE_URL: postgres://fabcore:fabcore-ci@localhost:5432/fabcore_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

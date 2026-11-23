@@ -14,7 +14,7 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 | MIG-01 | Architecture, contrats et outillage | MIG-00 | Fusionné : PR #100 et #101 ([ADR](adr/README.md)) |
 | MIG-02 | Domaine et connecteurs TypeScript | MIG-01 | Fusionné (#102 à #107, #109) ; recette physique à faire |
 | MIG-03 | Services backend et API | MIG-02 | Fusionné jusqu'à #114 ; dernière étape (routage complet, corrélation, niveaux) en revue |
-| MIG-04 | PostgreSQL et reprise des données | MIG-03 | À faire |
+| MIG-04 | PostgreSQL et reprise des données | MIG-03 | En cours (04.1, import 04.2.1–04.2.2) |
 | MIG-05 | Événements et SSE | MIG-03/04 | À faire |
 | MIG-06 | Interface React par parcours | MIG-05 | À faire |
 | MIG-07 | Documentation et extensibilité | MIG-02 à 06 | À faire |
@@ -134,6 +134,14 @@ Validation locale Node 24 : types, lint, **154 tests**, licences et navigation. 
 - MIG-04.2.1 Écrire un import `state.json` en simulation, puis transactionnel et idempotent, avec rapport d'anomalies sans secrets.
 - MIG-04.2.2 Préserver mots de passe hachés, références de fichiers et secrets chiffrés avec leurs clés ; tester que les accès restent utilisables.
 - MIG-04.2.3 Comparer comptes, machines et relations avant/après ; sauvegarder JSON, fichiers, clés et base ; répéter restauration sur copie.
+
+**MIG-04.1 et import en revue** :
+- **04.1.1** : schéma versionné (`src/persistence/migrations/0001-initial.ts`, migrateur Kysely appliqué au démarrage) : `installation`, `organizations` → `sites` → `farms` (un ensemble par défaut), `users` (admin unique, observateurs), `machines` et `machine_connections`, `cloud_accounts`, `settings` (notifications et clés d'état inconnues). Bobine manuelle en colonne JSONB de la machine.
+- **04.1.2** : UUID des machines et comptes cloud conservés ; unicité adresse LAN (hors broker cloud partagé) et série par type (`bambu`/`bambu-cloud` communs) ; compte cloud utilisé non supprimable (clé étrangère) ; un seul processus par base et schéma (verrou consultatif).
+- **04.1.3** : seul l'état d'installation passe en base ; télémétrie courante en mémoire, journaux en fichiers bornés, fichiers et `cloud-secret.key` dans `FABCORE_DATA`. Aucun historique ni gros fichier en SQL à ce stade.
+- **Magasin** (`openPostgresStore`) : même contrat que `state.json`, choisi par `FABCORE_DATABASE_URL` (JSON par défaut, inchangé). Lecture synchrone en mémoire ; chaque écriture est attendue avant la réponse, par différence dans une transaction ; échec : 503 `storage-unavailable`, état mémoire ramené au dernier état durable, lot entier refusé.
+- **04.2.1–04.2.2** : `scripts/import-state.mjs` : simulation par défaut (écriture, contraintes et relecture puis annulation), `--apply` transactionnel, idempotent (`already-imported`), refus d'une base différente ; rapport de codes et chemins sans valeur ; sels/hachages et jetons chiffrés repris tels quels, lisibilité des jetons vérifiée avec la clé. Comparaison complète avant/après dans la transaction.
+- **Reste** : 04.2.3 sauvegarde/restauration (base, JSON, fichiers, clés) et répétition sur copie ; extraction des services de `poc/server.mjs` en TypeScript ; parcours d'installation avec PostgreSQL local ou externe (ADR 0007). Codes d'accès machine encore en clair dans la colonne JSONB, comme dans `state.json`.
 
 **Sortie :** import reproductible sans perte et restauration prouvée ; même chemin PostgreSQL auto-hébergement/cloud. **Retour arrière :** arrêter les écritures, sauvegarder les changements intervenus, restaurer version et sauvegarde pré-migration. Aucun retour aveugle au JSON qui perdrait des changements.
 

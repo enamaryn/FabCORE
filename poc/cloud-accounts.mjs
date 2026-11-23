@@ -67,9 +67,14 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       return Buffer.concat([cipher.update(data.subarray(12, -16)), cipher.final()]).toString();
     } catch { fail('cloud-storage'); }
   }
-  function update(account, changes) {
+  // Écriture attendue avant toute réponse ; base indisponible : refus explicite, état précédent conservé.
+  async function save(next) {
+    try { await store.save(next); }
+    catch (error) { if (error.message === 'storage-unavailable') fail('storage-unavailable', 503); throw error; }
+  }
+  async function update(account, changes) {
     const next = { ...account, ...changes };
-    store.save({ ...store.state, cloudAccounts: entries().map(item => item.id === account.id ? next : item) });
+    await save({ ...store.state, cloudAccounts: entries().map(item => item.id === account.id ? next : item) });
     return next;
   }
   function clearPending(id) { clearTimeout(timers.get(id)); timers.delete(id); pending.delete(id); }
@@ -100,7 +105,7 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
     catch (error) {
       const code = error instanceof CloudError ? error.message : 'cloud-unavailable';
       log(id, 'operation-failed', { code });
-      if (['cloud-auth', 'cloud-access'].includes(code)) update(find(id), { status: 'reauth', issue: code });
+      if (['cloud-auth', 'cloud-access'].includes(code)) await update(find(id), { status: 'reauth', issue: code });
       throw new CloudError(code, error.status ?? 502);
     } finally { busy.delete(id); authRequests.delete(id); }
   }
@@ -108,15 +113,15 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
   async function complete(account, token, signal) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9._~-]{1,16384}$/.test(token)) fail('cloud-response');
     clearPending(account.id);
-    const next = update(account, { secret: encrypt(account.id, token), status: 'connected', issue: null, devices: [],
+    const next = await update(account, { secret: encrypt(account.id, token), status: 'connected', issue: null, devices: [],
       connectedAt: new Date(now()).toISOString(), checkedAt: null });
     log(account.id, 'authenticated');
     // A successful login remains visible even if the following device-list call fails.
-    try { return publicAccount(update(next, await devices(next, token, signal))); }
+    try { return publicAccount(await update(next, await devices(next, token, signal))); }
     catch (error) {
       const code = error instanceof CloudError ? error.message : 'cloud-unavailable';
       log(account.id, 'devices-failed', { code });
-      return publicAccount(update(next, { issue: code, status: ['cloud-auth', 'cloud-access'].includes(code) ? 'reauth' : 'connected' }));
+      return publicAccount(await update(next, { issue: code, status: ['cloud-auth', 'cloud-access'].includes(code) ? 'reauth' : 'connected' }));
     }
   }
   function stopMonitor(id) { monitors.get(id)?.close(); monitors.delete(id); }
@@ -141,13 +146,13 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
   } });
   return {
     list() { return { providers: cloudProviders, accounts: entries().map(publicAccount) }; },
-    add(data) {
+    async add(data) {
       if (entries().length >= 24) fail('cloud-limit', 409);
       const provider = cloudProviders.find(item => item.id === data.provider);
       const name = text(data.name, 80); const email = text(data.email, 254);
       if (!provider || !name || !['global', 'china'].includes(data.region) || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) fail('cloud-invalid', 400);
       const account = { id: randomUUID(), provider: provider.id, name, email, region: data.region, status: 'disconnected', devices: [] };
-      store.save({ ...store.state, cloudAccounts: [...entries(), account] });
+      await save({ ...store.state, cloudAccounts: [...entries(), account] });
       log(account.id, 'account-created', { provider: provider.id, region: account.region });
       return publicAccount(account);
     },
@@ -160,7 +165,7 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       stopMonitor(id);
       clearPending(id);
       // A new authentication attempt explicitly disconnects the previous credential.
-      update(account, { secret: undefined, status: 'disconnected', telemetryEnabled: false, devices: [], issue: null });
+      await update(account, { secret: undefined, status: 'disconnected', telemetryEnabled: false, devices: [], issue: null });
       const result = await cloudLogin(account, data.password, signal);
       if (result.accessToken) return complete(find(id), result.accessToken, signal);
       if (result.loginType === 'verifyCode') {
@@ -183,19 +188,19 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
     refresh(id, signal) { return locked(id, async () => {
       const account = find(id); bases(account);
       if (!account.secret) fail('cloud-auth', 401);
-      return publicAccount(update(account, await devices(account, decrypt(account), signal)));
+      return publicAccount(await update(account, await devices(account, decrypt(account), signal)));
     }); },
     importDevice(id, serial) { return locked(id, async () => {
       const account = find(id); bases(account);
       const device = account.devices?.find(item => item.serial === serial);
       if (!device || !account.secret || account.status !== 'connected') fail('cloud-auth', 401);
       if (store.state.machines.some(item => ['bambu', 'bambu-cloud'].includes(item.kind) && item.serial === serial)) fail('cloud-machine-exists', 409);
-      update(account, { telemetryEnabled: true }); await startMonitor(id);
+      await update(account, { telemetryEnabled: true }); await startMonitor(id);
       // Recheck after the asynchronous identity request, across all accounts and LAN.
       if (store.state.machines.some(item => ['bambu', 'bambu-cloud'].includes(item.kind) && item.serial === serial)) fail('cloud-machine-exists', 409);
       const machine = { id: randomUUID(), kind: 'bambu-cloud', name: device.name, model: 'Bambu Lab · ' + device.model,
         serial, cloudAccountId: id, mode: 'cloud', origin: 'mqtts://' + (account.region === 'china' ? 'cn' : 'us') + '.mqtt.bambulab.com:8883' };
-      store.save({ ...store.state, machines: [...store.state.machines, machine] });
+      await save({ ...store.state, machines: [...store.state.machines, machine] });
       log(id, 'machine-imported', { serial, machineId: machine.id });
       return { id: machine.id };
     }); },
@@ -213,22 +218,22 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
     telemetry(id, enabled) { return locked(id, async () => {
       const account = find(id); bases(account);
       if (enabled && (!account.secret || account.status !== 'connected')) fail('cloud-auth', 401);
-      update(account, { telemetryEnabled: enabled });
+      await update(account, { telemetryEnabled: enabled });
       if (enabled) await startMonitor(id); else stopMonitor(id);
       return publicAccount(find(id));
     }); },
-    disconnect(id, remove = false) {
+    async disconnect(id, remove = false) {
       const account = find(id); if (busy.has(id)) fail('cloud-busy', 409);
       if (remove && store.state.machines.some(machine => machine.cloudAccountId === id)) fail('cloud-in-use', 409);
       stopMonitor(id);
       clearPending(id);
       if (remove) {
-        store.save({ ...store.state, cloudAccounts: entries().filter(item => item.id !== id) });
+        await save({ ...store.state, cloudAccounts: entries().filter(item => item.id !== id) });
         for (const suffix of ['', '.1']) { try { unlinkSync(logPath(id) + suffix); } catch (error) { if (error.code !== 'ENOENT') throw error; } }
         limits.delete(id); loginAttempts.delete(id); return { deleted: true };
       }
       log(id, 'disconnected');
-      return publicAccount(update(account, { secret: undefined, status: 'disconnected', telemetryEnabled: false, devices: [], issue: null }));
+      return publicAccount(await update(account, { secret: undefined, status: 'disconnected', telemetryEnabled: false, devices: [], issue: null }));
     },
     logs(id) {
       if (!uuid.test(id)) fail('missing', 404); find(id);

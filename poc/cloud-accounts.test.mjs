@@ -33,9 +33,9 @@ test('cloud : plusieurs fabricants et comptes, secrets chiffrés et inventaires 
     return Response.json(responseDevices);
   };
   const { directory, store, manager } = await setup(ctx, fetcher);
-  const first = manager.add(metadata);
-  const second = manager.add({ ...metadata, name: 'Second compte', region: 'china' });
-  const planned = manager.add({ ...metadata, provider: 'creality' });
+  const first = await manager.add(metadata);
+  const second = await manager.add({ ...metadata, name: 'Second compte', region: 'china' });
+  const planned = await manager.add({ ...metadata, provider: 'creality' });
   await assert.rejects(manager.login(planned.id, { password: 'SYNTHETIC_PASSWORD' }, 'owner'), /cloud-unsupported/);
   const one = await manager.login(first.id, { password: 'SYNTHETIC_PASSWORD' }, 'owner');
   assert.equal(one.status, 'connected'); assert.equal(one.devices[0].serial, 'P2STEST123');
@@ -50,9 +50,9 @@ test('cloud : plusieurs fabricants et comptes, secrets chiffrés et inventaires 
   assert.equal((await restarted.refresh(first.id)).devices.length, 1);
   await restarted.login(second.id, { password: 'OTHER_PASSWORD' }, 'other');
   assert.ok(calls.some(([url]) => url.startsWith('https://api.bambulab.cn/')));
-  restarted.disconnect(first.id);
+  await restarted.disconnect(first.id);
   assert.equal(restarted.list().accounts[1].status, 'connected');
-  restarted.disconnect(second.id, true);
+  await restarted.disconnect(second.id, true);
   assert.equal(restarted.list().accounts.length, 2);
   assert.equal((await readdir(join(directory, 'cloud-logs'))).some(name => name.startsWith(second.id)), false);
   assert.equal(store.state.machines.length, 0);
@@ -67,7 +67,7 @@ test('cloud : challenge email lié à la session, aucun mot de passe conservé, 
     if (body?.code) return Response.json({ accessToken: token });
     return Response.json(responseDevices);
   });
-  const account = manager.add(metadata);
+  const account = await manager.add(metadata);
   assert.equal((await manager.login(account.id, { password: 'SECRET-PASS' }, 'owner')).challenge, 'email');
   assert.equal(calls.length, 1);
   await assert.rejects(manager.verify(account.id, { code: '123456' }, 'different-owner'), /forbidden/);
@@ -81,7 +81,7 @@ test('cloud : challenge email lié à la session, aucun mot de passe conservé, 
   const expiring = createCloudAccounts({ directory, store: openStore(directory), now: () => clock,
     fetcher: async () => Response.json({ loginType: 'tfa', tfaKey: 'SYNTHETIC_MFA_KEY' }) });
   ctx.after(() => expiring.close());
-  const fresh = expiring.add({ ...metadata, name: 'Expiry' });
+  const fresh = await expiring.add({ ...metadata, name: 'Expiry' });
   await expiring.login(fresh.id, { password: 'secret' }, 'owner'); clock += 600001;
   await assert.rejects(expiring.verify(fresh.id, { code: '123456' }, 'owner'), /cloud-code-expired/);
   assert.equal(expiring.list().accounts.find(a => a.id === fresh.id).challenge, null);
@@ -100,7 +100,7 @@ test('cloud : TOTP utilise le CSRF du portail et efface les cookies des réponse
     }
     return Response.json(responseDevices);
   });
-  const account = manager.add(metadata);
+  const account = await manager.add(metadata);
   await manager.login(account.id, { password: 'secret' }, 'owner');
   assert.equal((await manager.verify(account.id, { code: '123456' }, 'owner')).status, 'connected');
   assert.equal(calls[1][0], 'https://bambulab.com/api/csrf');
@@ -116,33 +116,33 @@ test('cloud : refus, HTML de challenge, corps trop gros et réponses étrangère
     ['cloud-response', () => new Response('SECRET_HTML', { status: 200 })],
     ['cloud-response', () => new Response('X'.repeat(1024 * 1024 + 1))]
   ]) {
-    response = make; const account = manager.add(metadata);
+    response = make; const account = await manager.add(metadata);
     await assert.rejects(manager.login(account.id, { password: 'SECRET_PASSWORD' }, 'owner'), new RegExp(expected));
     assert.doesNotMatch(manager.logs(account.id), /SECRET_/);
   }
-  const account = manager.add(metadata);
+  const account = await manager.add(metadata);
   await assert.rejects(manager.login(account.id, { password: 'x' }, 'owner'), /cloud-response/);
   // The manager has no generic URL input or command endpoint.
   assert.equal(manager.command, undefined);
-  assert.throws(() => manager.add({ ...metadata, provider: 'https://example.com' }), /cloud-invalid/);
+  await assert.rejects(manager.add({ ...metadata, provider: 'https://example.com' }), /cloud-invalid/);
 });
 
 test('cloud : absence de rejeu, verrou par compte, révocation et fichiers log bornés', async ctx => {
   let finish; let calls = 0;
   const { manager, directory } = await setup(ctx, async () => { calls++; return new Promise(resolve => { finish = resolve; }); });
-  const account = manager.add(metadata);
+  const account = await manager.add(metadata);
   const attempt = manager.login(account.id, { password: 'secret' }, 'owner');
   await assert.rejects(manager.login(account.id, { password: 'secret' }, 'owner'), /cloud-busy/);
-  assert.throws(() => manager.disconnect(account.id), /cloud-busy/);
+  await assert.rejects(manager.disconnect(account.id), /cloud-busy/);
   finish(Response.json({ loginType: 'tfa', tfaKey: 'secret' })); await attempt;
   assert.equal(calls, 1);
   manager.forgetOwner('owner');
   await assert.rejects(manager.verify(account.id, { code: '123456' }, 'owner'), /cloud-code-expired/);
   await writeFile(join(directory, 'cloud-logs', account.id + '.log'), 'X'.repeat(256 * 1024));
-  manager.disconnect(account.id);
+  await manager.disconnect(account.id);
   assert.equal((await stat(join(directory, 'cloud-logs', account.id + '.log.1'))).size, 256 * 1024);
   assert.ok((await stat(join(directory, 'cloud-logs', account.id + '.log'))).size < 1000);
-  manager.disconnect(account.id, true);
+  await manager.disconnect(account.id, true);
   assert.throws(() => manager.logs(account.id), /missing/);
 });
 
@@ -213,8 +213,9 @@ test('cloud UI : inventaire réel échappé, plusieurs comptes, marques planifi�
 test('cloud : déconnexion FabCore pendant le login empêche la conservation tardive du jeton', async ctx => {
   let finish;
   const { manager, store } = await setup(ctx, async () => new Promise(resolve => { finish = resolve; }));
-  const account = manager.add(metadata);
+  const account = await manager.add(metadata);
   const attempt = manager.login(account.id, { password: 'SYNTHETIC_PASSWORD' }, 'revoked-owner');
+  while (!finish) await new Promise(resolve => setImmediate(resolve)); // requête de connexion en cours
   manager.forgetOwner('revoked-owner');
   finish(Response.json({ accessToken: token }));
   await assert.rejects(attempt, /cloud-unavailable/);
@@ -231,7 +232,7 @@ test('cloud : login unique déclenche directement le champ code, nouvel essai te
     if (url.endsWith('/login')) return Response.json(JSON.parse(options.body).code ? { accessToken: token } : { loginType: 'verifyCode' });
     return Response.json(responseDevices);
   });
-  const account = manager.add(metadata);
+  const account = await manager.add(metadata);
   assert.equal((await manager.login(account.id, { password: 'SECRET_PASSWORD' }, 'owner')).challenge, 'email');
   assert.equal(calls, 1);
   await assert.rejects(manager.login(account.id, { password: 'SECRET_PASSWORD' }, 'owner'), /cloud-login-wait/);
@@ -253,7 +254,7 @@ test('cloud : suivi explicite multicomptes, jeton opaque, session partagée et f
     const client = new EventEmitter(); client.options = options; client.ends = 0;
     client.end = () => { client.ends++; }; clients.push(client); return client;
   } }); ctx.after(() => manager.close());
-  const a = manager.add(metadata); const b = manager.add({ ...metadata, name: 'Other' });
+  const a = await manager.add(metadata); const b = await manager.add({ ...metadata, name: 'Other' });
   await manager.login(a.id, { password: 'PRIVATE_PASSWORD' }, 'owner');
   await manager.login(b.id, { password: 'PRIVATE_PASSWORD' }, 'owner');
   assert.equal(clients.length, 0, 'aucune connexion MQTT implicite après login');
@@ -264,7 +265,7 @@ test('cloud : suivi explicite multicomptes, jeton opaque, session partagée et f
   assert.doesNotMatch(JSON.stringify(manager.list()), /SYNTHETIC|PRIVATE/);
   assert.doesNotMatch(manager.logs(a.id), /SYNTHETIC|PRIVATE/);
   await manager.telemetry(a.id, false); assert.equal(clients[0].ends, 1);
-  manager.disconnect(b.id); assert.equal(store.state.cloudAccounts[1].telemetryEnabled, false);
+  await manager.disconnect(b.id); assert.equal(store.state.cloudAccounts[1].telemetryEnabled, false);
 });
 
 test('cloud HTTP : ajout au parc, refus de doublon et suppression sans dissocier le compte', async ctx => {
@@ -288,7 +289,7 @@ test('cloud HTTP : ajout au parc, refus de doublon et suppression sans dissocier
 
 test('cloud : une série déjà en LAN ne devient pas une seconde machine cloud', async ctx => {
   const { manager, store } = await setup(ctx, async url => Response.json(url.endsWith('/login') ? { accessToken: token } : responseDevices));
-  const account = manager.add(metadata); await manager.login(account.id, { password: 'SECRET_PASSWORD' }, 'owner');
+  const account = await manager.add(metadata); await manager.login(account.id, { password: 'SECRET_PASSWORD' }, 'owner');
   store.save({ ...store.state, machines: [{ id: 'existing-lan', kind: 'bambu', serial: 'P2STEST123', name: 'LAN' }] });
   await assert.rejects(manager.importDevice(account.id, 'P2STEST123'), /cloud-machine-exists/);
   assert.equal(store.state.machines.length, 1); assert.equal(store.state.machines[0].kind, 'bambu');
