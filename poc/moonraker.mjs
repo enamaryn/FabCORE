@@ -3,5 +3,5 @@ import { createMoonrakerServices } from '../connectors/moonraker/src/index.ts';
 import { encodePath, filePath, moonrakerOrigin, multipart, readResponse } from './connector-http.mjs';
 export { privateIPv4, moonrakerOrigin, readResponse } from './connector-http.mjs';
 
-export const { readMoonraker, commandMoonraker, createMoonrakerFiles, sendMoonrakerGcode } =
+export const { readMoonraker, commandMoonraker, createMoonrakerFiles, sendMoonrakerGcode, moonrakerWebcam } =
   createMoonrakerServices({ encodePath, filePath, validOrigin: moonrakerOrigin, multipart, readResponse });

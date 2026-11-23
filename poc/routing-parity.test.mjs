@@ -95,7 +95,7 @@ test('routage : commandes, contrôles, terminal et caméras', async ctx => {
   assert.deepEqual(result(await send(gcode, { method: 'POST', body: { command: 'M105' } })), [401, { error: 'sign-in' }]);
   assert.deepEqual(result(await send(gcode, { method: 'POST', body: { command: '' }, cookie: admin })), [400, { error: 'invalid' }]);
   assert.deepEqual(result(await send(`/api/machines/${machine}/camera`)), [401, { error: 'sign-in' }]);
-  assert.deepEqual(result(await send(`/api/machines/${machine}/camera`, { cookie: observer })), [404, { error: 'camera-unsupported' }]);
+  assert.deepEqual(result(await send(`/api/machines/${machine}/camera`, { cookie: observer })), [502, { error: 'camera-unavailable' }], 'Klipper sans caméra déclarée (comportement voulu depuis l’audit LAN)');
   assert.deepEqual(result(await send(`/api/machines/${unknownId}/camera/preview/side`, { cookie: observer })), [404, { error: 'camera-unsupported' }]);
 });
 

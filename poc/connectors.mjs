@@ -33,6 +33,14 @@ const probeStatus = (read, allowed = [], keepIssue = false) => async (machine, {
   const ok = !result.issue || allowed.includes(result.issue);
   return { ok, issue: ok && !keepIssue ? null : result.issue };
 };
+// Caméra déclarée par la machine (Moonraker, OctoPrint) : aucune caméra configurée → 'no-stream' ; flux non MJPEG → 'invalid-stream'.
+async function declaredCamera(found, output, signal, onFrame) {
+  let url;
+  try { url = await found; } catch { return 'no-stream'; }
+  if (!url || signal.aborted) return url ? undefined : 'no-stream';
+  const { streamCamera } = await import('./camera.mjs');
+  if (!(await streamCamera(url, output, signal, undefined, onFrame))) return 'invalid-stream';
+}
 async function elegooCamera(machine, output, signal, onFrame, openCamera, identify) {
   const { cameraURL, streamCamera } = await import('./camera.mjs');
   const url = cameraURL(machine);
@@ -65,14 +73,16 @@ const definitions = {
     const mod = await import('./moonraker.mjs');
     const read = readPrinter ?? mod.readMoonraker;
     return { read: machine => read(machine), probe: probeStatus(machine => read(machine), ['print']), command: sendCommand ?? mod.commandMoonraker,
-      files: mod.createMoonrakerFiles(fetchFiles), gcode: sendGcode ?? mod.sendMoonrakerGcode };
-  }, { commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true, controls: true }),
+      files: mod.createMoonrakerFiles(fetchFiles), gcode: sendGcode ?? mod.sendMoonrakerGcode,
+      camera: (machine, output, signal, frame) => declaredCamera(mod.moonrakerWebcam(machine, fetchFiles), output, signal, frame) };
+  }, { camera: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true, controls: true }),
   octoprint: httpConnector('OctoPrint', 5000, true, async ({ readOcto, sendGcode, fetchFiles, sendCommand }) => {
     const mod = await import('./octoprint.mjs');
     const read = readOcto ?? mod.readOctoPrint;
     return { read, probe: probeStatus(read, ['octoprint-disconnected', 'octoprint-printer-error'], true), files: mod.createOctoPrintFiles(fetchFiles),
-      gcode: sendGcode ?? mod.sendOctoPrintGcode, command: sendCommand ?? ((machine, action) => mod.commandOctoPrint(machine, action, fetchFiles)) };
-  }, { interval: 5000, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true, controls: true }),
+      gcode: sendGcode ?? mod.sendOctoPrintGcode, command: sendCommand ?? ((machine, action) => mod.commandOctoPrint(machine, action, fetchFiles)),
+      camera: (machine, output, signal, frame) => declaredCamera(mod.octoPrintWebcam(machine, fetchFiles), output, signal, frame) };
+  }, { interval: 5000, camera: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true, controls: true }),
   prusalink: httpConnector('PrusaLink', 80, true, async ({ readPrusa, fetchFiles }) => {
     const mod = await import('./prusalink.mjs');
     const read = readPrusa ?? mod.readPrusaLink;

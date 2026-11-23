@@ -1,4 +1,4 @@
-import type { HttpFilePorts, MachineFile } from '../../../packages/connector-sdk/src/index.ts';
+import { sameHostStream, type HttpFilePorts, type MachineFile } from '../../../packages/connector-sdk/src/index.ts';
 import type { MoonrakerConnection, MoonrakerStatus, MoonrakerSnapshot, MoonrakerFetch, MoonrakerRequest, MoonrakerObjects, MoonrakerReply, MoonrakerFile, MoonrakerGcodeResult, GcodeEntry } from './types.ts';
 
 /** Protocole Moonraker unique, sans import du cœur ou du POC. Helpers partagés injectés. */
@@ -163,5 +163,27 @@ export function createMoonrakerServices({ encodePath, filePath, validOrigin: moo
     return { outcome: 'executed', responses };
   }
 
-  return { readMoonraker, commandMoonraker, createMoonrakerFiles, sendMoonrakerGcode };
+  /**
+   * Flux caméra déclaré par Moonraker (`/server/webcams/list`) : première caméra active, services MJPEG d'abord.
+   * Une URL relative est servie par l'interface web (port 80) du même hôte.
+   */
+  async function moonrakerWebcam(machine: MoonrakerConnection, fetcher: MoonrakerFetch = fetch): Promise<URL | null> {
+    if (moonrakerOrigin(machine.origin) !== machine.origin) return null;
+    const response = await fetcher(machine.origin + '/server/webcams/list', {
+      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(3000), headers: machine.apiKey ? { 'X-Api-Key': machine.apiKey } : {},
+    });
+    if (!response.ok) { await response.body?.cancel(); return null; }
+    const webcams = (await decode<{ webcams?: unknown }>(response))?.result?.webcams;
+    if (!Array.isArray(webcams)) return null;
+    const active = (webcams as { enabled?: unknown; service?: unknown; stream_url?: unknown }[]).filter(cam => cam && cam.enabled !== false).slice(0, 16);
+    const ordered = [...active.filter(cam => typeof cam.service === 'string' && /mjpeg/i.test(cam.service)), ...active.filter(cam => !(typeof cam.service === 'string' && /mjpeg/i.test(cam.service)))];
+    const base = `http://${new URL(machine.origin).hostname}/`;
+    for (const cam of ordered) {
+      const url = sameHostStream(cam.stream_url, base, machine.origin, moonrakerOrigin);
+      if (url) return url;
+    }
+    return null;
+  }
+
+  return { readMoonraker, commandMoonraker, createMoonrakerFiles, sendMoonrakerGcode, moonrakerWebcam };
 }

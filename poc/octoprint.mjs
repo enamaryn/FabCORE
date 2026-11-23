@@ -2,5 +2,5 @@
 import { createOctoPrintServices } from '../connectors/octoprint/src/index.ts';
 import { encodePath, filePath, moonrakerOrigin, multipart, readResponse } from './connector-http.mjs';
 
-export const { readOctoPrint, createOctoPrintFiles, commandOctoPrint, sendOctoPrintGcode } =
+export const { readOctoPrint, createOctoPrintFiles, commandOctoPrint, sendOctoPrintGcode, octoPrintWebcam } =
   createOctoPrintServices({ encodePath, filePath, validOrigin: moonrakerOrigin, multipart, readResponse });

@@ -273,7 +273,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   const secondCC2Id = (await secondCC2.json()).id;
   const cameraPath = (id) => '/api/machines/' + id + '/camera';
   assert.equal((await call(cameraPath(firstCC2Id))).status, 401);
-  assert.equal((await call(cameraPath(id), { cookie })).status, 404);
+  assert.equal((await call(cameraPath(id), { cookie })).status, 502, 'Klipper : caméra prise en charge, aucune caméra déclarée');
   assert.equal(cameraInputs.size, 0);
   cameraContentType = 'text/html';
   assert.equal((await call(cameraPath(firstCC2Id), { cookie })).status, 502);

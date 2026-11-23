@@ -29,3 +29,17 @@ export interface HttpFilePorts {
     headers: Record<string, string>;
   };
 }
+
+/**
+ * Adresse d'un flux caméra déclaré par la machine (Moonraker, OctoPrint) : acceptée seulement en HTTP,
+ * sur le même hôte que la machine, sans identifiants ; l'origine doit rester une adresse privée valide.
+ * Le contenu MJPEG est ensuite vérifié par le relais caméra.
+ */
+export function sameHostStream(candidate: unknown, base: string, machineOrigin: string, validOrigin: (origin: string) => string | null): URL | null {
+  if (typeof candidate !== 'string' || !candidate.trim() || candidate.length > 512) return null;
+  let url: URL;
+  try { url = new URL(candidate.trim(), base); } catch { return null; }
+  const host = new URL(machineOrigin).hostname;
+  if (url.protocol !== 'http:' || url.hostname !== host || url.username || url.password || validOrigin(url.origin) !== url.origin) return null;
+  return url;
+}
