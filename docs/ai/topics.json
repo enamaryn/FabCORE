@@ -20,7 +20,8 @@
     "tests": [
       "connectors/elegoo/test/monitor.test.ts",
       "poc/cc2-native-files.test.mjs",
-      "poc/elegoo.test.mjs"
+      "poc/elegoo.test.mjs",
+      "poc/cc2-light-fan.test.mjs"
     ],
     "docs": [
       "docs/protocols/ELEGOO-LAN.md"
@@ -295,7 +296,8 @@
     ],
     "tests": [
       "poc/manual-controls.test.mjs",
-      "poc/manual-controls-http.test.mjs"
+      "poc/manual-controls-http.test.mjs",
+      "poc/cc2-light-fan.test.mjs"
     ],
     "docs": [
       "poc/CONNECTORS.md"

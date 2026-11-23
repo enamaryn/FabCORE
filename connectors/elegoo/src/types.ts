@@ -24,6 +24,10 @@ export interface CC2Report {
   extruder?: { temperature?: unknown };
   heater_bed?: { temperature?: unknown };
   print_status?: { filename?: unknown };
+  /** État de l'éclairage du caisson : `status` 1 allumé, 0 éteint (méthode 1029 pour le modifier). */
+  led?: { status?: unknown };
+  /** Ventilateurs : `speed` en PWM 0–255, `rpm` éventuel (méthode 1030 pour `fan`, `aux_fan`, `box_fan`). */
+  fans?: Record<string, { speed?: unknown; rpm?: unknown }>;
   [key: string]: unknown;
 }
 export interface CC2Result extends CC2Report { error_code?: number; file_list?: unknown }

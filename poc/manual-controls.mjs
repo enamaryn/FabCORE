@@ -30,12 +30,15 @@ export function reportedControls(kind, report) {
       }
     }
   } else if (kind === 'elegoo') {
-    const canHeat = [1, 2].includes(report.machine_status?.status);
-    if (report.extruder) out.heaters.push(heater('nozzle', report.extruder.temperature, report.extruder.target, 260, canHeat));
-    if (report.heater_bed) out.heaters.push(heater('bed', report.heater_bed.temperature, report.heater_bed.target, 100, canHeat));
-    if ([0, 1].includes(report.led?.status)) out.lights.push({ id: 'main', value: report.led.status === 1, writable: false });
+    // Commandes acceptées seulement au repos (1) ou en fabrication (2, pause comprise), comme la chauffe.
+    const canControl = [1, 2].includes(report.machine_status?.status);
+    if (report.extruder) out.heaters.push(heater('nozzle', report.extruder.temperature, report.extruder.target, 260, canControl));
+    if (report.heater_bed) out.heaters.push(heater('bed', report.heater_bed.temperature, report.heater_bed.target, 100, canControl));
+    if ([0, 1].includes(report.led?.status)) out.lights.push({ id: 'main', value: report.led.status === 1, writable: canControl });
+    // CC2 : vitesse PWM 0–255 ; seuls pièce, auxiliaire et caisson sont pilotables (méthode 1030).
     for (const [id, fan] of Object.entries(report.fans ?? {})) if (['fan', 'aux_fan', 'box_fan', 'heater_fan', 'controller_fan'].includes(id)) {
-      out.fans.push({ id, percent: percent(fan.speed), rpm: numeric(fan.rpm), writable: false });
+      const pwm = Number.isFinite(fan?.speed) && fan.speed >= 0 && fan.speed <= 255 ? fan.speed : null;
+      out.fans.push({ id, percent: pwm === null ? null : Math.round(pwm / 255 * 100), rpm: numeric(fan?.rpm), writable: canControl && ['fan', 'aux_fan', 'box_fan'].includes(id) });
     }
   }
   return out;
@@ -81,6 +84,15 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
     }
     throw new Error('heater-unconfirmed');
   }
+  async function confirmReported(machine, control, id, value, matches) {
+    for (let attempt = 0; attempt < confirmationAttempts; attempt++) {
+      await wait(200);
+      const confirmed = matches(await snapshot(machine));
+      if (attempt === 0 || attempt === confirmationAttempts - 1 || confirmed) trace?.(machine.id, 'control-confirmation', { control, id, expected: value, attempt, confirmed });
+      if (confirmed) return { outcome: 'confirmed' };
+    }
+    throw new Error('command-unconfirmed');
+  }
   async function call(machine, path, body) {
     if (moonrakerOrigin(machine.origin) !== machine.origin) throw new Error('invalid-machine');
     const response = await fetcher(machine.origin + path, { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(10000),
@@ -125,9 +137,23 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
       return { outcome: ok ? 'accepted' : 'rejected' };
     }
     if (kind === 'elegoo') {
-      if (action !== 'heat' || !validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
-      const ok = await request(machine, 1028, { [id === 'nozzle' ? 'extruder' : 'heater_bed']: value });
-      return ok ? confirmHeat(machine, id, value) : { outcome: 'rejected' };
+      if (!['heat', 'light', 'fan'].includes(action) || !validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
+      if (action === 'heat') {
+        const ok = await request(machine, 1028, { [id === 'nozzle' ? 'extruder' : 'heater_bed']: value });
+        return ok ? confirmHeat(machine, id, value) : { outcome: 'rejected' };
+      }
+      // Un seul champ par commande ; l'accusé (`error_code: 0`) ne suffit pas, l'état relu doit correspondre.
+      if (action === 'light') {
+        const ok = await request(machine, 1029, { power: value ? 1 : 0 });
+        return ok ? confirmReported(machine, 'light', id, value, reported => reported.lights.find(item => item.id === id)?.value === value) : { outcome: 'rejected' };
+      }
+      const pwm = Math.round(value / 100 * 255);
+      const ok = await request(machine, 1030, { [id]: pwm });
+      // Tolérance d'un point : la conversion 0–100 ↔ 0–255 arrondit.
+      return ok ? confirmReported(machine, 'fan', id, value, reported => {
+        const actual = reported.fans.find(item => item.id === id)?.percent;
+        return Number.isFinite(actual) && Math.abs(actual - value) <= 1;
+      }) : { outcome: 'rejected' };
     }
     if (kind === 'octoprint') {
       if (action === 'heat') await call(machine, id === 'nozzle' ? '/api/printer/tool' : '/api/printer/bed', id === 'nozzle' ? { command: 'target', targets: { tool0: value } } : { command: 'target', target: value });

@@ -8,6 +8,8 @@ Relevé : 19 novembre 2026, base FabCore `7d1e6a4`. CC1 et CC2 utilisent des pro
 | Identification | Série/MainboardID SDCP ; réponses étrangères ignorées | Identité réelle puis enregistrement du client MQTT |
 | Commandes | Cmd 129 pause, 130 annulation, 131 reprise | Méthode 1021 pause, 1022 annulation, paramètres `{}` |
 | Chauffe | Non exposée dans FabCore | 1028, un champ par action : `extruder` OU `heater_bed`, zéro pour couper |
+| Éclairage | Non exposé | 1029 `{power: 0|1}`, état relu dans `led.status` ; recette à faire |
+| Ventilateurs | Non exposés | 1030, un seul champ `fan` (pièce), `aux_fan` ou `box_fan` (caisson), PWM 0–255 ; `heater_fan` et `controller_fan` en lecture seule ; recette à faire |
 | Caméra | MJPEG 3031 | MJPEG 8080 |
 | Fichiers | Copies des transferts FabCore réussis | Inventaire interne natif 1044 proposé, téléchargement HTTP et lancement 1020 ; recette à faire |
 | Filaments | Pas de CANVAS validé ici | CANVAS par lecture 2005 ; aucun % d’humidité inventé |
@@ -22,7 +24,7 @@ Commandes CC2 : messages JSON `{ "id": <transaction>, "method": 1021|1022, "para
 
 ## Validation et incident Pause/Stop
 
-Valentin confirme ajout/suppression/redécouverte CC2, hors ligne après extinction, chauffe buse et plateau puis coupure des deux. Firmware exact non relevé. Chauffe : plafonds logiciels 260/100 °C ; cible relue après ACK, sans commande répétée. Déplacements, éclairage et ventilateurs CC2 restent non activés en écriture.
+Valentin confirme ajout/suppression/redécouverte CC2, hors ligne après extinction, chauffe buse et plateau puis coupure des deux. Firmware exact non relevé. Chauffe : plafonds logiciels 260/100 °C ; cible relue après ACK, sans commande répétée. Déplacements CC2 non exposés. Éclairage et ventilateurs : pilotables depuis le 23 novembre 2026 (voir plus bas), recette matérielle à faire.
 
 Incident réel : pendant préparation/nivellement (status 2, sub_status 2901), le Stop normal n’a pas été confirmé. Lors de l’intervention, 1022 n’a pas eu de réponse corrélée ; cela ne prouve pas un refus constructeur. Les tentatives avec un identifiant MQTT concurrent ont perturbé la session et limitent l’interprétation. Avec une nouvelle session enregistrée, méthode 1007 : réponse `error_code=0`, exception 803 et état 14 reçus. Les cibles de chauffe après urgence n’ont pas été relues avec succès : ne pas affirmer leur valeur.
 
@@ -44,6 +46,8 @@ Le premier pilote utilisait `retainedOnly` : uniquement les copies transférées
 | Lancer un fichier existant | MQTT `1020`, `storage_media="local"`, `filename=<nom natif>`, `config={delay_video:false,printer_check:true,print_layout:"A",bedlevel_force:false,slot_map:[]}` | Nom vérifié dans l’inventaire ; confirmation et bobine externe obligatoires dans ce jalon, pas de choix CANVAS implicite ; attente d’un état printing côté serveur |
 | Pause / Stop | MQTT `1021` / `1022`, `params={}` | Résultats matériels positifs confirmés le 22 novembre ; session enregistrée conservée, pas de renvoi automatique |
 | Chauffe / coupure | MQTT `1028`, un seul champ `extruder` OU `heater_bed` | Zéro pour couper ; validation de consigne par la télémétrie, déjà confirmée par Valentin |
+| Éclairage | MQTT `1029`, `params={"power":0|1}` | Accusé `error_code: 0` insuffisant : `led.status` relu dans le rapport (jusqu’à 5 s), sinon résultat inconnu sans renvoi. **Recette matérielle à faire** |
+| Ventilateurs | MQTT `1030`, un seul champ `fan`, `aux_fan` ou `box_fan`, valeur PWM 0–255 (pourcentage × 255 / 100) | Vitesse relue dans `fans.<canal>.speed` (0–255, tolérance d’un point de pourcentage), sinon inconnu sans renvoi ; confirmation requise pendant une fabrication. **Recette matérielle à faire** |
 
 Le listing réutilise la session MQTT et les transactions corrélées du moniteur ; pas de second identifiant concurrent. Taille maximale des enveloppes bornée à 512 Kio ; affichage limité aux 300 premières entrées de la réponse. Aucun balayage spéculatif de numéros de méthodes. `1044` sans pagination est rapporté comme renvoyant tous les fichiers sur un firmware testé par la source ; cette implémentation n’invente pas de pagination distante non vérifiée.
 
@@ -89,3 +93,11 @@ Proposée en revue le 22 novembre 2026, sans déploiement : `connectors/elegoo/s
 | Lancement séparé | Cmd 128, `Filename`, `StartLayer=0`, `Calibration_switch=1`, `PrintPlatformType=0`, `Tlp_Switch=0`, `slot_map=[]` | Aucun démarrage lors de l’upload ; inventaire natif CC1 non ajouté |
 
 Le staging commun reste borné à 512 Mio, vérifie taille et MD5 et supprime le temporaire même après erreur réseau ; CC2 garde son PUT avec jeton et Content-Range. Tests : `connectors/elegoo/test/cc1.test.ts`, tests POC SDCP/fichiers et inventaire CC2 inchangés. Recette CC1 après déploiement demandé : connexion/lecture, envoi sans démarrage puis lancement/pause/reprise/annulation sur essai supervisé ; aucune nouvelle validation physique revendiquée ici.
+
+## Éclairage et ventilateurs CC2 · ajout du 23 novembre 2026
+
+Jusqu’ici la session ne conservait que `machine_status`, `extruder`, `heater_bed` et `print_status` : `led` et `fans` du rapport 1002/6000 étaient ignorés, d’où « Équipement absent ou non communiqué ». La vitesse des ventilateurs est en **PWM 0–255** (et non en pourcentage), avec `rpm` éventuel ; cinq canaux : `fan` (pièce), `aux_fan`, `box_fan` (caisson), `heater_fan` (tête) et `controller_fan` (électronique). Les mises à jour partielles par canal sont fusionnées.
+
+Commandes ajoutées, au repos (status 1) ou en fabrication (status 2) uniquement, comme la chauffe : `1029 {"power": 0|1}` et `1030 {"<canal>": 0-255}` pour `fan`, `aux_fan`, `box_fan`. Un seul champ par commande, QoS 0 sans rétention, aucun renvoi ; succès seulement quand l’état relu correspond. **Deux secondes minimum** entre deux contrôles d’une CC2 : au-delà de trois requêtes rapprochées, le broker cesse de répondre pendant environ cinq secondes.
+
+Sources : notes de protocole [pycentauri](https://github.com/bjan/pycentauri) (méthodes vérifiées sur matériel et captures OrcaSlicer, limite de débit), [elegoo-web](https://github.com/runnane/elegoo-web) (`1029 {power}`, `1030` en 0–255) et adaptateur CC2 du SDK officiel [elegoo-link](https://github.com/ELEGOO-3D/elegoo-link) (correspondance `model→fan`, `aux→aux_fan`, `chamber→box_fan`, lecture `led.status`, `fans.*.speed/rpm`). Dans ce SDK, 1029 et 1030 sont commentées dans la table active, comme 1028 avant sa validation : **à confirmer sur les deux CC2 et à noter avec la version exacte du firmware** (pycentauri signale des méthodes muettes sur 01.03.02.51).
