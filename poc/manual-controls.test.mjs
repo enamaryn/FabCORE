@@ -63,11 +63,43 @@ test('OctoPrint : consignes et jog natifs sans inventer éclairage ou retour ven
   assert.deepEqual(sent.at(-1)[1], { command: 'jog', z: -0.1, absolute: false, speed: 120 });
 });
 
-test('CC2 : chauffe uniquement à l’arrêt ou en impression, autres contrôles en lecture seule', () => {
-  const state = reportedControls('elegoo', { machine_status: { status: 1 }, led: { status: 1 }, extruder: { temperature: 25, target: 200 }, fans: { fan: { speed: 40, rpm: 1234 } } });
-  assert.equal(state.lights[0].value, true); assert.equal(state.heaters[0].target, 200); assert.equal(state.fans[0].rpm, 1234);
+test('CC2 : chauffe, éclairage et ventilateurs pilotables au repos ou en impression, PWM 0–255 converti', () => {
+  const state = reportedControls('elegoo', { machine_status: { status: 1 }, led: { status: 1 }, extruder: { temperature: 25, target: 200 },
+    fans: { fan: { speed: 102, rpm: 1234 }, aux_fan: { speed: 0 }, box_fan: { speed: 255 }, heater_fan: { speed: 255, rpm: 9000 }, controller_fan: { speed: 300 } } });
+  assert.equal(state.lights[0].value, true); assert.equal(state.lights[0].writable, true);
+  assert.equal(state.heaters[0].target, 200);
+  assert.deepEqual(state.fans.map(({ id, percent, writable }) => [id, percent, writable]), [
+    ['fan', 40, true], ['aux_fan', 0, true], ['box_fan', 100, true], ['heater_fan', 100, false], ['controller_fan', null, false],
+  ], 'tête et électronique en lecture seule ; vitesse hors plage inconnue');
+  assert.equal(state.fans[0].rpm, 1234);
   assert.equal(validateControl({ action: 'heat', id: 'nozzle', value: 200, confirm: true }, state).value, 200);
-  assert.equal(validateControl({ action: 'light', id: 'main', value: false, confirm: true }, state), null);
+  assert.deepEqual(validateControl({ action: 'light', id: 'main', value: false, confirm: true }, state), { action: 'light', id: 'main', value: false });
+  assert.deepEqual(validateControl({ action: 'fan', id: 'box_fan', value: 50, confirm: true }, state), { action: 'fan', id: 'box_fan', value: 50 });
+  assert.equal(validateControl({ action: 'fan', id: 'heater_fan', value: 50, confirm: true }, state), null);
+  const busy = reportedControls('elegoo', { machine_status: { status: 4 }, led: { status: 0 }, fans: { fan: { speed: 0 } } });
+  assert.equal(busy.lights[0].writable, false); assert.equal(busy.fans[0].writable, false, 'autre état machine : lecture seule');
+});
+
+test('CC2 : éclairage 1029 et ventilateur 1030 confirmés par l’état relu, sinon inconnus sans renvoi', async () => {
+  const machine = { id: 'cc2' };
+  let led = 1, box = 0;
+  const sent = [];
+  const read = () => reportedControls('elegoo', { machine_status: { status: 1 }, led: { status: led }, fans: { box_fan: { speed: box }, heater_fan: { speed: 255 } } });
+  const control = createManualControls('elegoo', { read, request: async (_machine, method, params) => { sent.push([method, params]); return true; },
+    wait: async () => {}, confirmationAttempts: 3 });
+  const state = read();
+  await assert.rejects(control.execute(machine, { action: 'light', id: 'main', value: false }, state), /command-unconfirmed/, 'accusé sans état relu : inconnu');
+  assert.deepEqual(sent, [[1029, { power: 0 }]], 'une seule émission');
+  led = 0;
+  assert.deepEqual(await control.execute(machine, { action: 'light', id: 'main', value: false }, state), { outcome: 'confirmed' });
+  box = 128;
+  assert.deepEqual(await control.execute(machine, { action: 'fan', id: 'box_fan', value: 50 }, state), { outcome: 'confirmed' }, '128/255 ≈ 50 %');
+  assert.deepEqual(sent.at(-1), [1030, { box_fan: 128 }], 'un seul canal, valeur PWM');
+  const before = sent.length;
+  assert.deepEqual(await control.execute(machine, { action: 'fan', id: 'heater_fan', value: 50 }, state), { outcome: 'rejected' });
+  assert.equal(sent.length, before, 'ventilateur en lecture seule : rien n’est envoyé');
+  const refused = createManualControls('elegoo', { read, request: async () => false, wait: async () => {}, confirmationAttempts: 3 });
+  assert.deepEqual(await refused.execute(machine, { action: 'light', id: 'main', value: true }, state), { outcome: 'rejected' });
 });
 
 test('Bambu : un accusé sans consigne confirmée échoue, sans renvoi de commande', async () => {

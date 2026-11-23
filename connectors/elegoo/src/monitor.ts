@@ -282,6 +282,17 @@ export function createCC2Services({ reportedControls, canvasFilaments, readRespo
             latest[field] = { ...latest[field], ...message.result[field] };
           }
         }
+        if (message.result.led && typeof message.result.led === 'object') latest.led = { ...latest.led, ...message.result.led };
+        // Ventilateurs : mises à jour partielles par canal (`fans.box_fan.speed` seul, par exemple).
+        const fans = message.result.fans;
+        if (fans && typeof fans === 'object' && !Array.isArray(fans)) {
+          const merged: Record<string, { speed?: unknown; rpm?: unknown }> = { ...latest.fans };
+          for (const [name, value] of Object.entries(fans)) {
+            if (['__proto__', 'constructor', 'prototype'].includes(name) || !value || typeof value !== 'object') continue;
+            merged[name] = { ...merged[name], ...value };
+          }
+          latest.fans = merged;
+        }
         const report = normalize(latest);
         entry.controls = reportedControls('elegoo', latest);
         if (report.issue === 'elegoo-report') return;
