@@ -4,7 +4,7 @@ import test from 'node:test';
 import { createAccountService, digest } from './accounts.ts';
 import { ServiceError } from './errors.ts';
 import { createMachineMetadata } from './machines.ts';
-import { createNotificationService } from './notifications.ts';
+import { createNotificationService, NotificationInputError, ntfySettings, smtpSettings } from './notifications.ts';
 import { createPersist, type FabCoreState, type StateStore } from './state-store.ts';
 
 function memory(initial: Partial<FabCoreState> = {}) {
@@ -69,4 +69,28 @@ test('bobine manuelle : machine inconnue, type non pris en charge, saisie invali
   assert.deepEqual(await service.setManualSpool(id, { spool: { material: ' PETG ', color: '#abcdef' } }), { manualSpool: { material: 'PETG', name: '', color: '#ABCDEF' } });
   assert.deepEqual(await service.setManualSpool(id, { spool: null }), { manualSpool: null });
   assert.equal(store.state.machines[0]?.manualSpool, null);
+});
+
+test('#121 : canaux enregistrés séparément, ntfy incomplet sans effet sur SMTP, champ en cause signalé', async () => {
+  const { store, persist } = memory();
+  const service = createNotificationService({ store, persist, internal: () => null, send: async () => true, withinLimit: () => true });
+  const smtp = { enabled: true, host: 'mail.example.test', port: 465, tls: 'tls', from: 'fabcore@example.test', to: 'moi@example.test', auth: true, username: 'fabcore@example.test', secret: 'mot-de-passe' };
+  // L'interface conservée envoie les deux canaux : ntfy interne non installé bloque tout, comme avant.
+  await assert.rejects(service.save({ ntfy: { mode: 'internal' }, smtp }), code(400, 'ntfy-install-required'));
+  // Un seul canal : SMTP enregistré, ntfy laissé tel quel.
+  assert.deepEqual((await service.save({ smtp })).ntfy, { mode: 'off' });
+  assert.equal(store.state.notifications?.smtp && (store.state.notifications.smtp as { secret?: string }).secret, 'mot-de-passe');
+  await service.save({ ntfy: { mode: 'external', url: 'https://ntfy.example.test', topic: 'atelier', auth: 'none' } });
+  assert.equal((store.state.notifications?.smtp as { host?: string }).host, 'mail.example.test', 'SMTP conservé');
+  // Mot de passe conservé si la connexion ne change pas.
+  await service.save({ smtp: { ...smtp, to: 'autre@example.test', secret: '' } });
+  assert.equal((store.state.notifications?.smtp as { secret?: string }).secret, 'mot-de-passe');
+  const field = (input: Record<string, unknown>) => { try { smtpSettings(input, undefined); return null; } catch (error) { return error instanceof NotificationInputError ? error.field : String(error); } };
+  assert.equal(field({ ...smtp, from: 'mail.example.test' }), 'smtp.from', 'nom de serveur au lieu d’une adresse');
+  assert.equal(field({ ...smtp, to: 'mail.example.test' }), 'smtp.to');
+  assert.equal(field({ ...smtp, port: 'abc' }), 'smtp.port');
+  assert.equal(field({ ...smtp, secret: '' }), 'smtp.secret');
+  assert.equal(smtpSettings({ ...smtp, secret: '' }, { enabled: true, host: 'mail.example.test', port: 465, tls: 'tls', from: 'x@y.z', to: 'x@y.z', auth: true, username: 'fabcore@example.test' }, { assumeStoredSecret: true }).enabled, true, 'interface : secret conservé supposé');
+  assert.throws(() => ntfySettings({ mode: 'external', url: 'http://ntfy.example.test', topic: 'a', auth: 'none' }, undefined), (error: unknown) => error instanceof NotificationInputError && error.field === 'ntfy.url');
+  await assert.rejects(service.save({}), code(400, 'notifications-invalid'));
 });

@@ -541,7 +541,8 @@
       "src/application/state-store.ts",
       "src/domain/spool.ts",
       "poc/notifications.mjs",
-      "poc/manual-spool.mjs"
+      "poc/manual-spool.mjs",
+      "web/src/components/admin/NotificationsPage.tsx"
     ],
     "symbols": [
       "createAccountService",
@@ -549,7 +550,10 @@
       "notificationSettings",
       "createMachineMetadata",
       "createPersist",
-      "manualSpool"
+      "manualSpool",
+      "smtpSettings",
+      "ntfySettings",
+      "NotificationsPage"
     ],
     "tests": [
       "src/application/services.test.ts",
