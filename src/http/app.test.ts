@@ -20,6 +20,8 @@ function build(view: () => Record<string, unknown> = () => ({ events: [] })) {
     fleet: { list: async () => [] },
     machines: { write: async () => null, spool: () => ({ manualSpool: null }), networks: () => ({ networks: [] }), discover: async () => null },
     notifications: { view: () => ({ ntfy: { mode: 'off' }, smtp: { enabled: false }, internal: null }), save: () => { throw new Error('unused'); }, test: async () => ({ accepted: true as const }) },
+    operations: { cloudAction: () => undefined, camera: () => undefined, command: () => undefined, controls: () => undefined, terminal: () => undefined, files: () => undefined },
+    pages: { asset: () => undefined, oidc: () => undefined },
     logs: { machine: () => null, machineLog: () => '', cloudAccounts: () => ({ providers: [], accounts: [] }), cloudLog: () => '', cloudFailure: () => { throw new Error('unused'); } },
   }));
 }
@@ -69,28 +71,35 @@ test('socle HTTP : le diagnostic conserve tout le contenu produit et la liste du
   await http.close();
 });
 
-test('socle HTTP : seules les routes migrées sont déléguées, identifiants contraints comme le POC', async () => {
-  const http = build();
+test('socle HTTP : chaîne de requête refusée hors routes prévues, repli et mode brut', async () => {
+  const fallbacks: string[] = [];
+  let failures = 0;
+  const http = createHttpApp({ allowedHost: host, origin: 'http://fabcore.test', limit: () => true, viewer, onFailure: () => { failures += 1; },
+    fallback: (request, response) => { fallbacks.push(`${request.method} ${request.url}`); response.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' }); response.end('{"error":"missing"}'); } }, [
+    (app, guards) => {
+      app.route({ method: 'POST', url: '/flux', config: { query: true }, onRequest: guards.raw(async (request, response) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(chunk as Buffer);
+        response.writeHead(201, { 'Content-Type': 'text/plain' });
+        response.end(`${Buffer.concat(chunks).length} ${request.url}`);
+      }, request => guards.admin(request)), handler: async () => undefined });
+      app.get('/casse', { onRequest: guards.raw(() => { throw new Error('/var/lib/secret'); }) }, async () => undefined);
+    },
+  ]);
   await http.ready;
-  const request = (method: string, url: string) => ({ method, url }) as IncomingMessage;
-  assert.equal(http.handles(request('GET', '/api/session')), true);
-  assert.equal(http.handles(request('GET', '/api/diagnostics')), true);
-  assert.equal(http.handles(request('GET', '/api/openapi.json')), true);
-  assert.equal(http.handles(request('POST', '/api/session')), false, 'autre méthode : routeur POC');
-  assert.equal(http.handles(request('HEAD', '/api/session')), false);
-  assert.equal(http.handles(request('GET', '/api/session?x=1')), false, 'chemin exact uniquement, comme le POC');
-  const id = '3f1c2b9e-4d5a-4b6c-8d7e-9f0a1b2c3d4e';
-  assert.equal(http.handles(request('GET', '/api/machines')), true);
-  assert.equal(http.handles(request('GET', `/api/machines/${id}/logs`)), true);
-  assert.equal(http.handles(request('GET', `/api/machines/${id}/logs-download`)), true);
-  assert.equal(http.handles(request('GET', `/api/cloud-accounts/${id}/logs`)), true);
-  assert.equal(http.handles(request('GET', '/api/machines/not-a-uuid/logs')), false, 'identifiant invalide : réponse POC inchangée');
-  assert.equal(http.handles(request('GET', `/api/machines/${id}/camera`)), false);
-  assert.equal(http.handles(request('POST', '/api/machines')), true);
-  assert.equal(http.handles(request('POST', `/api/machines/${id}/spool`)), true);
-  assert.equal(http.handles(request('POST', `/api/machines/${id}/command`)), false, 'commandes encore servies par le POC');
-  assert.equal(http.handles(request('POST', `/api/cloud-accounts/${id}/login`)), false);
-  assert.equal(http.handles(request('GET', `/api/cloud-accounts/${id}/login`)), false);
+  assert.deepEqual([(await get(http, '/casse?x=1')).statusCode, (await get(http, '/casse?x=1')).json()], [404, { error: 'missing' }], 'requête non prévue : 404 comme le POC');
+  const unknown = await http.app.inject({ method: 'POST', url: '/inconnue', headers: { host, 'content-type': 'application/json' }, payload: '{' });
+  assert.equal(unknown.statusCode, 405, 'repli avant lecture du corps invalide');
+  assert.equal(unknown.headers['cache-control'], 'no-store', 'en-têtes posés sur le repli');
+  assert.deepEqual(fallbacks, ['POST /inconnue']);
+  const denied = await http.app.inject({ method: 'POST', url: '/flux?name=a', headers: { host, cookie: 'observer', 'content-type': 'application/octet-stream' }, payload: 'G28' });
+  assert.deepEqual([denied.statusCode, denied.json()], [403, { error: 'forbidden' }], 'garde appliquée avant le gestionnaire brut');
+  const streamed = await http.app.inject({ method: 'POST', url: '/flux?name=a', headers: { host, cookie: 'admin', 'content-type': 'application/octet-stream' }, payload: Buffer.alloc(70_000) });
+  assert.deepEqual([streamed.statusCode, streamed.body], [201, '70000 /flux?name=a'], 'corps brut intact, au-delà de la limite JSON');
+  assert.equal(streamed.headers['x-content-type-options'], 'nosniff');
+  const broken = await get(http, '/casse');
+  assert.deepEqual([broken.statusCode, broken.json()], [500, { error: 'internal' }], 'erreur interne sans détail');
+  assert.equal(failures, 1);
   await http.close();
 });
 

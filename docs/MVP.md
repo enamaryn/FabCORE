@@ -1,6 +1,6 @@
 # Phase 2 · MVP — produit utilisable au quotidien
 
-**État : cadrage actif après clôture du POC le 22 novembre 2026.** Migration technique engagée : MIG-01 et MIG-02 (connecteurs typés et cycle de vie) fusionnés ; socle HTTP, OpenAPI, lectures et écritures comptes/notifications (MIG-03) fusionnés, administration du parc en revue. Voir le [bilan technique](POC-BILAN.md) et le [plan détaillé MIG-00 à MIG-08](MIGRATION-MVP.md).
+**État : cadrage actif après clôture du POC le 22 novembre 2026.** Migration technique engagée : MIG-01 et MIG-02 (connecteurs typés et cycle de vie) fusionnés ; MIG-03 (API Fastify, OpenAPI) fusionné jusqu'à l'administration du parc ; routage complet, corrélation et niveaux de journal en revue. Voir le [bilan technique](POC-BILAN.md) et le [plan détaillé MIG-00 à MIG-08](MIGRATION-MVP.md).
 Objectif ([prompt d’origine](../MASTER_PROMPT_ORIGIN.md#phase-mvp--produit-utilisable)) : un produit assez fiable pour un usage réel, sans repousser la sécurité ni les autorisations.
 
 Le découpage suit la même convention que le [POC](POC.md#lire-ce-plan) : étapes `MVP-xx`, sous-étapes `MVP-xx.y`, états `À faire` · `En cours` · `Ouvert` · `Fusionné` · `Déployé` · `Testé matériel` · `Reporté`. L’ordre des étapes est l’ordre de travail recommandé. MVP-00 est un préalable bloquant.

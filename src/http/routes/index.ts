@@ -5,6 +5,8 @@ import { fleetRoutes, type FleetDependencies } from './fleet.ts';
 import { logRoutes, type LogDependencies } from './logs.ts';
 import { machineRoutes, type MachineDependencies } from './machines.ts';
 import { notificationRoutes, type NotificationDependencies } from './notifications.ts';
+import { operationRoutes, type OperationHandlers } from './operations.ts';
+import { pageRoutes, type PageHandlers } from './pages.ts';
 import { sessionRoutes, type SessionDependencies } from './session.ts';
 
 export interface RouteDependencies {
@@ -15,9 +17,11 @@ export interface RouteDependencies {
   machines: MachineDependencies;
   notifications: NotificationDependencies;
   logs: LogDependencies;
+  operations: OperationHandlers;
+  pages: PageHandlers;
 }
 
-/** Liste unique des routes migrées : utilisée par le serveur et par la génération OpenAPI. */
+/** Liste unique des routes du serveur : utilisée par le serveur et par la génération OpenAPI. */
 export const migratedRoutes = (dependencies: RouteDependencies): RouteModule[] => [
   sessionRoutes(dependencies.session),
   accountRoutes(dependencies.accounts),
@@ -26,4 +30,6 @@ export const migratedRoutes = (dependencies: RouteDependencies): RouteModule[] =
   machineRoutes(dependencies.machines),
   notificationRoutes(dependencies.notifications),
   logRoutes(dependencies.logs),
+  operationRoutes(dependencies.operations),
+  pageRoutes(dependencies.pages),
 ];

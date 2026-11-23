@@ -1,6 +1,7 @@
 import { manualSpool, supportsManualSpool } from './manual-spool.mjs';
 import { createServer } from 'node:http';
 import { createHttpApp } from '../src/http/app.ts';
+import { currentRequestId } from '../src/http/correlation.ts';
 import { HttpError } from '../src/http/errors.ts';
 import { migratedRoutes } from '../src/http/routes/index.ts';
 import { once } from 'node:events';
@@ -107,7 +108,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification, logLevel = 'debug' } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -115,13 +116,13 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const secure = publicUrl.protocol === 'https:';
   const allowedHost = publicUrl.host;
   const store = openStore(directory);
-  const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt });
+  const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt, context: currentRequestId });
   const token = store.state.admin ? null : (activationToken ?? randomBytes(24).toString('base64url'));
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
   const sessions = new Map();
   const attempts = new Map();
-  const machineLogs = createMachineLogs({ directory, machines: () => store.state.machines });
-  const diagnostics = createDiagnostics({ journal: machineLogs });
+  const machineLogs = createMachineLogs({ directory, machines: () => store.state.machines, context: currentRequestId, minLevel: logLevel });
+  const diagnostics = createDiagnostics({ journal: machineLogs, context: currentRequestId });
   diagnostics.record('server', 'started');
   const connectors = createConnectorRegistry({ isCurrent: machine => store.state.machines.includes(machine), directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, diagnostics, openCamera, cloud });
   const snapshot = monitor(async (machine) => {
@@ -187,12 +188,9 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     }
     return true;
   }
-  async function route(req, res) {
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Referrer-Policy', 'no-referrer');
-    res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
-    if (req.headers.host !== allowedHost) return error(res, 421, 'host');
+  // Gestionnaires HTTP bruts, branchés par src/http/routes/operations.ts et pages.ts derrière les gardes du socle.
+  // Pages et scripts de l'interface : chemin exact, seule la page d'accueil accepte `?auth=oidc-failed`.
+  function handleAsset(req, res) {
     const path = req.url;
     const asset = path === '/?auth=oidc-failed' ? '/' : path;
     if (req.method === 'GET' && assets.has(asset)) {
@@ -200,172 +198,391 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       res.writeHead(200, { 'Content-Type': type });
       return res.end(body);
     }
+    return error(res, 404, 'missing');
+  }
+
+  async function handleOidc(req, res) {
+    const path = req.url;
     const activeSession = session(req);
     const viewer = sessions.get(activeSession);
-    if (req.method === 'GET' && (path === '/api/oidc/start' || path.split('?')[0] === '/api/oidc/callback')) {
-      if (!secure || !oidc || !store.state.admin) return error(res, 404, 'missing');
-      const redirect = (destination, cookies) => {
-        res.writeHead(303, { Location: destination, 'Set-Cookie': cookies });
-        res.end();
-      };
-      try {
-        if (path === '/api/oidc/start') {
-          if (!withinLimit(path)) return error(res, 429, 'rate');
-          const flow = await oidc.begin();
-          return redirect(flow.url, flow.cookie);
-        }
-        const query = new URLSearchParams(path.split('?').slice(1).join('?'));
-        const account = await oidc.complete(query, req.headers.cookie);
-        if (account) {
-          if (activeSession) {
-            sessions.delete(activeSession);
-            stopCameraStreams(activeSession);
-            cloud.forgetOwner(activeSession);
-          }
-          return redirect('/', [oidc.clearCookie, newSession(account.username, account.role)]);
-        }
-      } catch { /* The local login page remains available when OIDC fails. */ }
-      return redirect('/?auth=oidc-failed', oidc.clearCookie);
-    }
-    const cloudRoute = path.match(/^\/api\/cloud-accounts(?:\/([a-f0-9-]{36})\/(login|verify|devices|disconnect|delete|logs|logs-download|telemetry-start|telemetry-stop|import))?$/);
-    if (cloudRoute) {
-      if (!viewer) return error(res, 401, 'sign-in');
-      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
-      const [, id, action] = cloudRoute;
-      try {
-        // Lectures (liste et journaux) servies par src/http/routes/logs.ts.
-        if (req.method !== 'POST') return error(res, 405, 'missing');
-        if (!requireJson(req, res)) return;
-        if (!withinLimit('/cloud/' + (id ?? 'new'))) return error(res, 429, 'rate');
-        let data;
-        try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
-        const abort = new AbortController();
-        res.once('close', () => { if (!res.writableEnded) abort.abort(); });
-        let result;
-        if (!id) result = cloud.add(data);
-        else if (action === 'login') result = await cloud.login(id, data, activeSession, abort.signal);
-        else if (action === 'verify') result = await cloud.verify(id, data, activeSession, abort.signal);
-        else if (action === 'telemetry-start' || action === 'telemetry-stop') result = await cloud.telemetry(id, action === 'telemetry-start');
-        else if (action === 'import') result = await cloud.importDevice(id, data.serial);
-        else if (action === 'devices') result = await cloud.refresh(id, abort.signal);
-        else if (action === 'disconnect' || action === 'delete') result = cloud.disconnect(id, action === 'delete');
-        else return error(res, 405, 'missing');
-        return answer(res, 200, result);
-      } catch (failure) {
-        return error(res, failure instanceof CloudError ? failure.status : 500, failure instanceof CloudError ? failure.message : 'cloud-storage');
+    if (!secure || !oidc || !store.state.admin) return error(res, 404, 'missing');
+    const redirect = (destination, cookies) => {
+      res.writeHead(303, { Location: destination, 'Set-Cookie': cookies });
+      res.end();
+    };
+    try {
+      if (path === '/api/oidc/start') {
+        if (!withinLimit(path)) return error(res, 429, 'rate');
+        const flow = await oidc.begin();
+        return redirect(flow.url, flow.cookie);
       }
+      const query = new URLSearchParams(path.split('?').slice(1).join('?'));
+      const account = await oidc.complete(query, req.headers.cookie);
+      if (account) {
+        if (activeSession) {
+          sessions.delete(activeSession);
+          stopCameraStreams(activeSession);
+          cloud.forgetOwner(activeSession);
+        }
+        return redirect('/', [oidc.clearCookie, newSession(account.username, account.role)]);
+      }
+    } catch { /* The local login page remains available when OIDC fails. */ }
+    return redirect('/?auth=oidc-failed', oidc.clearCookie);
+  }
+
+  async function handleCloudAction(req, res) {
+    const path = req.url;
+    const activeSession = session(req);
+    const viewer = sessions.get(activeSession);
+    const cloudRoute = path.match(/^\/api\/cloud-accounts(?:\/([a-f0-9-]{36})\/(login|verify|devices|disconnect|delete|logs|logs-download|telemetry-start|telemetry-stop|import))?$/);
+    const [, id, action] = cloudRoute;
+    try {
+      // Lectures (liste et journaux) servies par src/http/routes/logs.ts.
+      if (req.method !== 'POST') return error(res, 405, 'missing');
+      if (!requireJson(req, res)) return;
+      if (!withinLimit('/cloud/' + (id ?? 'new'))) return error(res, 429, 'rate');
+      let data;
+      try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+      const abort = new AbortController();
+      res.once('close', () => { if (!res.writableEnded) abort.abort(); });
+      let result;
+      if (!id) result = cloud.add(data);
+      else if (action === 'login') result = await cloud.login(id, data, activeSession, abort.signal);
+      else if (action === 'verify') result = await cloud.verify(id, data, activeSession, abort.signal);
+      else if (action === 'telemetry-start' || action === 'telemetry-stop') result = await cloud.telemetry(id, action === 'telemetry-start');
+      else if (action === 'import') result = await cloud.importDevice(id, data.serial);
+      else if (action === 'devices') result = await cloud.refresh(id, abort.signal);
+      else if (action === 'disconnect' || action === 'delete') result = cloud.disconnect(id, action === 'delete');
+      else return error(res, 405, 'missing');
+      return answer(res, 200, result);
+    } catch (failure) {
+      return error(res, failure instanceof CloudError ? failure.status : 500, failure instanceof CloudError ? failure.message : 'cloud-storage');
     }
-    // Journaux par machine (GET logs, logs-download) : src/http/routes/logs.ts.
+  }
+
+  async function handleCamera(req, res) {
+    const path = req.url;
+    const activeSession = session(req);
+    const viewer = sessions.get(activeSession);
     const preview = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera\/preview(?:\/(side|far|near))?$/);
     const camera = preview ?? path.match(/^\/api\/machines\/([a-f0-9-]{36})\/camera(?:\/(side|far|near))?$/);
-    if (req.method === 'GET' && camera) {
-      if (!activeSession) return error(res, 401, 'sign-in');
-      const machine = store.state.machines.find(({ id }) => id === camera[1]);
-      const definition = connectorDefinition(machine?.kind);
-      if (!definition?.camera) return error(res, 404, 'camera-unsupported');
-      if (camera[2] && machine.kind !== 'xtool-m2') return error(res, 404, 'camera-unsupported');
-      const cameraView = machine.kind === 'xtool-m2' ? camera[2] ?? 'side' : undefined;
-      const streamKey = cameraView ? machine.id + '/' + cameraView : machine.id;
-      if (preview && machine.kind === 'xtool-m2' && !cameraStreams.has(streamKey)) {
-        const abort = new AbortController();
-        const timeout = setTimeout(() => abort.abort(), 15_000);
-        res.once('close', () => abort.abort());
-        try {
-          const connector = await connectors.get(machine.kind);
-          const image = await connector.preview(machine, abort.signal, cameraView);
-          if (abort.signal.aborted) return error(res, 504, 'camera-unavailable');
-          res.writeHead(200, { 'Content-Type': 'image/jpeg' });
-          res.end(image);
-        } catch {
-          if (!res.destroyed) error(res, 502, 'camera-unavailable');
-        } finally { clearTimeout(timeout); }
-        return;
-      }
-      const cameraResponse = preview ? cameraPreview(res) : res;
-      let relay = cameraStreams.get(streamKey);
-      const viewerCount = [...cameraStreams.values()].reduce((count, stream) => count + stream.viewers.size, 0);
-      if (viewerCount >= 32 || (!relay && cameraStreams.size >= 8)) return error(res, 429, 'camera-busy');
-      if (relay) {
-        if (relay.controller.signal.aborted) return error(res, 503, 'camera-unavailable');
-        relay.subscribe(cameraResponse, activeSession, viewer.expires);
-        return;
-      }
-      relay = cameraRelay();
-      relay.machineId = machine.id;
-      cameraStreams.set(streamKey, relay);
-      relay.subscribe(cameraResponse, activeSession, viewer.expires);
-      const { controller, output } = relay;
-      diagnostics.record('camera', 'opening', machine.id);
-      let firstFrame = true;
-      const onFrame = () => {
-        if (firstFrame) diagnostics.record('camera', 'streaming', machine.id);
-        firstFrame = false;
-        diagnostics.frame(machine.id);
-      };
-      let failure;
+    const machine = store.state.machines.find(({ id }) => id === camera[1]);
+    const definition = connectorDefinition(machine?.kind);
+    if (!definition?.camera) return error(res, 404, 'camera-unsupported');
+    if (camera[2] && machine.kind !== 'xtool-m2') return error(res, 404, 'camera-unsupported');
+    const cameraView = machine.kind === 'xtool-m2' ? camera[2] ?? 'side' : undefined;
+    const streamKey = cameraView ? machine.id + '/' + cameraView : machine.id;
+    if (preview && machine.kind === 'xtool-m2' && !cameraStreams.has(streamKey)) {
+      const abort = new AbortController();
+      const timeout = setTimeout(() => abort.abort(), 15_000);
+      res.once('close', () => abort.abort());
       try {
         const connector = await connectors.get(machine.kind);
-        if (!controller.signal.aborted) failure = await connector.camera(machine, output, controller.signal, onFrame, cameraView);
+        const image = await connector.preview(machine, abort.signal, cameraView);
+        if (abort.signal.aborted) return error(res, 504, 'camera-unavailable');
+        res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+        res.end(image);
       } catch {
-        failure = 'interrupted';
-      } finally {
-        cameraStreams.delete(streamKey);
-        if (failure && !controller.signal.aborted) diagnostics.record('camera', failure, machine.id);
-        if (!firstFrame) diagnostics.record('camera', 'closed', machine.id);
-        for (const viewerResponse of relay.viewers.keys()) {
-          if (controller.signal.aborted || (failure && viewerResponse.headersSent)) viewerResponse.destroy();
-          else if (failure) error(viewerResponse, 502, 'camera-unavailable');
-          else viewerResponse.end();
-        }
-      }
+        if (!res.destroyed) error(res, 502, 'camera-unavailable');
+      } finally { clearTimeout(timeout); }
       return;
     }
-    if (path === '/api/notifications' || path === '/api/notifications/test') {
-      if (!viewer) return error(res, 401, 'sign-in');
-      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
-      // GET et POST : src/http/routes/notifications.ts ; autres méthodes refusées comme avant.
-      return error(res, 405, 'missing');
+    const cameraResponse = preview ? cameraPreview(res) : res;
+    let relay = cameraStreams.get(streamKey);
+    const viewerCount = [...cameraStreams.values()].reduce((count, stream) => count + stream.viewers.size, 0);
+    if (viewerCount >= 32 || (!relay && cameraStreams.size >= 8)) return error(res, 429, 'camera-busy');
+    if (relay) {
+      if (relay.controller.signal.aborted) return error(res, 503, 'camera-unavailable');
+      relay.subscribe(cameraResponse, activeSession, viewer.expires);
+      return;
     }
-    if (path === '/api/discovery') {
-      if (!viewer) return error(res, 401, 'sign-in');
-      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
-      // GET et POST : src/http/routes/machines.ts ; autres méthodes refusées comme avant.
-      return error(res, 405, 'missing');
+    relay = cameraRelay();
+    relay.machineId = machine.id;
+    cameraStreams.set(streamKey, relay);
+    relay.subscribe(cameraResponse, activeSession, viewer.expires);
+    const { controller, output } = relay;
+    diagnostics.record('camera', 'opening', machine.id);
+    let firstFrame = true;
+    const onFrame = () => {
+      if (firstFrame) diagnostics.record('camera', 'streaming', machine.id);
+      firstFrame = false;
+      diagnostics.frame(machine.id);
+    };
+    let failure;
+    try {
+      const connector = await connectors.get(machine.kind);
+      if (!controller.signal.aborted) failure = await connector.camera(machine, output, controller.signal, onFrame, cameraView);
+    } catch {
+      failure = 'interrupted';
+    } finally {
+      cameraStreams.delete(streamKey);
+      if (failure && !controller.signal.aborted) diagnostics.record('camera', failure, machine.id);
+      if (!firstFrame) diagnostics.record('camera', 'closed', machine.id);
+      for (const viewerResponse of relay.viewers.keys()) {
+        if (controller.signal.aborted || (failure && viewerResponse.headersSent)) viewerResponse.destroy();
+        else if (failure) error(viewerResponse, 502, 'camera-unavailable');
+        else viewerResponse.end();
+      }
     }
-    // Lecture du parc (GET /api/machines) : src/http/routes/fleet.ts, service listFleet ci-dessous.
-    // Bobine manuelle (POST /api/machines/{id}/spool) : src/http/routes/machines.ts.
+    return;
+  }
+
+  async function handleCommand(req, res) {
+    const path = req.url;
+    const activeSession = session(req);
+    const viewer = sessions.get(activeSession);
     const command = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/command$/);
-    if (req.method === 'POST' && command) {
-      if (!viewer) return error(res, 401, 'sign-in');
-      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+    if (!requireJson(req, res)) return;
+    let data;
+    try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+    const action = data.action;
+    if (!['start', 'pause', 'resume', 'stop'].includes(action)) return error(res, 400, 'invalid');
+    const machine = store.state.machines.find(({ id }) => id === command[1]);
+    if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.commands) return error(res, 404, 'missing');
+    if (!connectorDefinition(machine.kind ?? 'klipper').commandActions.includes(action)) return error(res, 400, 'command-unsupported');
+    if (['stop', 'start'].includes(action) && data.confirm !== true) return error(res, 400, 'invalid');
+    if (pendingCommands.has(machine.id) || pendingUploads.has(machine.id)) return error(res, 409, 'command-busy');
+    const before = { pause: ['printing'], resume: ['paused'], stop: ['printing', 'paused'], start: ['ready', 'done'] }[action];
+    const after = { pause: ['paused'], resume: ['printing'], stop: ['ready', 'done'], start: ['printing'] }[action];
+    pendingCommands.add(machine.id);
+    try {
+      const connector = await connectors.get(machine.kind ?? 'klipper');
+      if (!before.includes((await connector.read(machine)).status)) return error(res, 409, 'command-state');
+      if (res.destroyed) return;
+      if (!session(req)) return error(res, 401, 'sign-in');
+      try {
+        if (!(await connector.command(machine, action))) return error(res, 502, 'command-rejected');
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const report = await connector.read(machine), status = report.status;
+          if (after.includes(status) || (machine.kind === 'longer-ray5' && action === 'stop' && status === 'error' && report.nativeState === 'Alarm' && report.spindle === 0 && report.feedRate === 0)) return answer(res, 200, { status });
+          if (attempt < 3) await delay(350);
+        }
+      } catch (failure) {
+        if (failure.message === 'bambu-authorization') return error(res, 403, 'bambu-authorization');
+        /* The request may have reached the printer. Never retry it automatically. */
+      }
+      return error(res, 504, 'command-unconfirmed');
+    } finally {
+      snapshot.forget(machine.id);
+      pendingCommands.delete(machine.id);
+    }
+  }
+
+  async function handleControls(req, res) {
+    const path = req.url;
+    const activeSession = session(req);
+    const viewer = sessions.get(activeSession);
+    const controlsRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/controls$/);
+    const machine = store.state.machines.find(entry => entry.id === controlsRoute[1]);
+    if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.controls) return error(res, 404, 'missing');
+    if (req.method === 'POST' && viewer.role !== 'admin') return error(res, 403, 'forbidden');
+    if (req.method === 'POST' && !requireJson(req, res)) return;
+    let data;
+    if (req.method === 'POST') { try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); } }
+    if (req.method === 'POST' && (pendingCommands.has(machine.id) || pendingUploads.has(machine.id))) return error(res, 409, 'command-busy');
+    if (req.method === 'POST') {
+      const now = Date.now(), key = 'controls:' + machine.id;
+      const recent = (terminalUse.get(key) ?? []).filter(at => now - at < minute);
+      if (recent.length >= 30 || (recent.length && now - recent.at(-1) < 500)) return error(res, 429, 'rate');
+      terminalUse.set(key, [...recent, now]);
+      pendingCommands.add(machine.id);
+    }
+    let attempted = false;
+    try {
+      const connector = await connectors.get(machine.kind ?? 'klipper');
+      const status = (await connector.read(machine)).status;
+      if (req.method === 'POST' && !(machine.kind === 'longer-ray5' && ['reset','unlock','jog-cancel'].includes(data.action)) && !['ready', 'done', 'printing', 'paused'].includes(status)) return error(res, 409, 'command-state');
+      const controls = await connector.control.read(machine);
+      if (req.method === 'GET') return answer(res, 200, { ...controls, status });
+      const command = validateControl(data, controls);
+      if (!command) return error(res, 400, 'control-invalid');
+      if (['move', 'home', 'zero', 'laser-pulse'].includes(command.action) && !['ready', 'done'].includes(status)) return error(res, 409, 'command-state');
+      if (['printing', 'paused'].includes(status) && ['heat', 'fan'].includes(command.action) && data.duringPrint !== true) return error(res, 409, 'control-confirm');
+      if (res.destroyed) return;
+      if (!session(req)) return error(res, 401, 'sign-in');
+      attempted = true;
+      const result = await connector.control.execute(machine, command, controls);
+      diagnostics.record('controls', result.outcome, machine.id);
+      return answer(res, result.outcome === 'rejected' ? 502 : 200, result.outcome === 'rejected' ? { error: 'command-rejected' } : result);
+    } catch (failure) {
+      if (failure.message === 'bambu-authorization') return error(res, 403, 'bambu-authorization');
+      const heaterUnconfirmed = attempted && failure.message === 'heater-unconfirmed';
+      diagnostics.record('controls', !attempted ? 'request-failed' : heaterUnconfirmed ? 'heater-unconfirmed' : failure.message === 'command-rejected' ? 'rejected' : 'unconfirmed', machine.id);
+      return error(res, !attempted || failure.message === 'command-rejected' ? 502 : 504, !attempted ? 'controls-unavailable' : heaterUnconfirmed ? 'heater-unconfirmed' : failure.message === 'command-rejected' ? 'command-rejected' : 'command-unconfirmed');
+    } finally { if (req.method === 'POST') pendingCommands.delete(machine.id); }
+  }
+
+  async function handleTerminal(req, res) {
+    const path = req.url;
+    const activeSession = session(req);
+    const viewer = sessions.get(activeSession);
+    const terminal = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/gcode$/);
+    if (!requireJson(req, res)) return;
+    let data;
+    try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+    const script = typeof data.command === 'string' ? data.command.trim() : '';
+    if (!/^[\x20-\x7E]{1,256}$/.test(script)) return error(res, 400, 'invalid');
+    const machine = store.state.machines.find(({ id }) => id === terminal[1]);
+    if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.terminal) return error(res, 404, 'missing');
+    if (pendingCommands.has(machine.id)) return error(res, 409, 'command-busy');
+    const now = Date.now();
+    const use = terminalUse.get(machine.id);
+    const recent = (use ?? []).filter(time => now - time < minute);
+    if (recent.length >= 30 || (recent.length && now - recent.at(-1) < 500)) return error(res, 429, 'rate');
+    terminalUse.set(machine.id, [...recent, now]);
+    pendingCommands.add(machine.id);
+    try {
+      const connector = await connectors.get(machine.kind ?? 'klipper');
+      const { status } = await connector.read(machine);
+      if (status === 'offline') return error(res, 409, 'terminal-offline');
+      if ((status === 'printing' || status === 'paused') && !harmlessGcode(script) && data.confirm !== true) {
+        return error(res, 409, 'terminal-confirm');
+      }
+      if (res.destroyed) return;
+      if (!session(req)) return error(res, 401, 'sign-in');
+      try {
+        const result = await connector.gcode(machine, script);
+        diagnostics.record('terminal', result.outcome, machine.id);
+        return answer(res, 200, result);
+      } catch {
+        /* La commande a pu atteindre la machine : ne jamais la renvoyer automatiquement. */
+        diagnostics.record('terminal', 'unconfirmed', machine.id);
+        return error(res, 504, 'command-unconfirmed');
+      }
+    } finally {
+      pendingCommands.delete(machine.id);
+    }
+  }
+
+  async function handleFiles(req, res) {
+    const path = req.url;
+    const activeSession = session(req);
+    const viewer = sessions.get(activeSession);
+    const fileRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/(files|file|print|transfer)(?:\?(.*))?$/);
+    const [, id, route, query = ''] = fileRoute;
+    const machine = store.state.machines.find(entry => entry.id === id);
+    if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.files) return error(res, 404, 'missing');
+    const files = (await connectors.get(machine.kind ?? 'klipper')).files;
+    const validPath = machine.kind === 'longer-ray5' ? ray5Path : connectorDefinition(machine.kind ?? 'klipper').projects ? productionPath : filePath;
+    const params = new URLSearchParams(query);
+    if (req.method === 'GET' && route === 'files') {
+      try {
+        const list = await files.list(machine);
+        return answer(res, 200, { files: list.sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0)).slice(0, 300), ...(list.length > 300 ? { truncated: true } : {}) });
+      } catch { return error(res, 502, 'files-unavailable'); }
+    }
+    if (req.method === 'GET' && route === 'file') {
+      const target = validPath(params.get('path'));
+      if (!target) return error(res, 400, 'invalid');
+      const controller = new AbortController();
+      res.once('close', () => controller.abort());
+      let response;
+      const download = params.get('download') === '1' ? files.downloadOriginal ?? files.download : files.download;
+      try { response = await download.call(files, machine, target, controller.signal); } catch (failure) {
+        return error(res, 502, ['project-multiple-plates', 'project-no-gcode', 'project-format'].includes(failure.message) ? failure.message : 'files-unavailable');
+      }
+      if (!response.ok || !response.body) {
+        await response.body?.cancel();
+        return response.status === 404 ? error(res, 404, 'missing') : error(res, 502, 'files-unavailable');
+      }
+      const length = Number(response.headers.get('content-length'));
+      if (length > fileLimit) {
+        await response.body.cancel();
+        return error(res, 413, 'file-too-large');
+      }
+      const attachment = params.get('download') === '1';
+      const filename = target.split('/').at(-1);
+      res.writeHead(200, { 'Content-Type': attachment ? 'application/octet-stream' : 'text/plain; charset=utf-8',
+        ...(attachment ? { 'Content-Disposition': "attachment; filename*=UTF-8''" + encodeURIComponent(filename).replace(/['()*]/g, char => '%' + char.charCodeAt(0).toString(16).toUpperCase()), 'Cache-Control': 'no-store' } : {}), ...(length > 0 ? { 'Content-Length': String(length) } : {}) });
+      let sent = 0;
+      try {
+        for await (const chunk of response.body) {
+          sent += chunk.length;
+          if (sent > fileLimit) throw new Error('file too large');
+          if (!res.write(chunk)) await once(res, 'drain');
+        }
+        return res.end();
+      } catch { return res.destroy(); }
+    }
+    if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
+    if (req.headers.origin !== publicUrl.origin) return error(res, 403, 'origin');
+    if (req.method === 'POST' && route === 'transfer') {
       if (!requireJson(req, res)) return;
       let data;
       try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
-      const action = data.action;
-      if (!['start', 'pause', 'resume', 'stop'].includes(action)) return error(res, 400, 'invalid');
-      const machine = store.state.machines.find(({ id }) => id === command[1]);
-      if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.commands) return error(res, 404, 'missing');
-      if (!connectorDefinition(machine.kind ?? 'klipper').commandActions.includes(action)) return error(res, 400, 'command-unsupported');
-      if (['stop', 'start'].includes(action) && data.confirm !== true) return error(res, 400, 'invalid');
+      const sourcePath = validPath(data.path);
+      const destination = store.state.machines.find(entry => entry.id === data.destination);
+      const definition = destination && connectorDefinition(destination.kind ?? 'klipper');
+      const destinationPath = destination?.kind === 'longer-ray5' ? ray5Path : definition?.projects ? productionPath : filePath;
+      const name = data.name;
+      if (!sourcePath || data.confirm !== true || !destination || destination.id === machine.id || !definition?.files ||
+        (definition.fileFamily ?? 'fdm') !== (connectorDefinition(machine.kind ?? 'klipper').fileFamily ?? 'fdm') || !destinationPath(name) || name.includes('/') || /\.3mf$/i.test(sourcePath) !== /\.3mf$/i.test(name)) return error(res, 400, 'invalid');
+      if ([machine.id, destination.id].some(id => pendingUploads.has(id) || pendingCommands.has(id))) return error(res, 409, 'upload-busy');
+      pendingUploads.add(machine.id);
+      pendingUploads.add(destination.id);
+      const controller = new AbortController();
+      res.once('close', () => controller.abort());
+      try {
+        const targetFiles = (await connectors.get(destination.kind ?? 'klipper')).files;
+        if ((await targetFiles.list(destination)).some(entry => entry.path === name)) return error(res, 409, 'file-exists');
+        const stored = await transferMachineFile({ machine, files }, { machine: destination, files: targetFiles }, sourcePath, name, controller.signal);
+        diagnostics.record('files', 'transferred', destination.id);
+        return answer(res, 201, { path: stored, destination: destination.id });
+      } catch (failure) {
+        const known = ['file-too-large', 'missing', 'files-unavailable', 'file-exists', 'file-quota', 'project-format', 'project-multiple-plates', 'project-no-gcode'];
+        return error(res, failure.message === 'file-exists' ? 409 : failure.message === 'file-too-large' ? 413 : failure.message === 'missing' ? 404 : 502,
+          known.includes(failure.message) ? failure.message : 'upload-failed');
+      } finally {
+        pendingUploads.delete(machine.id);
+        pendingUploads.delete(destination.id);
+      }
+    }
+    if (req.method === 'POST' && route === 'files') {
+      const name = params.get('name');
+      const size = Number(req.headers['content-length']);
+      if (req.headers['content-type'] !== 'application/octet-stream' || !validPath(name) || name.includes('/')) return error(res, 400, 'invalid');
+      if (!Number.isSafeInteger(size) || size < 1) return error(res, 411, 'invalid');
+      if (size > (machine.kind === 'longer-ray5' ? 16 * 1024 * 1024 : fileLimit)) return error(res, 413, 'file-too-large');
+      if (pendingUploads.has(machine.id) || pendingCommands.has(machine.id)) return error(res, 409, 'upload-busy');
+      pendingUploads.add(machine.id);
+      try {
+        const stored = await files.upload(machine, name, req, size);
+        if (!stored) return error(res, 502, 'upload-rejected');
+        diagnostics.record('files', 'uploaded', machine.id);
+        return answer(res, 201, { path: stored });
+      } catch (failure) {
+        if (!res.headersSent) return error(res, 502, ['project-multiple-plates', 'project-no-gcode', 'project-format', 'file-exists', 'file-quota'].includes(failure.message) ? failure.message : 'upload-failed');
+        return res.destroy();
+      } finally {
+        pendingUploads.delete(machine.id);
+      }
+    }
+    if (req.method === 'POST' && route === 'print') {
+      if (!requireJson(req, res)) return;
+      let data;
+      try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
+      const target = validPath(data.path);
+      if (!target || data.confirm !== true) return error(res, 400, 'invalid');
+      if (machine.kind === 'longer-ray5' && data.operatorPresent !== true) return error(res, 400, 'laser-confirm');
+      if (connectorDefinition(machine.kind ?? 'klipper').externalFilament && data.filamentMode !== 'external') return error(res, 400, 'filament-confirm');
       if (pendingCommands.has(machine.id) || pendingUploads.has(machine.id)) return error(res, 409, 'command-busy');
-      const before = { pause: ['printing'], resume: ['paused'], stop: ['printing', 'paused'], start: ['ready', 'done'] }[action];
-      const after = { pause: ['paused'], resume: ['printing'], stop: ['ready', 'done'], start: ['printing'] }[action];
       pendingCommands.add(machine.id);
       try {
         const connector = await connectors.get(machine.kind ?? 'klipper');
-        if (!before.includes((await connector.read(machine)).status)) return error(res, 409, 'command-state');
+        if (!['ready', 'done'].includes((await connector.read(machine)).status)) return error(res, 409, 'command-state');
         if (res.destroyed) return;
         if (!session(req)) return error(res, 401, 'sign-in');
         try {
-          if (!(await connector.command(machine, action))) return error(res, 502, 'command-rejected');
-          for (let attempt = 0; attempt < 4; attempt++) {
-            const report = await connector.read(machine), status = report.status;
-            if (after.includes(status) || (machine.kind === 'longer-ray5' && action === 'stop' && status === 'error' && report.nativeState === 'Alarm' && report.spindle === 0 && report.feedRate === 0)) return answer(res, 200, { status });
-            if (attempt < 3) await delay(350);
+          if (!(await files.start(machine, target))) return error(res, 502, 'command-rejected');
+          diagnostics.record('files', 'print-started', machine.id);
+          for (let attempt = 0; attempt < 6; attempt++) {
+            if ((await connector.read(machine)).status === 'printing') return answer(res, 200, { status: 'printing' });
+            if (attempt < 5) await delay(500);
           }
         } catch (failure) {
           if (failure.message === 'bambu-authorization') return error(res, 403, 'bambu-authorization');
-          /* The request may have reached the printer. Never retry it automatically. */
+          if (['project-format', 'project-no-gcode', 'project-multiple-plates'].includes(failure.message)) return error(res, 400, failure.message);
+          /* La demande a pu atteindre la machine : ne jamais la renvoyer automatiquement. */
         }
         return error(res, 504, 'command-unconfirmed');
       } finally {
@@ -373,225 +590,24 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
         pendingCommands.delete(machine.id);
       }
     }
-    const controlsRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/controls$/);
-    if (controlsRoute && ['GET', 'POST'].includes(req.method)) {
-      if (!viewer) return error(res, 401, 'sign-in');
-      const machine = store.state.machines.find(entry => entry.id === controlsRoute[1]);
-      if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.controls) return error(res, 404, 'missing');
-      if (req.method === 'POST' && viewer.role !== 'admin') return error(res, 403, 'forbidden');
-      if (req.method === 'POST' && !requireJson(req, res)) return;
-      let data;
-      if (req.method === 'POST') { try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); } }
-      if (req.method === 'POST' && (pendingCommands.has(machine.id) || pendingUploads.has(machine.id))) return error(res, 409, 'command-busy');
-      if (req.method === 'POST') {
-        const now = Date.now(), key = 'controls:' + machine.id;
-        const recent = (terminalUse.get(key) ?? []).filter(at => now - at < minute);
-        if (recent.length >= 30 || (recent.length && now - recent.at(-1) < 500)) return error(res, 429, 'rate');
-        terminalUse.set(key, [...recent, now]);
-        pendingCommands.add(machine.id);
-      }
-      let attempted = false;
-      try {
-        const connector = await connectors.get(machine.kind ?? 'klipper');
-        const status = (await connector.read(machine)).status;
-        if (req.method === 'POST' && !(machine.kind === 'longer-ray5' && ['reset','unlock','jog-cancel'].includes(data.action)) && !['ready', 'done', 'printing', 'paused'].includes(status)) return error(res, 409, 'command-state');
-        const controls = await connector.control.read(machine);
-        if (req.method === 'GET') return answer(res, 200, { ...controls, status });
-        const command = validateControl(data, controls);
-        if (!command) return error(res, 400, 'control-invalid');
-        if (['move', 'home', 'zero', 'laser-pulse'].includes(command.action) && !['ready', 'done'].includes(status)) return error(res, 409, 'command-state');
-        if (['printing', 'paused'].includes(status) && ['heat', 'fan'].includes(command.action) && data.duringPrint !== true) return error(res, 409, 'control-confirm');
-        if (res.destroyed) return;
-        if (!session(req)) return error(res, 401, 'sign-in');
-        attempted = true;
-        const result = await connector.control.execute(machine, command, controls);
-        diagnostics.record('controls', result.outcome, machine.id);
-        return answer(res, result.outcome === 'rejected' ? 502 : 200, result.outcome === 'rejected' ? { error: 'command-rejected' } : result);
-      } catch (failure) {
-        if (failure.message === 'bambu-authorization') return error(res, 403, 'bambu-authorization');
-        const heaterUnconfirmed = attempted && failure.message === 'heater-unconfirmed';
-        diagnostics.record('controls', !attempted ? 'request-failed' : heaterUnconfirmed ? 'heater-unconfirmed' : failure.message === 'command-rejected' ? 'rejected' : 'unconfirmed', machine.id);
-        return error(res, !attempted || failure.message === 'command-rejected' ? 502 : 504, !attempted ? 'controls-unavailable' : heaterUnconfirmed ? 'heater-unconfirmed' : failure.message === 'command-rejected' ? 'command-rejected' : 'command-unconfirmed');
-      } finally { if (req.method === 'POST') pendingCommands.delete(machine.id); }
-    }
-    const terminal = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/gcode$/);
-    if (req.method === 'POST' && terminal) {
+    return error(res, 404, 'missing');
+  }
+
+  // Repli des requêtes sans route : réponses historiques (405 après contrôle des droits, sinon 404).
+  async function handleFallback(req, res) {
+    const path = req.url;
+    const activeSession = session(req);
+    const viewer = sessions.get(activeSession);
+    const cloudRoute = /^\/api\/cloud-accounts(?:\/([a-f0-9-]{36})\/(login|verify|devices|disconnect|delete|logs|logs-download|telemetry-start|telemetry-stop|import))?$/.test(path);
+    if (cloudRoute || ['/api/notifications', '/api/notifications/test', '/api/discovery'].includes(path)) {
       if (!viewer) return error(res, 401, 'sign-in');
       if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
-      if (!requireJson(req, res)) return;
-      let data;
-      try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
-      const script = typeof data.command === 'string' ? data.command.trim() : '';
-      if (!/^[\x20-\x7E]{1,256}$/.test(script)) return error(res, 400, 'invalid');
-      const machine = store.state.machines.find(({ id }) => id === terminal[1]);
-      if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.terminal) return error(res, 404, 'missing');
-      if (pendingCommands.has(machine.id)) return error(res, 409, 'command-busy');
-      const now = Date.now();
-      const use = terminalUse.get(machine.id);
-      const recent = (use ?? []).filter(time => now - time < minute);
-      if (recent.length >= 30 || (recent.length && now - recent.at(-1) < 500)) return error(res, 429, 'rate');
-      terminalUse.set(machine.id, [...recent, now]);
-      pendingCommands.add(machine.id);
-      try {
-        const connector = await connectors.get(machine.kind ?? 'klipper');
-        const { status } = await connector.read(machine);
-        if (status === 'offline') return error(res, 409, 'terminal-offline');
-        if ((status === 'printing' || status === 'paused') && !harmlessGcode(script) && data.confirm !== true) {
-          return error(res, 409, 'terminal-confirm');
-        }
-        if (res.destroyed) return;
-        if (!session(req)) return error(res, 401, 'sign-in');
-        try {
-          const result = await connector.gcode(machine, script);
-          diagnostics.record('terminal', result.outcome, machine.id);
-          return answer(res, 200, result);
-        } catch {
-          /* La commande a pu atteindre la machine : ne jamais la renvoyer automatiquement. */
-          diagnostics.record('terminal', 'unconfirmed', machine.id);
-          return error(res, 504, 'command-unconfirmed');
-        }
-      } finally {
-        pendingCommands.delete(machine.id);
-      }
+      return error(res, 405, 'missing');
     }
-    const fileRoute = path.match(/^\/api\/machines\/([a-f0-9-]{36})\/(files|file|print|transfer)(?:\?(.*))?$/);
-    if (fileRoute) {
+    if (/^\/api\/machines\/([a-f0-9-]{36})\/(files|file|print|transfer)(?:\?(.*))?$/.test(path)) {
       if (!viewer) return error(res, 401, 'sign-in');
-      const [, id, route, query = ''] = fileRoute;
-      const machine = store.state.machines.find(entry => entry.id === id);
-      if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.files) return error(res, 404, 'missing');
-      const files = (await connectors.get(machine.kind ?? 'klipper')).files;
-      const validPath = machine.kind === 'longer-ray5' ? ray5Path : connectorDefinition(machine.kind ?? 'klipper').projects ? productionPath : filePath;
-      const params = new URLSearchParams(query);
-      if (req.method === 'GET' && route === 'files') {
-        try {
-          const list = await files.list(machine);
-          return answer(res, 200, { files: list.sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0)).slice(0, 300), ...(list.length > 300 ? { truncated: true } : {}) });
-        } catch { return error(res, 502, 'files-unavailable'); }
-      }
-      if (req.method === 'GET' && route === 'file') {
-        const target = validPath(params.get('path'));
-        if (!target) return error(res, 400, 'invalid');
-        const controller = new AbortController();
-        res.once('close', () => controller.abort());
-        let response;
-        const download = params.get('download') === '1' ? files.downloadOriginal ?? files.download : files.download;
-        try { response = await download.call(files, machine, target, controller.signal); } catch (failure) {
-          return error(res, 502, ['project-multiple-plates', 'project-no-gcode', 'project-format'].includes(failure.message) ? failure.message : 'files-unavailable');
-        }
-        if (!response.ok || !response.body) {
-          await response.body?.cancel();
-          return response.status === 404 ? error(res, 404, 'missing') : error(res, 502, 'files-unavailable');
-        }
-        const length = Number(response.headers.get('content-length'));
-        if (length > fileLimit) {
-          await response.body.cancel();
-          return error(res, 413, 'file-too-large');
-        }
-        const attachment = params.get('download') === '1';
-        const filename = target.split('/').at(-1);
-        res.writeHead(200, { 'Content-Type': attachment ? 'application/octet-stream' : 'text/plain; charset=utf-8',
-          ...(attachment ? { 'Content-Disposition': "attachment; filename*=UTF-8''" + encodeURIComponent(filename).replace(/['()*]/g, char => '%' + char.charCodeAt(0).toString(16).toUpperCase()), 'Cache-Control': 'no-store' } : {}), ...(length > 0 ? { 'Content-Length': String(length) } : {}) });
-        let sent = 0;
-        try {
-          for await (const chunk of response.body) {
-            sent += chunk.length;
-            if (sent > fileLimit) throw new Error('file too large');
-            if (!res.write(chunk)) await once(res, 'drain');
-          }
-          return res.end();
-        } catch { return res.destroy(); }
-      }
-      if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
-      if (req.headers.origin !== publicUrl.origin) return error(res, 403, 'origin');
-      if (req.method === 'POST' && route === 'transfer') {
-        if (!requireJson(req, res)) return;
-        let data;
-        try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
-        const sourcePath = validPath(data.path);
-        const destination = store.state.machines.find(entry => entry.id === data.destination);
-        const definition = destination && connectorDefinition(destination.kind ?? 'klipper');
-        const destinationPath = destination?.kind === 'longer-ray5' ? ray5Path : definition?.projects ? productionPath : filePath;
-        const name = data.name;
-        if (!sourcePath || data.confirm !== true || !destination || destination.id === machine.id || !definition?.files ||
-          (definition.fileFamily ?? 'fdm') !== (connectorDefinition(machine.kind ?? 'klipper').fileFamily ?? 'fdm') || !destinationPath(name) || name.includes('/') || /\.3mf$/i.test(sourcePath) !== /\.3mf$/i.test(name)) return error(res, 400, 'invalid');
-        if ([machine.id, destination.id].some(id => pendingUploads.has(id) || pendingCommands.has(id))) return error(res, 409, 'upload-busy');
-        pendingUploads.add(machine.id);
-        pendingUploads.add(destination.id);
-        const controller = new AbortController();
-        res.once('close', () => controller.abort());
-        try {
-          const targetFiles = (await connectors.get(destination.kind ?? 'klipper')).files;
-          if ((await targetFiles.list(destination)).some(entry => entry.path === name)) return error(res, 409, 'file-exists');
-          const stored = await transferMachineFile({ machine, files }, { machine: destination, files: targetFiles }, sourcePath, name, controller.signal);
-          diagnostics.record('files', 'transferred', destination.id);
-          return answer(res, 201, { path: stored, destination: destination.id });
-        } catch (failure) {
-          const known = ['file-too-large', 'missing', 'files-unavailable', 'file-exists', 'file-quota', 'project-format', 'project-multiple-plates', 'project-no-gcode'];
-          return error(res, failure.message === 'file-exists' ? 409 : failure.message === 'file-too-large' ? 413 : failure.message === 'missing' ? 404 : 502,
-            known.includes(failure.message) ? failure.message : 'upload-failed');
-        } finally {
-          pendingUploads.delete(machine.id);
-          pendingUploads.delete(destination.id);
-        }
-      }
-      if (req.method === 'POST' && route === 'files') {
-        const name = params.get('name');
-        const size = Number(req.headers['content-length']);
-        if (req.headers['content-type'] !== 'application/octet-stream' || !validPath(name) || name.includes('/')) return error(res, 400, 'invalid');
-        if (!Number.isSafeInteger(size) || size < 1) return error(res, 411, 'invalid');
-        if (size > (machine.kind === 'longer-ray5' ? 16 * 1024 * 1024 : fileLimit)) return error(res, 413, 'file-too-large');
-        if (pendingUploads.has(machine.id) || pendingCommands.has(machine.id)) return error(res, 409, 'upload-busy');
-        pendingUploads.add(machine.id);
-        try {
-          const stored = await files.upload(machine, name, req, size);
-          if (!stored) return error(res, 502, 'upload-rejected');
-          diagnostics.record('files', 'uploaded', machine.id);
-          return answer(res, 201, { path: stored });
-        } catch (failure) {
-          if (!res.headersSent) return error(res, 502, ['project-multiple-plates', 'project-no-gcode', 'project-format', 'file-exists', 'file-quota'].includes(failure.message) ? failure.message : 'upload-failed');
-          return res.destroy();
-        } finally {
-          pendingUploads.delete(machine.id);
-        }
-      }
-      if (req.method === 'POST' && route === 'print') {
-        if (!requireJson(req, res)) return;
-        let data;
-        try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
-        const target = validPath(data.path);
-        if (!target || data.confirm !== true) return error(res, 400, 'invalid');
-        if (machine.kind === 'longer-ray5' && data.operatorPresent !== true) return error(res, 400, 'laser-confirm');
-        if (connectorDefinition(machine.kind ?? 'klipper').externalFilament && data.filamentMode !== 'external') return error(res, 400, 'filament-confirm');
-        if (pendingCommands.has(machine.id) || pendingUploads.has(machine.id)) return error(res, 409, 'command-busy');
-        pendingCommands.add(machine.id);
-        try {
-          const connector = await connectors.get(machine.kind ?? 'klipper');
-          if (!['ready', 'done'].includes((await connector.read(machine)).status)) return error(res, 409, 'command-state');
-          if (res.destroyed) return;
-          if (!session(req)) return error(res, 401, 'sign-in');
-          try {
-            if (!(await files.start(machine, target))) return error(res, 502, 'command-rejected');
-            diagnostics.record('files', 'print-started', machine.id);
-            for (let attempt = 0; attempt < 6; attempt++) {
-              if ((await connector.read(machine)).status === 'printing') return answer(res, 200, { status: 'printing' });
-              if (attempt < 5) await delay(500);
-            }
-          } catch (failure) {
-            if (failure.message === 'bambu-authorization') return error(res, 403, 'bambu-authorization');
-            if (['project-format', 'project-no-gcode', 'project-multiple-plates'].includes(failure.message)) return error(res, 400, failure.message);
-            /* La demande a pu atteindre la machine : ne jamais la renvoyer automatiquement. */
-          }
-          return error(res, 504, 'command-unconfirmed');
-        } finally {
-          snapshot.forget(machine.id);
-          pendingCommands.delete(machine.id);
-        }
-      }
-      return error(res, 404, 'missing');
+      return handleFiles(req, res);
     }
-    // Comptes (POST /api/setup, login, logout, observers) et machines (POST /api/machines, test, pair, edit, delete) :
-    // src/http/routes/accounts.ts et machines.ts. Toute autre requête répond 404 comme avant.
     return error(res, 404, 'missing');
   }
   // Services d'administration du parc, appelés par src/http/routes/machines.ts. Erreurs : HttpError (code stable).
@@ -817,13 +833,13 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     }));
     return machines.filter(Boolean);
   }
-  // Socle HTTP typé (MIG-03) : routes migrées servies par Fastify, les autres par le routeur POC ci-dessus.
+  // Socle HTTP (MIG-03) : Fastify route toutes les requêtes ; services et gestionnaires ci-dessus.
   const viewerOf = (req) => {
     const key = session(req);
     const entry = key ? sessions.get(key) : null;
     return entry ? { session: key, username: entry.username, role: entry.role } : null;
   };
-  const http = createHttpApp({ allowedHost, origin: publicUrl.origin, limit: withinLimit, viewer: viewerOf, onFailure: () => diagnostics.record('server', 'request-failed') }, migratedRoutes({
+  const http = createHttpApp({ allowedHost, origin: publicUrl.origin, limit: withinLimit, viewer: viewerOf, onFailure: () => diagnostics.record('server', 'request-failed'), fallback: handleFallback }, migratedRoutes({
     accounts,
     session: { installed: () => Boolean(store.state.admin), oidcEnabled: () => Boolean(secure && oidc && store.state.admin), viewer: viewerOf },
     diagnostics: { view: () => diagnostics.view(), fleet: () => store.state.machines.map(({ id, name }) => ({ id, name })) },
@@ -841,16 +857,11 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       cloudAccounts: () => cloud.list(),
       cloudLog: id => cloud.logs(id),
       cloudFailure: failure => new HttpError(failure instanceof CloudError ? failure.status : 500, failure instanceof CloudError ? failure.message : 'cloud-storage')
-    }
+    },
+    operations: { cloudAction: handleCloudAction, camera: handleCamera, command: handleCommand, controls: handleControls, terminal: handleTerminal, files: handleFiles },
+    pages: { asset: handleAsset, oidc: handleOidc }
   }));
-  const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => {
-    if (http.handles(req)) return http.dispatch(req, res);
-    route(req, res).catch(() => {
-      diagnostics.record('server', 'request-failed');
-      if (!res.headersSent) error(res, 500, 'internal');
-      else res.end();
-    });
-  });
+  const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => http.dispatch(req, res));
   server.on('close', () => { connectors.close(); cloud.close(); void http.close(); });
   return { server, token };
 }
@@ -863,7 +874,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   if (origin.protocol !== 'https:' && (
     !['127.0.0.1', '::1'].includes(host) || !['127.0.0.1', '[::1]', 'localhost'].includes(origin.hostname)
   )) throw new Error('Une écoute réseau requiert FABCORE_ORIGIN en HTTPS et un reverse proxy.');
-  const { server, token } = createFabCore({ directory: resolve(process.env.FABCORE_DATA || '.fabcore'), origin, oidc: createOidc(origin) });
+  const logLevel = process.env.FABCORE_LOG_LEVEL || 'debug';
+  if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) throw new Error('FABCORE_LOG_LEVEL invalide (debug, info, warn, error).');
+  const { server, token } = createFabCore({ directory: resolve(process.env.FABCORE_DATA || '.fabcore'), origin, oidc: createOidc(origin), logLevel });
   server.listen(port, host, () => {
     console.log(`FabCore · ${origin.origin}`);
     if (token) console.log(`Jeton d’activation (15 min, usage unique) : ${token}`);

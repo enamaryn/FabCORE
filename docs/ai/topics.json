@@ -186,13 +186,16 @@
   },
   {
     "id": "http",
-    "title": "Socle HTTP Fastify, routes migrées (session, comptes, parc et administration, notifications, journaux) et OpenAPI",
+    "title": "Socle HTTP Fastify : toutes les routes, mode brut, repli, corrélation et OpenAPI",
     "files": [
       "src/http/app.ts",
       "src/http/errors.ts",
       "src/http/routes/index.ts",
       "src/http/routes/accounts.ts",
       "src/http/routes/machines.ts",
+      "src/http/correlation.ts",
+      "src/http/routes/pages.ts",
+      "src/http/routes/operations.ts",
       "src/http/routes/session.ts",
       "src/http/routes/diagnostics.ts",
       "src/http/routes/fleet.ts",
@@ -203,7 +206,6 @@
     ],
     "symbols": [
       "createHttpApp",
-      "routePattern",
       "migratedRoutes",
       "openApiDocument",
       "HttpError",
@@ -211,7 +213,11 @@
       "accountRoutes",
       "JsonBody",
       "machineRoutes",
-      "machineAdmin"
+      "machineAdmin",
+      "operationRoutes",
+      "pageRoutes",
+      "currentRequestId",
+      "handleFallback"
     ],
     "tests": [
       "src/http/app.test.ts",
@@ -219,7 +225,10 @@
       "poc/write-routes.test.mjs",
       "poc/machine-writes.test.mjs",
       "poc/server.test.mjs",
-      "poc/cloud-accounts.test.mjs"
+      "poc/cloud-accounts.test.mjs",
+      "poc/routing-parity.test.mjs",
+      "poc/correlation-http.test.mjs",
+      "src/http/correlation.test.ts"
     ],
     "docs": [
       "docs/api/openapi.json",
@@ -375,7 +384,8 @@
     "symbols": [
       "createMachineLogs",
       "instrumentConnector",
-      "safeCloudPayload"
+      "safeCloudPayload",
+      "levelOf"
     ],
     "tests": [
       "poc/machine-logs.test.mjs",
