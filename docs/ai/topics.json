@@ -203,13 +203,14 @@
       "src/http/routes/notifications.ts",
       "src/http/routes/logs.ts",
       "src/http/openapi.ts",
-      "poc/server.mjs"
+      "poc/server.mjs",
+      "src/application/errors.ts"
     ],
     "symbols": [
       "createHttpApp",
       "migratedRoutes",
       "openApiDocument",
-      "HttpError",
+      "ServiceError",
       "listFleet",
       "accountRoutes",
       "JsonBody",
@@ -241,15 +242,21 @@
     "id": "permissions",
     "title": "Authentification et droits",
     "files": [
+      "src/application/accounts.ts",
+      "src/application/errors.ts",
       "poc/server.mjs",
       "poc/oidc.mjs",
       "poc/store.mjs"
     ],
     "symbols": [
+      "createAccountService",
+      "ServiceError",
       "createFabCore",
       "openStore"
     ],
     "tests": [
+      "src/application/services.test.ts",
+      "poc/write-routes.test.mjs",
       "poc/oidc.test.mjs",
       "poc/manual-controls-http.test.mjs",
       "poc/files.test.mjs"
@@ -497,6 +504,36 @@
     "docs": [
       "README.md",
       "poc/README.md"
+    ]
+  },
+  {
+    "id": "application",
+    "title": "Cas d'usage TypeScript : comptes, notifications, bobine manuelle (MIG-04)",
+    "files": [
+      "src/application/accounts.ts",
+      "src/application/notifications.ts",
+      "src/application/machines.ts",
+      "src/application/state-store.ts",
+      "src/domain/spool.ts",
+      "poc/notifications.mjs",
+      "poc/manual-spool.mjs"
+    ],
+    "symbols": [
+      "createAccountService",
+      "createNotificationService",
+      "notificationSettings",
+      "createMachineMetadata",
+      "createPersist",
+      "manualSpool"
+    ],
+    "tests": [
+      "src/application/services.test.ts",
+      "poc/notifications.test.mjs",
+      "poc/manual-spool.test.mjs",
+      "poc/write-routes.test.mjs"
+    ],
+    "docs": [
+      "docs/MIGRATION-MVP.md"
     ]
   }
 ]

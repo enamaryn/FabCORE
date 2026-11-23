@@ -5,13 +5,7 @@ import { ErrorCode } from '../domain/index.ts';
 export const ErrorBody = Type.Object({ error: ErrorCode }, { additionalProperties: false, $id: 'ErrorBody' });
 
 /** Erreur métier transportée jusqu'au gestionnaire central, qui répond `{ error: code }`. */
-export class HttpError extends Error {
-  readonly statusCode: number;
-  constructor(statusCode: number, code: string) {
-    super(code);
-    this.statusCode = statusCode;
-  }
-}
+export { ServiceError as HttpError } from '../application/errors.ts';
 
 /** Réponses d'erreur documentées, réutilisées par chaque route. */
 export const errorResponses = (...statuses: number[]) =>
