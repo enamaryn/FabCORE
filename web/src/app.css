@@ -9,4 +9,3 @@
 .auth-divider{display:flex;align-items:center;gap:12px;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.auth-divider::before,.auth-divider::after{content:"";flex:1;height:1px;background:var(--line)}
 .auth-oidc{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:46px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font-weight:600;text-decoration:none}.auth-oidc:hover{background:var(--raised)}
 .auth-preferences{justify-content:center;gap:8px}.auth-preferences button{min-height:34px;font-size:13px}
-
