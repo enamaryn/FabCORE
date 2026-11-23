@@ -175,3 +175,30 @@ test('CC2 : limites conservées, calibration/chargement et contrôles non implé
   assert.deepEqual(await control.execute(machine, { action: 'light', id: 'main', value: true }, state), { outcome: 'rejected' });
   assert.equal(sends, 0);
 });
+
+test('CC2 : mise à l’origine 1026 puis déplacements 1027 bornés, confirmés par la position relue', async () => {
+  const machine = { id: 'cc2' };
+  let report = { machine_status: { status: 1 }, gcode_move: { x: 100, y: 264, z: 50 }, tool_head: { homed_axes: '' } };
+  const sent = [];
+  const read = () => reportedControls('elegoo', report);
+  let state = read();
+  assert.deepEqual(state.motion, { homed: '', position: [100, 264, 50], gcode: [100, 264, 50], minimum: [0, 0, 0], maximum: [256, 264, 256], home: true }, 'limite haute = position garée hors volume');
+  assert.equal(validateControl({ action: 'move', axis: 'Z', distance: 10, confirm: true }, state), null, 'aucun déplacement avant mise à l’origine');
+  const control = createManualControls('elegoo', { read, wait: async () => {}, confirmationAttempts: 3,
+    request: async (_machine, method, params) => { sent.push([method, params]); if (method === 1026) report = { ...report, tool_head: { homed_axes: 'xyz' } }; if (method === 1027) report = { ...report, gcode_move: { ...report.gcode_move, [params.axes]: report.gcode_move[params.axes] + params.distance } }; return true; } });
+  assert.deepEqual(await control.execute(machine, { action: 'home' }, state), { outcome: 'confirmed' });
+  assert.deepEqual(sent[0], [1026, { homed_axes: 'xyz' }]);
+  state = read();
+  assert.deepEqual(await control.execute(machine, { action: 'move', axis: 'Z', distance: 10 }, state), { outcome: 'confirmed' });
+  assert.deepEqual(sent[1], [1027, { axes: 'z', distance: 10 }]);
+  state = read();
+  assert.equal(validateControl({ action: 'move', axis: 'Y', distance: 1, confirm: true }, state), null, 'jamais au-delà d’une position déjà relue');
+  assert.equal(validateControl({ action: 'move', axis: 'X', distance: 10, confirm: true }, reportedControls('elegoo', { ...report, gcode_move: { x: 250, y: 10, z: 5 } })), null, 'hors volume refusé');
+  assert.equal(reportedControls('elegoo', { ...report, machine_status: { status: 2 } }).motion.home, false, 'pas de mise à l’origine en fabrication');
+  const stuck = createManualControls('elegoo', { read: () => state, request: async (_m, method, params) => { sent.push([method, params]); return true; }, wait: async () => {}, confirmationAttempts: 3 });
+  const before = sent.length;
+  await assert.rejects(stuck.execute(machine, { action: 'move', axis: 'X', distance: 1 }, state), /command-unconfirmed/, 'position inchangée : inconnu');
+  assert.equal(sent.length, before + 1, 'aucun renvoi');
+  const refused = createManualControls('elegoo', { read, request: async () => false, wait: async () => {}, confirmationAttempts: 3 });
+  assert.deepEqual(await refused.execute(machine, { action: 'move', axis: 'X', distance: 1 }, state), { outcome: 'rejected' }, 'error_code 1003 : refus');
+});

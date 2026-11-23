@@ -97,3 +97,35 @@ test('HTTP : deux secondes minimum entre deux contrôles CC2, 500 ms ailleurs', 
   clock += 600;
   assert.notEqual((await control(voron)).status, 429, 'Klipper : 500 ms inchangés');
 });
+
+test('CC2 : position et origine conservées depuis la session, ancien nom gcode_move_inf accepté', async () => {
+  const machine = { id: 'cc2b', kind: 'elegoo', serial: 'CC2MOVE01', origin: 'mqtt://192.168.1.3:1883', accessCode: 'test-only' };
+  const client = new EventEmitter(); client.connected = true;
+  let response;
+  const commands = [];
+  const deliver = (topic, data) => client.emit('message', topic, Buffer.from(JSON.stringify(data)), { retain: false });
+  const push = result => deliver(`elegoo/${machine.serial}/api_status`, { method: 6000, result });
+  client.subscribe = (_topics, done) => done(null, [{ qos: 0 }, { qos: 0 }, { qos: 0 }]);
+  client.end = () => {};
+  client.publish = (topic, payload, options, callback) => {
+    const data = JSON.parse(payload);
+    if (topic.endsWith('/api_register')) deliver(`elegoo/${machine.serial}/${data.request_id}/register_response`, { error: 'ok' });
+    else if (data.method === 1002) deliver(response, { id: data.id, method: 1002, result: { machine_status: { status: 1 }, extruder: { temperature: 22, target: 0 }, gcode_move_inf: { x: 10, y: 20, z: 30 }, toolhead: { homed_axes: 'xyz' } } });
+    else if (data.method === 1027) {
+      commands.push(data); callback();
+      queueMicrotask(() => { deliver(response, { id: data.id, method: 1027, result: { error_code: 0 } }); push({ gcode_move: { [data.params.axes]: 30 + data.params.distance } }); });
+    }
+  };
+  const monitor = createElegooMonitor({ fetcher: async () => Response.json({ system_info: { sn: machine.serial } }),
+    connectPrinter(_url, options) { response = `elegoo/${machine.serial}/${options.clientId}/api_response`; queueMicrotask(() => client.emit('connect')); return client; } });
+  const registry = createConnectorRegistry({}, () => ({ controls: true, load: async () => ({ ...monitor }) }));
+  try {
+    const connector = await registry.get('elegoo');
+    await connector.read(machine); await setImmediate();
+    const state = await connector.control.read(machine);
+    assert.deepEqual([state.motion.homed, state.motion.position], ['xyz', [10, 20, 30]]);
+    assert.deepEqual(await connector.control.execute(machine, { action: 'move', axis: 'Z', distance: 10 }, state), { outcome: 'confirmed' });
+    assert.deepEqual(commands.map(command => command.params), [{ axes: 'z', distance: 10 }]);
+    assert.deepEqual((await connector.control.read(machine)).motion.position, [10, 20, 40], 'X et Y conservés lors d’une mise à jour partielle');
+  } finally { registry.close(); }
+});

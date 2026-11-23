@@ -28,6 +28,12 @@ export interface CC2Report {
   led?: { status?: unknown };
   /** Ventilateurs : `speed` en PWM 0–255, `rpm` éventuel (méthode 1030 pour `fan`, `aux_fan`, `box_fan`). */
   fans?: Record<string, { speed?: unknown; rpm?: unknown }>;
+  /** Position commandée en mm (`gcode_move`, `gcode_move_inf` sur d'anciens firmwares). */
+  gcode_move?: Record<string, unknown>;
+  gcode_move_inf?: Record<string, unknown>;
+  /** Axes à l'origine (`homed_axes`, par exemple `xyz`) ; `toolhead` sur certains firmwares. */
+  tool_head?: Record<string, unknown>;
+  toolhead?: Record<string, unknown>;
   [key: string]: unknown;
 }
 export interface CC2Result extends CC2Report { error_code?: number; file_list?: unknown }
