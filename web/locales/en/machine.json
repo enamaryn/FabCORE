@@ -101,5 +101,9 @@
     "spool-invalid": "Invalid spool information.",
     "storage-unavailable": "Storage unavailable. Retry later."
   },
-  "machineSettings": "Machine settings"
+  "machineSettings": "Machine settings",
+  "cameraEnlarge": "Enlarge camera",
+  "cameraReduce": "Shrink camera",
+  "cameraPage": "Full page",
+  "cameraExitPage": "Exit full page (Esc)"
 }

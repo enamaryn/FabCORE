@@ -39,6 +39,9 @@ test('socle HTTP : en-têtes de sécurité, refus d’hôte et format d’erreur
   assert.equal(session.headers['x-content-type-options'], 'nosniff');
   assert.equal(session.headers['referrer-policy'], 'no-referrer');
   assert.match(String(session.headers['content-security-policy']), /frame-ancestors 'none'/);
+  // Aperçu caméra React : image JPEG lue en blob ; seules les images y ont droit, pas les scripts.
+  assert.match(String(session.headers['content-security-policy']), /img-src 'self' blob:;/);
+  assert.doesNotMatch(String(session.headers['content-security-policy']), /script-src[^;]*blob:/);
   assert.match(String(session.headers['content-type']), /^application\/json; charset=utf-8/);
   assert.deepEqual(session.json(), { installed: true, authenticated: false, username: null });
   const wrongHost = await get(http, '/api/session', undefined, 'evil.test');

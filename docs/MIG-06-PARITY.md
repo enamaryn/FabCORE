@@ -88,3 +88,10 @@ Recette après fusion : liste native CC2/P2S, envoi puis relecture et téléchar
 - Interface : version relue à chaque changement de page. En bas à gauche, « Version abc1234 · à jour », ou un encadré « Mise à jour disponible » bien visible (et dans le menu Compte sur mobile). Administrateur : fenêtre « Ne pas me rappeler » (cette version ; une version plus récente est annoncée à nouveau), « Me rappeler plus tard » (24 h au plus une fois), « Faire la mise à jour » (commande `fabcore update` à copier : l’interface ne lance pas la mise à jour, qui demande les droits root du serveur). Choix gardés dans le navigateur.
 - Menu Compte refermé à chaque changement de page ; rôle affiché à côté du menu, plus en bas de la barre latérale.
 - Vérifications : `src/application/version.test.ts`, `web/test/update-prompt.test.ts` ; Chromium local avec dépôt d’origine simulé : fenêtre affichée puis « plus tard » respecté au changement de page, encadré visible, menu refermé après un lien et après la navigation latérale, une seule interrogation de GitHub.
+
+## Fiche machine : mise en page alignée
+
+- Trois rangées en paires, hauteurs alignées : Fabrication | Déplacements, Caméra | Températures, Filaments | Actions rapides. Une colonne sous 900 px.
+- Réglages en lignes alignées (nom | état | commande) ; éclairage en interrupteur, vert quand allumé ; libellés de saisie portés par `aria-label`. Chauffes : mesure, consigne remontée et saisie sur la même ligne.
+- Caméra : clic sur l'image pour agrandir/réduire dans la page ; « Pleine page » occupe la fenêtre du navigateur (pas le plein écran système), Échap pour revenir. Un seul flux à la fois.
+- Correctif : la politique de sécurité autorise désormais les images `blob:` (`img-src 'self' blob:`), nécessaires à l'aperçu caméra React, qui échouait jusque-là.

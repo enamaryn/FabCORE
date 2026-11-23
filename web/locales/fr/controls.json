@@ -66,5 +66,8 @@
     "sport": "Sport",
     "ludicrous": "Ludicrous",
     "unknown": "Non communiqué"
-  }
+  },
+  "offState": "Éteint",
+  "readOnlyShort": "Lecture seule",
+  "speedCurrent": "Mode actuel"
 }
