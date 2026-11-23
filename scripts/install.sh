@@ -81,27 +81,36 @@ else
   update_bin="$HOME/.local/bin"
 fi
 mkdir -p -- "$update_bin"
-launcher=$(mktemp "$update_bin/.fabcore-update.XXXXXXXX")
-trap 'rm -f -- "$launcher"' EXIT
-{
-  printf '#!/usr/bin/env bash\n'
-  printf 'export PATH=%q:"$PATH"\n' "$(dirname -- "$(command -v node)")"
-  printf 'exec bash %q "$@"\n' "$(pwd -P)/scripts/update.sh"
-} > "$launcher"
-chmod 0755 "$launcher"
-mv -Tf -- "$launcher" "$update_bin/fabcore-update"
-trap - EXIT
+# `fabcore` : commande d'administration (update, backup, restore…) ; `fabcore-update` reste un alias de `fabcore update`.
+write_launcher() {
+  local name=$1 launcher
+  shift
+  launcher=$(mktemp "$update_bin/.$name.XXXXXXXX")
+  trap 'rm -f -- "$launcher"' EXIT
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'export PATH=%q:"$PATH"\n' "$(dirname -- "$(command -v node)")"
+    printf 'exec bash %q %s"$@"\n' "$(pwd -P)/scripts/fabcore.sh" "$*"
+  } > "$launcher"
+  chmod 0755 "$launcher"
+  mv -Tf -- "$launcher" "$update_bin/$name"
+  trap - EXIT
+}
+write_launcher fabcore
+write_launcher fabcore-update 'update '
 
 # Proxmox can enter a minimal LXC with /usr/bin but without /usr/local/bin.
-if (( EUID == 0 )) && [[ :$PATH: != *:"$update_bin":* && :$PATH: == *:/usr/bin:* &&
-    ! -e /usr/bin/fabcore-update && ! -L /usr/bin/fabcore-update ]]; then
-  ln -s -- "$update_bin/fabcore-update" /usr/bin/fabcore-update
-fi
+for name in fabcore fabcore-update; do
+  if (( EUID == 0 )) && [[ :$PATH: != *:"$update_bin":* && :$PATH: == *:/usr/bin:* &&
+      ! -e /usr/bin/$name && ! -L /usr/bin/$name ]]; then
+    ln -s -- "$update_bin/$name" "/usr/bin/$name"
+  fi
+done
 
-if [[ $(command -v fabcore-update) == "$update_bin/fabcore-update" ||
-    $(readlink -f -- "$(command -v fabcore-update || true)") == "$update_bin/fabcore-update" ]]; then
-  echo 'Pour mettre FabCore à jour : fabcore-update'
+if [[ $(command -v fabcore) == "$update_bin/fabcore" ||
+    $(readlink -f -- "$(command -v fabcore || true)") == "$update_bin/fabcore" ]]; then
+  echo 'Administration : fabcore help (mise à jour : fabcore update, sauvegarde : fabcore backup)'
 else
-  printf 'Pour mettre FabCore à jour : %q\n' "$update_bin/fabcore-update"
+  printf 'Administration : %q help\n' "$update_bin/fabcore"
 fi
 exec npm start

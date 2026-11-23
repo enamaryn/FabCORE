@@ -159,10 +159,12 @@ FabCore lit le numéro de série et l’état de la M2. À l’ajout, il mémori
 
 ### Passer de state.json à PostgreSQL (MIG-04)
 
-1. Arrêter FabCore et sauvegarder tout `FABCORE_DATA` (`state.json`, `cloud-secret.key`, fichiers, journaux).
-2. Simulation (écrit, vérifie les contraintes, relit et compare, puis annule) : `FABCORE_DATABASE_URL=… node scripts/import-state.mjs --data <dossier>`. Le rapport JSON donne les comptes et les anomalies (codes et chemins, jamais de valeur). Code de sortie 2 si une anomalie bloque.
-3. Import réel : même commande avec `--apply`. Relancer est sans effet (`already-imported`) ; une base contenant d’autres données est refusée (`database-not-empty`).
+1. Arrêter FabCore et sauvegarder tout `FABCORE_DATA` : `fabcore backup`.
+2. Simulation (écrit, vérifie les contraintes, relit et compare, puis annule) : `fabcore import` (ou `FABCORE_DATABASE_URL=… node scripts/import-state.mjs --data <dossier>`). Le rapport JSON donne les comptes et les anomalies (codes et chemins, jamais de valeur). Code de sortie 2 si une anomalie bloque.
+3. Import réel : `fabcore import --apply`. Relancer est sans effet (`already-imported`) ; une base contenant d’autres données est refusée (`database-not-empty`).
 4. Démarrer FabCore avec `FABCORE_DATABASE_URL`. Sans import, une base vide à côté d’un `state.json` refuse de démarrer (`database-import-required`) ; une seconde instance sur la même base aussi (`database-in-use`).
+
+Sauvegarde : `fabcore backup` archive `FABCORE_DATA` (dont `cloud-secret.key`, indispensable aux jetons cloud) et, avec PostgreSQL, un `pg_dump` du schéma FabCore (client `postgresql-client-<version>` de la même version majeure que le serveur requis : un client plus récent produit des archives que PostgreSQL 16 refuse) ; à chaud, un envoi de fichier en cours peut manquer. `fabcore restore` vérifie l’empreinte et l’archive, refuse si FabCore utilise encore la base, si le schéma diffère ou si une sauvegarde JSON est remise sur une installation PostgreSQL, sauvegarde l’état actuel, puis restaure la base en une seule transaction. Pour répéter une restauration sur copie : `FABCORE_SERVICE=none FABCORE_DATA=<copie> FABCORE_DATABASE_URL=<base de copie> fabcore restore <archive> --yes`.
 
 `state.json` n’est plus modifié une fois PostgreSQL actif : un retour au JSON perdrait les changements ultérieurs. L’URL ne doit pas être passée en argument (liste des processus) ni journalisée. Base indisponible pendant une écriture : réponse 503 `storage-unavailable`, état précédent conservé.
 

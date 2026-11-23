@@ -1,4 +1,6 @@
 /.fabcore/
+/.fabcore-backups/
+/.fabcore.avant-restauration-*/
 /node_modules/
 # Caches/outils IA locaux ; seule la configuration Serena est versionnée.
 /.serena/*

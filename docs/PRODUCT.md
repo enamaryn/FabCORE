@@ -47,7 +47,7 @@ Règles durables tirées des essais du POC. Elles s’appliquent à toute nouvel
 
 - Viser une installation presque prête à l’emploi sur serveur Linux ou LXC Proxmox.
 - N’annoncer une distribution, Docker ou les Community Scripts qu’après implémentation et validation.
-- Installer les dépendances des fonctions livrées (Node.js, FFmpeg…). Rendre `fabcore-update` disponible dès l’installation.
+- Installer les dépendances des fonctions livrées (Node.js, FFmpeg…). Rendre la commande `fabcore` (mise à jour, sauvegarde, restauration) disponible dès l’installation.
 - Préserver les données, droits et réglages lors des mises à jour. Documenter les limites et les vérifications réellement faites.
 - Garder un README accessible, orienté produit, avec des compatibilités honnêtes et des liens vers les guides techniques.
 

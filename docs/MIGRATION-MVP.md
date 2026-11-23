@@ -14,7 +14,7 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 | MIG-01 | Architecture, contrats et outillage | MIG-00 | Fusionné : PR #100 et #101 ([ADR](adr/README.md)) |
 | MIG-02 | Domaine et connecteurs TypeScript | MIG-01 | Fusionné (#102 à #107, #109) ; recette physique à faire |
 | MIG-03 | Services backend et API | MIG-02 | Fusionné jusqu'à #114 ; dernière étape (routage complet, corrélation, niveaux) en revue |
-| MIG-04 | PostgreSQL et reprise des données | MIG-03 | En cours (04.1, import 04.2.1–04.2.2) |
+| MIG-04 | PostgreSQL et reprise des données | MIG-03 | En cours (04.1, 04.2 ; reste extraction des services et parcours d'installation) |
 | MIG-05 | Événements et SSE | MIG-03/04 | À faire |
 | MIG-06 | Interface React par parcours | MIG-05 | À faire |
 | MIG-07 | Documentation et extensibilité | MIG-02 à 06 | À faire |
@@ -141,7 +141,8 @@ Validation locale Node 24 : types, lint, **154 tests**, licences et navigation. 
 - **04.1.3** : seul l'état d'installation passe en base ; télémétrie courante en mémoire, journaux en fichiers bornés, fichiers et `cloud-secret.key` dans `FABCORE_DATA`. Aucun historique ni gros fichier en SQL à ce stade.
 - **Magasin** (`openPostgresStore`) : même contrat que `state.json`, choisi par `FABCORE_DATABASE_URL` (JSON par défaut, inchangé). Lecture synchrone en mémoire ; chaque écriture est attendue avant la réponse, par différence dans une transaction ; échec : 503 `storage-unavailable`, état mémoire ramené au dernier état durable, lot entier refusé.
 - **04.2.1–04.2.2** : `scripts/import-state.mjs` : simulation par défaut (écriture, contraintes et relecture puis annulation), `--apply` transactionnel, idempotent (`already-imported`), refus d'une base différente ; rapport de codes et chemins sans valeur ; sels/hachages et jetons chiffrés repris tels quels, lisibilité des jetons vérifiée avec la clé. Comparaison complète avant/après dans la transaction.
-- **Reste** : 04.2.3 sauvegarde/restauration (base, JSON, fichiers, clés) et répétition sur copie ; extraction des services de `poc/server.mjs` en TypeScript ; parcours d'installation avec PostgreSQL local ou externe (ADR 0007). Codes d'accès machine encore en clair dans la colonne JSONB, comme dans `state.json`.
+- **04.2.3** (PR séparée) : commande `fabcore` (`update`, `backup`, `backups`, `restore`, `import`, `status`) ; archive données + clés + `pg_dump` du schéma, empreinte SHA-256, rétention ; restauration vérifiée (`--check`), confirmée, précédée d'une sauvegarde, en une transaction PostgreSQL, refusée si une instance tient la base ou si le schéma diffère ; répétition sur copie par `FABCORE_DATA`/`FABCORE_DATABASE_URL`. Sauvegarde automatique avant `fabcore update`.
+- **Reste** : extraction des services de `poc/server.mjs` en TypeScript ; parcours d'installation avec PostgreSQL local ou externe (ADR 0007). Codes d'accès machine encore en clair dans la colonne JSONB, comme dans `state.json`.
 
 **Sortie :** import reproductible sans perte et restauration prouvée ; même chemin PostgreSQL auto-hébergement/cloud. **Retour arrière :** arrêter les écritures, sauvegarder les changements intervenus, restaurer version et sauvegarde pré-migration. Aucun retour aveugle au JSON qui perdrait des changements.
 
