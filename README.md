@@ -55,11 +55,20 @@ Le script télécharge le projet, installe les dépendances manquantes, dont Nod
 
 Ouvrez <http://127.0.0.1:3000> et utilisez le jeton affiché pour créer votre compte administrateur. Pour un serveur distant, suivre le [guide d’accès par tunnel SSH ou reverse proxy HTTPS](poc/README.md#4-ouvrir-linterface).
 
-## Mise à jour
+## Mise à jour et sauvegardes
 
-Si FabCore tourne dans le terminal, arrêtez-le avec `Ctrl+C`, puis lancez `fabcore-update` avec le compte utilisé pour l’installation. Relancez ensuite `bash scripts/install.sh` depuis le dossier FabCore. Un service systemd actif nommé `fabcore` est redémarré automatiquement si son dossier de travail correspond à cette installation.
+L’installation fournit la commande d’administration `fabcore` (`fabcore help` liste tout) :
 
-`fabcore-update --check` compare la version installée à la branche `main` sans déployer. Si la commande est absente du PATH, utilisez `/usr/local/bin/fabcore-update` pour une installation root ou `~/.local/bin/fabcore-update` pour une installation utilisateur.
+| Commande | Rôle |
+| --- | --- |
+| `fabcore update` | Sauvegarde automatique, puis mise à jour depuis `main` (`--check` : comparer sans déployer) |
+| `fabcore backup` | Archive horodatée des données, des clés et de la base PostgreSQL éventuelle, avec empreinte SHA-256 |
+| `fabcore backups` | Liste des sauvegardes (les 10 dernières sont conservées) |
+| `fabcore restore <archive>` | Remet une sauvegarde en place après confirmation et sauvegarde de l’état actuel (`--check` : vérifier sans rien modifier) |
+| `fabcore import` | Passage de `state.json` à PostgreSQL (simulation, puis `--apply`) |
+| `fabcore status` | Version, service, stockage et dernière sauvegarde |
+
+Si FabCore tourne dans le terminal, arrêtez-le avec `Ctrl+C`, puis lancez `fabcore update` avec le compte utilisé pour l’installation. Relancez ensuite `bash scripts/install.sh` depuis le dossier FabCore. Un service systemd actif nommé `fabcore` est redémarré automatiquement si son dossier de travail correspond à cette installation, et arrêté le temps d’une restauration. `fabcore-update` reste disponible et équivaut à `fabcore update` ; une installation antérieure obtient la commande `fabcore` en relançant `bash scripts/install.sh`. Si la commande est absente du PATH, utilisez `/usr/local/bin/fabcore` (root) ou `~/.local/bin/fabcore` (utilisateur). Les sauvegardes sont dans `.fabcore-backups` du dossier FabCore ; copiez-les aussi hors de la machine.
 
 ## Ajoutez votre première machine
 
