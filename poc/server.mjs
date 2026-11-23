@@ -8,7 +8,7 @@ import { once } from 'node:events';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { readWebAssets } from '../src/http/web-build.ts';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { discoveryNetworks, reconcileDiscovery, scanNetwork } from './discovery.mjs';
@@ -207,7 +207,16 @@ export function createFabCore({ directory, store: storage = openStore(directory)
   async function handleAsset(req, res) {
     const path = req.url;
     if (path === '/app' || path === '/app/' || /^\/app\/assets\/[A-Za-z0-9_.-]+\.(js|css)$/.test(path)) {
-      const asset = (await (reactAssets ??= readWebAssets())).get(path);
+      let assets;
+      try { assets = await (reactAssets ??= readWebAssets({ fallback: join(resolve(directory ?? '.fabcore'), 'web-dist') })); }
+      catch (failure) {
+        // Compilation impossible : cause dans le journal du service, page explicite, nouvel essai à la prochaine visite.
+        reactAssets = null;
+        console.error(`FabCore · interface /app indisponible : ${failure?.code ?? ''} ${String(failure?.message ?? failure).split('\n')[0]}`.trim());
+        res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': '60' });
+        return res.end('<!doctype html><meta charset="utf-8"><title>FabCore</title><p>La nouvelle interface n’a pas pu être préparée (voir <code>journalctl -u fabcore</code>). Lancer <code>npm run build:web</code> dans le dossier de FabCore puis réessayer. <a href="/">Interface actuelle</a></p>');
+      }
+      const asset = assets.get(path);
       if (!asset) return error(res, 404, 'missing');
       res.writeHead(200, { 'Content-Type': asset.type });
       return res.end(asset.body);

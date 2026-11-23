@@ -706,8 +706,8 @@ const statusLabels = {
 };
 let telemetryTimer;
 let fleetRevision = 0;
-// Mobile : une actualisation reconstruit la page du parc ; jamais pendant un geste tactile ni son élan (iOS
-// interrompt le défilement), et toujours à la même position de défilement.
+// Mobile : aucune actualisation pendant un geste tactile ni son élan (iOS interrompt le défilement) ; la page du
+// parc reconstruite garde sa position de défilement.
 let touchActive = false, touchTimer = null, deferredRender = false;
 function redrawKeepingScroll() {
   const x = scrollX, y = scrollY;
@@ -719,8 +719,9 @@ for (const type of ['touchend', 'touchcancel']) addEventListener(type, () => {
   clearTimeout(touchTimer);
   touchTimer = setTimeout(() => {
     touchActive = false;
-    if (deferredRender && live.phase === 'workshop' && !dialog.open) redrawKeepingScroll();
+    const pending = deferredRender;
     deferredRender = false;
+    if (pending) refresh();
   }, 800);
 }, { passive: true });
 let workshopEpoch = 0;
@@ -762,6 +763,8 @@ function startLiveUpdates() {
 }
 async function refresh() {
   if (live.pending || live.phase !== 'workshop') return;
+  // Geste tactile en cours : aucune modification de la page avant la fin du geste et de son élan.
+  if (touchActive) { deferredRender = true; return; }
   live.pending = true;
   try {
     const revision = fleetRevision;
@@ -822,8 +825,7 @@ async function refresh() {
         if (current && app.querySelector('[data-files]')?.dataset.fileStart !== String(canStart(current))) renderFiles(current.id);
         const target = app.querySelector('[data-terminal-target]');
         if (target && current) target.innerHTML = terminalTarget(current);
-      } else if (touchActive) deferredRender = true;
-      else redrawKeepingScroll();
+      } else redrawKeepingScroll();
       if (action) [...app.querySelectorAll('[data-action]')].find(button => button.dataset.action === action && button.getClientRects().length)?.focus({ preventScroll: true });
     }
   } catch (error) {
