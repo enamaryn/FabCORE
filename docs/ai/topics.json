@@ -370,21 +370,37 @@
       "poc/production-files.mjs",
       "poc/file-transfer.mjs",
       "poc/gcode.mjs",
-      "poc/live.js"
+      "poc/live.js",
+      "web/src/components/files/FilesPanel.tsx",
+      "web/src/components/files/TransferDialog.tsx",
+      "web/src/components/files/PrintFileDialog.tsx",
+      "web/src/file-batch.ts",
+      "web/src/files.ts",
+      "web/src/api.ts"
     ],
     "symbols": [
       "retainedFiles",
       "transferMachineFile",
       "createGcodeParser",
-      "filesPanel"
+      "filesPanel",
+      "FilesPanel",
+      "TransferDialog",
+      "PrintFileDialog",
+      "filePage",
+      "runFileBatch"
     ],
     "tests": [
       "poc/file-transfer.test.mjs",
       "poc/viewer.test.mjs",
-      "poc/transfer-ui.test.mjs"
+      "poc/transfer-ui.test.mjs",
+      "web/test/files-data.test.ts",
+      "web/test/files-api.test.ts",
+      "web/test/files-components.test.mjs",
+      "web/test/transfers.test.mjs"
     ],
     "docs": [
-      "poc/CONNECTORS.md"
+      "poc/CONNECTORS.md",
+      "docs/MIG-06-PARITY.md"
     ]
   },
   {
@@ -575,7 +591,7 @@
   },
   {
     "id": "react",
-    "title": "Interface React : sessions, parc, cockpit, i18n et SSE",
+    "title": "Interface React : sessions, parc, cockpit, fichiers, i18n et SSE",
     "files": [
       "web/src/App.tsx",
       "web/src/main.tsx",
@@ -590,7 +606,10 @@
       "web/src/components/machine/CameraPanel.tsx",
       "web/src/components/machine/MaterialsPanel.tsx",
       "web/src/route.ts",
-      "web/src/temperature.ts"
+      "web/src/temperature.ts",
+      "web/src/components/machine/MachineHeader.tsx",
+      "web/src/components/files/FilesPanel.tsx",
+      "web/src/components/files/TransferDialog.tsx"
     ],
     "symbols": [
       "App",
@@ -602,7 +621,10 @@
       "CameraPanel",
       "MaterialsPanel",
       "parseRoute",
-      "recordTemperatures"
+      "recordTemperatures",
+      "MachineHeader",
+      "FilesPanel",
+      "TransferDialog"
     ],
     "tests": [
       "web/test/api.test.ts",
@@ -611,7 +633,9 @@
       "poc/react-pages.test.mjs",
       "web/test/cockpit.test.mjs",
       "web/test/cockpit-data.test.ts",
-      "web/test/controls.test.mjs"
+      "web/test/controls.test.mjs",
+      "web/test/files-components.test.mjs",
+      "web/test/transfers.test.mjs"
     ],
     "docs": [
       "docs/MIG-06-PARITY.md",

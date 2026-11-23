@@ -12,7 +12,7 @@ import { validateControl as pocValidation } from '../../poc/manual-controls.mjs'
 
 const resources = Object.fromEntries(['fr', 'en'].map(lang => [lang, { controls: JSON.parse(readFileSync(new URL(`../locales/${lang}/controls.json`, import.meta.url), 'utf8')) }]));
 const i18n = createInstance(); await i18n.use(ICU).init({ resources, lng: 'fr', defaultNS: 'controls', interpolation: { escapeValue: false } });
-const server = await createServer({ configFile: new URL('../vite.config.ts', import.meta.url).pathname, server: { middlewareMode: true, hmr: false }, optimizeDeps: { noDiscovery: true }, logLevel: 'error' });
+const server = await createServer({ configFile: new URL('../vite.config.ts', import.meta.url).pathname, server: { middlewareMode: true, hmr: false, ws: false }, optimizeDeps: { noDiscovery: true }, logLevel: 'error' });
 after(() => server.close());
 const { HeaterControls, QuickControls, MotionControls } = await server.ssrLoadModule('/src/components/controls/index.ts');
 const { allowed } = await server.ssrLoadModule('/src/components/controls/shared.tsx');

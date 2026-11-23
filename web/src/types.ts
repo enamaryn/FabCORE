@@ -24,6 +24,7 @@ export type MachineCapabilities = Static<typeof FleetCapabilities>;
 /** Stable API contract plus optional, reported presentation telemetry. */
 export type MachineData = Static<typeof FleetMachine> & {
   model?: string | null;
+  serial?: string | null;
   origin?: string;
   capabilities?: MachineCapabilities;
   transport?: string;
@@ -36,6 +37,8 @@ export type MachineData = Static<typeof FleetMachine> & {
   progress?: number | null;
   progressKnown?: boolean;
   file?: string | null;
+  filePath?: string | null;
+  filePosition?: number | null;
   checkedAt?: string | null;
   filaments?: FilamentUnit[] | null;
   manualSpool?: ManualSpool | null;

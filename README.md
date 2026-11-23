@@ -14,7 +14,7 @@ Gardez un œil sur vos fabrications, ouvrez les caméras en direct et voyez quel
 
 ![Tableau de bord FabCore avec le parc et l’activité récente](docs/screenshots/vue-ensemble.webp)
 
-**POC clôturé le 22 novembre 2026 sur P2S et deux CC2.** [Bilan et limites](docs/POC-BILAN.md) · [Migration vers le MVP](docs/MIGRATION-MVP.md). [Release « POC v0 » publiée](https://github.com/enamaryn/FabCORE/releases/tag/poc-v0). La migration technique du MVP est engagée. Le socle React, la vue d’ensemble et le parc sont fusionnés (#126), accessibles sur `/app`. Le cockpit machine React à six blocs est en cours de revue : caméra, filaments, fabrication, températures, actions rapides et déplacements. Les fichiers, logs et outils non encore migrés restent accessibles dans l’interface actuelle.
+**POC clôturé le 22 novembre 2026 sur P2S et deux CC2.** [Bilan et limites](docs/POC-BILAN.md) · [Migration vers le MVP](docs/MIGRATION-MVP.md). [Release « POC v0 » publiée](https://github.com/enamaryn/FabCORE/releases/tag/poc-v0). La migration technique du MVP est engagée. Le socle React et le parc (#126), puis le cockpit machine à six blocs (#127), sont fusionnés et accessibles sur `/app`. Le parcours React des fichiers et transferts est en revue : recherche, tri, pagination, téléchargement, envoi et transferts multiples avec lancement séparé. Le visualiseur, les logs et les outils non encore migrés restent accessibles dans l’interface actuelle.
 
 ## Ce que vous pouvez faire
 

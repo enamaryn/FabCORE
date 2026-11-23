@@ -30,5 +30,9 @@ test('React HTTP : build servi sans CDN, assets confinés, shell public et API a
   assert.equal((await get(server, '/?screen=add')).status, 200);
   assert.equal((await get(server, '/?screen=cloud')).status, 200);
   assert.equal((await get(server, '/?machine=11111111-1111-4111-8111-111111111111')).status, 200);
+  for (const view of ['usb/part.gcode', 'part.gcode.3mf', 'folder/laser.nc']) assert.equal((await get(server, '/?machine=11111111-1111-4111-8111-111111111111&view=' + encodeURIComponent(view))).status, 200);
+  assert.equal((await get(server, '/?machine=11111111-1111-4111-8111-111111111111&view=part.gcode&follow=1')).status, 200);
+  assert.equal((await get(server, '/?machine=11111111-1111-4111-8111-111111111111&view=part.gcode&follow=invalid')).status, 404);
+  for (const view of ['../part.gcode', '<script>', 'a.png', 'a\\part.gcode']) assert.equal((await get(server, '/?machine=11111111-1111-4111-8111-111111111111&view=' + encodeURIComponent(view))).status, 404);
   for (const tab of ['files', 'logs', 'console']) assert.equal((await get(server, '/?machine=11111111-1111-4111-8111-111111111111&tab=' + tab)).status, 200);
 });

@@ -5,6 +5,7 @@ import { errorResponses } from '../errors.ts';
 export const FleetCapabilities = Type.Object({
   camera: Type.Optional(Type.Boolean()), controls: Type.Optional(Type.Boolean()),
   commands: Type.Optional(Type.Boolean()), commandActions: Type.Optional(Type.Array(Type.String())),
+  projects: Type.Optional(Type.Boolean()), retainedOnly: Type.Optional(Type.Boolean()),
   files: Type.Optional(Type.Boolean()), terminal: Type.Optional(Type.Boolean()),
   filaments: Type.Optional(Type.Union([Type.String(), Type.Null()])), temperatures: Type.Optional(Type.Boolean()),
   printJob: Type.Optional(Type.Boolean()), fileFamily: Type.Optional(Type.String()), externalFilament: Type.Optional(Type.Boolean()),

@@ -11,7 +11,7 @@ import { createServer } from 'vite';
 
 const resources = Object.fromEntries(['fr', 'en'].map(lang => [lang, Object.fromEntries(readdirSync(new URL('../locales/fr/', import.meta.url)).filter(name => name.endsWith('.json')).map(name => name.slice(0, -5)).map(ns => [ns, JSON.parse(readFileSync(new URL(`../locales/${lang}/${ns}.json`, import.meta.url), 'utf8'))]))]));
 const i18n = createInstance(); await i18n.use(ICU).init({ resources, lng: 'fr', defaultNS: 'common', fallbackLng: ['en', 'fr'], interpolation: { escapeValue: false } });
-const server = await createServer({ configFile: new URL('../vite.config.ts', import.meta.url).pathname, server: { middlewareMode: true, hmr: false }, optimizeDeps: { noDiscovery: true }, logLevel: 'error' });
+const server = await createServer({ configFile: new URL('../vite.config.ts', import.meta.url).pathname, server: { middlewareMode: true, hmr: false, ws: false }, optimizeDeps: { noDiscovery: true }, logLevel: 'error' });
 after(() => server.close());
 const { FleetPage, FilamentDots, Shell } = await server.ssrLoadModule('/src/components/index.ts');
 const { resources: bundledResources } = await server.ssrLoadModule('/src/i18n.ts');

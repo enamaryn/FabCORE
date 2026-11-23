@@ -25,7 +25,7 @@ export function App() {
   const [theme, setTheme] = useState<Theme>(() => { const value = readPreference('fabcore-theme', 'dark'); return value === 'light' || value === 'dark' ? value : 'system'; });
   const api = useMemo(() => createApi(fetch, () => {
     client.setQueryData(['session'], { installed: true, authenticated: false, username: null });
-    for (const key of ['fleet', 'controls']) void client.cancelQueries({ queryKey: [key] }).then(() => client.removeQueries({ queryKey: [key] }));
+    for (const key of ['fleet', 'controls', 'files']) void client.cancelQueries({ queryKey: [key] }).then(() => client.removeQueries({ queryKey: [key] }));
   }), [client]);
   useEffect(() => applyTheme(theme), [theme]);
   useEffect(() => { document.documentElement.lang = i18n.resolvedLanguage ?? 'fr'; }, [i18n.resolvedLanguage]);
@@ -69,5 +69,5 @@ function Workshop({ api, username, role, page }: { api: ReturnType<typeof create
     if (changes.length) setEvents(items => [...changes, ...items].slice(0, 30));
   }, [fleet.data]);
   if (!fleet.data) return <section className="panel stack"><h1 tabIndex={-1}>{fleet.isError ? t('failed') : t('loading')}</h1>{fleet.isError && <button type="button" onClick={() => { void fleet.refetch(); }}>{t('retry')}</button>}</section>;
-  return <>{fleet.isError && <p className="notice" role="status">{t('refreshFailed')}</p>}{page.kind === 'machine' ? <MachineDetail key={page.id + ':' + role} id={page.id} machines={fleet.data} api={api} actor={username + ':' + role} role={role} samples={temperatures.get(page.id) ?? []} stale={fleet.isError} /> : page.kind === 'history' ? <HistoryPage events={events} /> : <FleetPage machines={fleet.data} overview={page.kind === 'home'} role={role} events={events} />}</>;
+  return <>{fleet.isError && <p className="notice" role="status">{t('refreshFailed')}</p>}{page.kind === 'machine' ? <MachineDetail key={page.id + ':' + role} id={page.id} tab={page.tab} machines={fleet.data} api={api} actor={username + ':' + role} role={role} samples={temperatures.get(page.id) ?? []} stale={fleet.isError} /> : page.kind === 'history' ? <HistoryPage events={events} /> : <FleetPage machines={fleet.data} overview={page.kind === 'home'} role={role} events={events} />}</>;
 }

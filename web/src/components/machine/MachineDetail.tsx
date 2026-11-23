@@ -12,14 +12,17 @@ import { CameraPanel } from './CameraPanel.tsx';
 import { MaterialsPanel } from './MaterialsPanel.tsx';
 import { TemperatureChart } from './TemperatureChart.tsx';
 import { Unavailable } from './Unavailable.tsx';
+import { MachineHeader } from './MachineHeader.tsx';
+import { connectionSignature } from '../../file-batch.ts';
+import { FilesPanel } from '../files/FilesPanel.tsx';
 import './machine.css';
 
-type Props = { id: string; machines: MachineData[]; api: ReturnType<typeof createApi>; actor: string; role: 'admin' | 'observer'; samples: TemperatureSample[]; stale: boolean };
+type Props = { id: string; machines: MachineData[]; api: ReturnType<typeof createApi>; actor: string; role: 'admin' | 'observer'; samples: TemperatureSample[]; stale: boolean; tab?: 'files' | undefined };
 export function MachineDetail(props: Props) {
   const { t } = useTranslation('machine');
   const machine = props.machines.find(item => item.id === props.id);
   if (!machine) return <section className="panel stack"><h1 tabIndex={-1}>{t('missing')}</h1><a href="#machines">{t('back')}</a></section>;
-  return <Cockpit key={machine.id + ':' + machine.kind + ':' + String(machine.origin ?? '')} {...props} machine={machine} />;
+  return <div className="react-detail"><MachineHeader machine={machine} role={props.role} tab={props.tab ?? 'overview'} />{props.tab === 'files' ? <FilesPanel key={machine.id + ':' + connectionSignature(machine)} machine={machine} machines={props.machines} actor={props.actor} role={props.role} stale={props.stale} api={props.api} /> : <Cockpit key={machine.id + ':' + connectionSignature(machine)} {...props} machine={machine} />}</div>;
 }
 function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machine: MachineData }) {
   const { t, i18n } = useTranslation('machine'); const client = useQueryClient();
@@ -63,11 +66,10 @@ function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machin
   const progress = machine.progressKnown !== false && typeof machine.progress === 'number' && Number.isFinite(machine.progress) && machine.progress >= 0 && machine.progress <= 100 ? machine.progress : null;
   const props = { machine, controls, role, busy: busy || stale, onControl };
   const temperature = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? new Intl.NumberFormat(i18n.resolvedLanguage, { style: 'unit', unit: 'celsius', maximumFractionDigits: 1 }).format(value) : t('notReported');
-  return <div className="react-detail"><div className="hero"><div className="row wrap"><a className="button ghost" href="#machines" aria-label={t('back')}>←</a><div><h1 tabIndex={-1}>{machine.name}</h1><p>{machine.model}</p></div><StatusBadge status={machine.status} /></div>{role === 'admin' && <a className="button ghost" href={'/?machine=' + encodeURIComponent(machine.id)}>{t('machineSettings')}</a>}</div>
-    <nav className="react-machine-tabs" aria-label={t('machineNavigation')}><a href={'#machine/' + machine.id} aria-current="page">{t('overview')}</a>{capabilities.files ? <a href={'/?machine=' + encodeURIComponent(machine.id) + '&tab=files'}>{t('files')}</a> : <span aria-disabled="true" title={t('unsupported')}>{t('files')}</span>}{role === 'admin' && <a href={'/?machine=' + encodeURIComponent(machine.id) + '&tab=logs'}>{t('logs')}</a>}{capabilities.terminal && <a href={'/?machine=' + encodeURIComponent(machine.id) + '&tab=console'}>{t('console')}</a>}</nav>
+  return <>
     <div aria-live="polite" className="machine-feedback">{failure && <p className="error" role="alert">{t('errors.' + errorKey)}</p>}{result && <p className="notice">{result.startsWith('state:') ? t('stateRead', { state: i18n.t('status.' + result.slice(6), { ns: 'fleet' }) }) : t('outcomes.' + result)}</p>}{busy && <p role="status">{t('sending')}</p>}</div>
     <div className="react-cockpit"><div className="react-cockpit-left"><CameraPanel machine={machine} api={api} /><MaterialsPanel machine={machine} role={role} busy={busy} save={saveSpool} /></div><div className="react-cockpit-right">
-      <section className="panel stack" data-machine-block="fabrication"><div className="row between wrap"><h2>{t('fabrication')}</h2><div className="row wrap"><StatusBadge status={machine.status} />{role === 'admin' && ['pause', 'resume', 'stop', 'start'].filter(action => commandAllowed(action, machine)).map(action => <button type="button" key={action} className={action === 'stop' ? 'danger' : 'primary'} disabled={busy || stale} onClick={() => { if (['start', 'stop'].includes(action)) setConfirm(action); else void runCommand(action); }}>{t('actions.' + action)}</button>)}{role === 'admin' && capabilities.files && ['ready', 'done'].includes(machine.status) && <a className="button ghost" href={'/?machine=' + encodeURIComponent(machine.id) + '&tab=files'}>{t('chooseFile')}</a>}</div></div>
+      <section className="panel stack" data-machine-block="fabrication"><div className="row between wrap"><h2>{t('fabrication')}</h2><div className="row wrap"><StatusBadge status={machine.status} />{role === 'admin' && ['pause', 'resume', 'stop', 'start'].filter(action => commandAllowed(action, machine)).map(action => <button type="button" key={action} className={action === 'stop' ? 'danger' : 'primary'} disabled={busy || stale} onClick={() => { if (['start', 'stop'].includes(action)) setConfirm(action); else void runCommand(action); }}>{t('actions.' + action)}</button>)}{role === 'admin' && capabilities.files && ['ready', 'done'].includes(machine.status) && <a className="button ghost" href={'#machine/' + machine.id + '/files'}>{t('chooseFile')}</a>}</div></div>
         <p className="react-job-file">{machine.file || t('noFile')}</p>{capabilities.printJob !== false && (progress === null ? <p>{t('progressUnknown')}</p> : <><strong>{new Intl.NumberFormat(i18n.resolvedLanguage).format(progress)} %</strong><progress value={progress} max={100} aria-label={t('progress')} /></>)}
         {machine.kind === 'bambu-cloud' && <p className="notice">{t('cloudReadOnly')}</p>}{machine.kind === 'xtool-m2' && <p>{t('preparedProject')}</p>}{machine.kind === 'longer-ray5' && <small>GRBL · {machine.nativeState || t('notReported')}{machine.firmware ? ' · ' + machine.firmware : ''}</small>}
         {machine.issue && <p className="notice">{t('machineIssue')} <code>{machine.issue}</code></p>}<small>{t('checkedAt')}: <time dateTime={machine.checkedAt ?? undefined}>{date}</time></small>
@@ -77,7 +79,7 @@ function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machin
       <section className="panel stack" data-machine-block="motion"><h2>{t('motion')}</h2><div hidden={!controls?.motion && !controls?.laser}><MotionControls {...props} /></div>{!controls?.motion && !controls?.laser && <Unavailable message={t(capabilities.controls ? controlsQuery.isError ? 'controlsUnavailable' : ['offline', 'connecting'].includes(machine.status) ? 'offline' : 'motionNotReported' : 'controlsUnsupported')} />}</section></div>
     </div></div>
     {confirm && <PrintConfirmation action={confirm} close={() => setConfirm(null)} submit={() => { void runCommand(confirm); }} />}
-  </div>;
+  </>;
 }
 function PrintConfirmation({ action, close, submit }: { action: string; close(): void; submit(): void }) {
   const { t } = useTranslation('machine'); const ref = useRef<HTMLDialogElement>(null), title = useId();
