@@ -24,21 +24,32 @@ export function safeMachineDetails(value, secrets = [], depth = 0, name = '') {
   if (omitted) result.omittedFields = omitted;
   return result;
 }
-export function createMachineLogs({ directory, machines, now = Date.now, limit = 1024 * 1024 }) {
+// Niveaux de journal (MIG-03.2.2) : `debug` pour les échanges protocolaires, `info` pour les événements,
+// `warn` pour les refus et résultats inconnus, `error` pour les défaillances internes.
+export const logLevels = ['debug', 'info', 'warn', 'error'];
+export function levelOf(area, code) {
+  if (area === 'protocol') return 'debug';
+  if (code === 'request-failed') return 'error';
+  return /fail|error|unconfirmed|unavailable|reject|denied|authorization|timeout|refus|offline|retry|interrupted|connection|access|tls|unknown/i.test(String(code)) ? 'warn' : 'info';
+}
+export function createMachineLogs({ directory, machines, now = Date.now, limit = 1024 * 1024, context = () => undefined, minLevel = 'debug' }) {
+  const threshold = Math.max(0, logLevels.indexOf(minLevel));
   const path = join(directory, 'machine-logs');
   mkdirSync(path, { recursive: true, mode: 0o700 });
   const failed = new Set();
   const file = id => join(path, id + '.log');
   const known = id => /^[a-f0-9-]{36}$/.test(id ?? '') && machines().find(item => item.id === id);
   return {
-    record(id, area, event, details = {}) {
+    record(id, area, event, details = {}, level = levelOf(area, event)) {
+      if (logLevels.indexOf(level) < threshold) return;
       const machine = known(id); if (!machine) return;
       try {
         const secrets = Object.entries(machine).filter(([key]) => secretName.test(key)).map(([, value]) => value).filter(value => typeof value === 'string');
-        const entry = { at: new Date(now()).toISOString(), area, event, details: safeMachineDetails(details, secrets) };
+        const requestId = context();
+        const entry = { at: new Date(now()).toISOString(), level, ...(requestId ? { requestId } : {}), area, event, details: safeMachineDetails(details, secrets) };
         const text = JSON.stringify(entry);
         // Preserve valid JSON even for unexpectedly large native reports.
-        const line = (Buffer.byteLength(text) <= 16384 ? text : JSON.stringify({ at: entry.at, area, event, details: { bytes: Buffer.byteLength(text), outcome: 'log-entry-too-large' } })) + '\n';
+        const line = (Buffer.byteLength(text) <= 16384 ? text : JSON.stringify({ at: entry.at, level, area, event, details: { bytes: Buffer.byteLength(text), outcome: 'log-entry-too-large' } })) + '\n';
         try { if (statSync(file(id)).size >= limit) renameSync(file(id), file(id) + '.1'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
         appendFileSync(file(id), line, { mode: 0o600 }); failed.delete(id);
       } catch { failed.add(id); /* Logging must never block a machine command. */ }

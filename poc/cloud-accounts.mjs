@@ -16,7 +16,7 @@ const fail = (code, status) => { throw new CloudError(code, status); };
 const text = (value, max) => typeof value === 'string' && value.length <= max ? value.trim() : '';
 
 // Log sanitized protocol bodies and selected HTTP metadata, never raw credentials or exceptions.
-export function createCloudAccounts({ store, directory, fetcher = fetch, now = Date.now, connectMqtt }) {
+export function createCloudAccounts({ store, directory, fetcher = fetch, now = Date.now, connectMqtt, context = () => undefined }) {
   const logDirectory = join(directory, 'cloud-logs');
   mkdirSync(logDirectory, { recursive: true, mode: 0o700 });
   const monitors = new Map();
@@ -37,7 +37,9 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
     try {
       if (statSync(path).size >= 256 * 1024) renameSync(path, path + '.1');
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    let entry = { at: new Date(now()).toISOString(), event, ...details };
+    const requestId = context();
+    const level = /fail|error|denied|refus|invalid|expired|unconfirmed|unavailable|auth/i.test(event) ? 'warn' : 'info';
+    let entry = { at: new Date(now()).toISOString(), level, ...(requestId ? { requestId } : {}), event, ...details };
     if (Buffer.byteLength(JSON.stringify(entry)) > 64 * 1024) entry = { at: entry.at, event, truncated: true, status: details.status, path: details.path, detailBytes: Buffer.byteLength(JSON.stringify(entry)) };
     appendFileSync(path, JSON.stringify(entry) + '\n', { mode: 0o600 });
   }

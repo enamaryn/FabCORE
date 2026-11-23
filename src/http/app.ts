@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import swagger from '@fastify/swagger';
 import Type from 'typebox';
+import { requestIdFrom, withRequestId } from './correlation.ts';
 import { ErrorBody, HttpError, errorResponses } from './errors.ts';
 
 export type Role = 'admin' | 'observer';
@@ -167,7 +168,9 @@ export function createHttpApp(dependencies: HttpDependencies, routes: RouteModul
     app,
     ready,
     dispatch(request, response) {
-      ready.then(() => handler!(request, response), () => {
+      const requestId = requestIdFrom(request.headers['x-request-id']);
+      response.setHeader('X-Request-Id', requestId);
+      ready.then(() => withRequestId(requestId, response, () => handler!(request, response)), () => {
         response.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
         response.end(JSON.stringify({ error: 'internal' }));
       });

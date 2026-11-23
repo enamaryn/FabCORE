@@ -1,6 +1,7 @@
 import { manualSpool, supportsManualSpool } from './manual-spool.mjs';
 import { createServer } from 'node:http';
 import { createHttpApp } from '../src/http/app.ts';
+import { currentRequestId } from '../src/http/correlation.ts';
 import { HttpError } from '../src/http/errors.ts';
 import { migratedRoutes } from '../src/http/routes/index.ts';
 import { once } from 'node:events';
@@ -107,7 +108,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification } = {}) {
+export function createFabCore({ directory, origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification, logLevel = 'debug' } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -115,13 +116,13 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
   const secure = publicUrl.protocol === 'https:';
   const allowedHost = publicUrl.host;
   const store = openStore(directory);
-  const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt });
+  const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt, context: currentRequestId });
   const token = store.state.admin ? null : (activationToken ?? randomBytes(24).toString('base64url'));
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
   const sessions = new Map();
   const attempts = new Map();
-  const machineLogs = createMachineLogs({ directory, machines: () => store.state.machines });
-  const diagnostics = createDiagnostics({ journal: machineLogs });
+  const machineLogs = createMachineLogs({ directory, machines: () => store.state.machines, context: currentRequestId, minLevel: logLevel });
+  const diagnostics = createDiagnostics({ journal: machineLogs, context: currentRequestId });
   diagnostics.record('server', 'started');
   const connectors = createConnectorRegistry({ isCurrent: machine => store.state.machines.includes(machine), directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, diagnostics, openCamera, cloud });
   const snapshot = monitor(async (machine) => {
@@ -873,7 +874,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   if (origin.protocol !== 'https:' && (
     !['127.0.0.1', '::1'].includes(host) || !['127.0.0.1', '[::1]', 'localhost'].includes(origin.hostname)
   )) throw new Error('Une écoute réseau requiert FABCORE_ORIGIN en HTTPS et un reverse proxy.');
-  const { server, token } = createFabCore({ directory: resolve(process.env.FABCORE_DATA || '.fabcore'), origin, oidc: createOidc(origin) });
+  const logLevel = process.env.FABCORE_LOG_LEVEL || 'debug';
+  if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) throw new Error('FABCORE_LOG_LEVEL invalide (debug, info, warn, error).');
+  const { server, token } = createFabCore({ directory: resolve(process.env.FABCORE_DATA || '.fabcore'), origin, oidc: createOidc(origin), logLevel });
   server.listen(port, host, () => {
     console.log(`FabCore · ${origin.origin}`);
     if (token) console.log(`Jeton d’activation (15 min, usage unique) : ${token}`);

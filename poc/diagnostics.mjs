@@ -1,9 +1,13 @@
-export function createDiagnostics({ journal } = {}) {
+import { levelOf } from './machine-logs.mjs';
+
+export function createDiagnostics({ journal, context = () => undefined } = {}) {
   const events = [];
   const machines = new Map();
   function record(area, code, id = null, details = {}) {
-    journal?.record(id, area, code, details);
-    events.unshift({ at: new Date().toISOString(), area, code, id });
+    const level = levelOf(area, code);
+    journal?.record(id, area, code, details, level);
+    const requestId = context();
+    events.unshift({ at: new Date().toISOString(), level, area, code, id, ...(requestId ? { requestId } : {}) });
     if (events.length > 300) events.pop();
   }
   function entry(id) {
@@ -12,7 +16,7 @@ export function createDiagnostics({ journal } = {}) {
   }
   return {
     record,
-    trace(id, event, details) { journal?.record(id, 'protocol', event, details); },
+    trace(id, event, details) { journal?.record(id, 'protocol', event, details, 'debug'); },
     report(id) { entry(id).reportAt = new Date().toISOString(); },
     frame(id) { entry(id).frameAt = new Date().toISOString(); },
     status(id, { status, issue }) {

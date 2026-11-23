@@ -152,6 +152,7 @@ FabCore lit le numéro de série et l’état de la M2. À l’ajout, il mémori
 | --- | --- | --- |
 | `FABCORE_HOST` | `127.0.0.1` | Adresse d’écoute |
 | `FABCORE_PORT` | `3000` | Port HTTP |
+| `FABCORE_LOG_LEVEL` | `debug` | Seuil des journaux machine : `debug` (échanges protocolaires), `info`, `warn` ou `error` |
 | `FABCORE_ORIGIN` | `http://127.0.0.1:3000` si port par défaut | Origine exacte utilisée par le navigateur |
 | `FABCORE_DATA` | `.fabcore` | Répertoire de stockage |
 
@@ -214,3 +215,5 @@ Le scan interroge les interfaces GRBL TCP 8080 et ESP3D 8848/8849. Une réponse 
 La fiche propose les déplacements XY, zéro G54, origine si activée dans le firmware, M5, impulsion de test bornée, annulation de jog, Reset et déverrouillage séparé. Pause/Reprise/Stop utilisent la session TCP et un rapport d’état récent. Le mode ESP3D reste sans contrôles manuels dans cette livraison. La carte SD native est listée via `/upload`, les originaux lus via `/SD/`, les uploads vérifiés sans lancement et le démarrage reste confirmé séparément, avec présence opérateur. Formats `.gc/.nc/.gcode/.gco/.g`, 16 Mio par fichier ; limites d’inventaire affichées. Transferts laser/FDM bloqués.
 
 **Recette matérielle du pilotage encore à faire.** Aucun tir, déplacement, upload ou lancement réel effectué pendant le développement. Source des commandes, différences de firmware, lectures réellement constatées, limites et ordre des essais : [dossier Longer Ray5](../docs/protocols/LONGER-RAY5-LAN.md).
+
+Chaque réponse HTTP porte un en-tête `X-Request-Id`, repris d'un proxy amont s'il est valide. Les entrées de journal machine, cloud et diagnostic écrites pendant la requête portent le même `requestId`, avec un niveau (`debug`, `info`, `warn`, `error`).
