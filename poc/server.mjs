@@ -398,7 +398,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const command = validateControl(data, controls);
       if (!command) return error(res, 400, 'control-invalid');
       if (['move', 'home', 'zero', 'laser-pulse'].includes(command.action) && !['ready', 'done'].includes(status)) return error(res, 409, 'command-state');
-      if (['printing', 'paused'].includes(status) && ['heat', 'fan'].includes(command.action) && data.duringPrint !== true) return error(res, 409, 'control-confirm');
+      if (['printing', 'paused'].includes(status) && ['heat', 'fan', 'speed'].includes(command.action) && data.duringPrint !== true) return error(res, 409, 'control-confirm');
       if (res.destroyed) return;
       if (!session(req)) return error(res, 401, 'sign-in');
       attempted = true;

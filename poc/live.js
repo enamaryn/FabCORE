@@ -1249,6 +1249,7 @@ function ray5ControlsPanel(m, part) {
   return `<section class="panel stack" data-manual-controls="${part}"><div class="row between"><h2>${part === 'motion' ? t('Déplacements XY','XY movement') : t('Laser / contrôleur','Laser / controller')}</h2>${part === 'quick' ? btn('manual-refresh',t('Actualiser','Refresh')) : ''}</div>${content}${error}${result}</section>`;
 }
 
+const speedModes = () => [t('Silencieux','Silent'), t('Équilibré','Balanced'), t('Sport','Sport'), t('Ludicrous','Ludicrous')];
 function manualControlsPanel(m, part = 'all') {
   if (m.kind === 'longer-ray5') return ray5ControlsPanel(m,part);
   if (!machineConnectors[m.kind]?.controls) {
@@ -1272,6 +1273,7 @@ function manualControlsPanel(m, part = 'all') {
   const missingEquipment = entry.error || (m.status === 'offline' ? t('Machine hors ligne.', 'Machine offline.') : !data ? t('Lecture des équipements…', 'Reading equipment…') : t('Équipement absent ou non communiqué.', 'Equipment absent or not reported.'));
   const quick = `<div class="stack"><div class="stack"><h3>${t('Éclairage','Lighting')}</h3>${data?.lights.map((item, index) => `<div class="quick-control"><span>${esc(label(item.id))}</span>${admin && item.writable ? btn('manual-light:' + index + ':' + (item.value === true ? 'off' : 'on'), item.value === true ? t('Allumé','On') : item.value === false ? t('Éteint','Off') : t('Allumer','Turn on'), 'sun', 'control-switch', `${disabled} aria-pressed="${item.value === true}" aria-label="${t('Basculer l’éclairage','Toggle lighting')} ${esc(label(item.id))}"`) : `<span>${item.value === true ? t('Allumé','On') : item.value === false ? t('Éteint','Off') : '—'}</span>`}</div>`).join('') || unavailableContent(missingEquipment)}</div>
     <div class="stack"><h3>${t('Ventilateurs','Fans')}</h3>${data?.fans.map(item => `<div class="quick-control"><span>${esc(label(item.id))} · ${value(item.percent, ' %')}${Number.isFinite(item.rpm) ? ' · ' + value(item.rpm, ' tr/min') : ''}</span>${setting(item, 'fan')}</div>`).join('') || unavailableContent(missingEquipment)}</div>
+    ${data?.speed ? `<div class="stack"><h3>${t('Mode de vitesse','Speed mode')}</h3><div class="quick-control"><span>${speedModes()[data.speed.mode]}</span>${admin && data.speed.writable ? `<form class="row wrap" data-manual-form="speed"><select name="value" aria-label="${t('Mode de vitesse','Speed mode')}" ${disabled}>${speedModes().map((name, mode) => `<option value="${mode}" ${mode === data.speed.mode ? 'selected' : ''}>${name}</option>`).join('')}</select><button type="submit" ${disabled}>${t('Appliquer','Apply')}</button></form>` : `<small>${t('Modifiable pendant une impression.','Can be changed during a print.')}</small>`}</div></div>` : ''}
     ${m.kind === 'elegoo' ? `<small>${t('CC2 : ventilateurs tête et électronique en lecture seule ; deux secondes minimum entre deux commandes.', 'CC2: hotend and controller fans are read-only; at least two seconds between commands.')}</small>` : ''}</div>`;
   const canMove = data?.motion && online && ['ready', 'done'].includes(data.status) && ['ready', 'done'].includes(m.status) && !entry.busy;
   const canJog = canMove && (data.motion.homed === null ? (!data.motion.axes || data.motion.axes.length > 0) : ['x','y','z'].every(a => data.motion.homed.includes(a)));
@@ -1311,7 +1313,7 @@ async function sendManualControl(id, command) {
   const printing = ['printing', 'paused'].includes(entry.data?.status);
   if (machine(id)?.kind === 'longer-ray5' && ['zero','unlock','reset','laser-pulse'].includes(command.action) && !window.confirm(t('Confirmer cette action sur la Ray5 ? Pour une impulsion, soyez présent avec les protections laser et la zone dégagée.','Confirm this Ray5 action? For a pulse, be present with laser protection and a clear work area.'))) return;
   if (command.action === 'home' && !window.confirm(t('Effectuer la prise d’origine XYZ ? Vérifiez que les axes sont dégagés.', 'Home XYZ? Check that the axes are clear.'))) return;
-  if (printing && ['heat', 'fan'].includes(command.action) && !window.confirm(t('Modifier ce réglage pendant la fabrication ou sa pause ?', 'Change this setting during the print or its pause?'))) return;
+  if (printing && ['heat', 'fan', 'speed'].includes(command.action) && !window.confirm(t('Modifier ce réglage pendant la fabrication ou sa pause ?', 'Change this setting during the print or its pause?'))) return;
   entry.busy = true; entry.error = ''; entry.result = '';
   app.querySelectorAll('[data-manual-controls] button,[data-manual-controls] input,[data-manual-controls] select').forEach(node => { node.disabled = true; });
   try {

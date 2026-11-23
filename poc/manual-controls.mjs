@@ -47,6 +47,9 @@ export function reportedControls(kind, report) {
       const homed = typeof report.tool_head?.homed_axes === 'string' ? report.tool_head.homed_axes.toLowerCase() : '';
       out.motion = { homed, position, gcode: position, minimum: [0, 0, 0], maximum: position.map(value => Math.max(256, value)), home: report.machine_status?.status === 1 };
     }
+    // Mode de vitesse (méthode 1031) : 0 silencieux, 1 équilibré, 2 sport, 3 ludicrous ; refusé au repos (code 1010).
+    const mode = report.gcode_move?.speed_mode;
+    if (Number.isInteger(mode) && mode >= 0 && mode <= 3) out.speed = { mode, writable: report.machine_status?.status === 2 };
   }
   if (kind === 'elegoo-cc1') {
     // SDCP CC1 : PrintInfo.Status 0 repos, 6 pause, 8 arrêtée, 9 terminée, 13 impression ; ailleurs lecture seule.
@@ -72,6 +75,7 @@ export function validateControl(data, controls) {
     const item = controls.heaters.find(item => item.id === data.id && item.writable);
     if (item && data.value >= 0 && data.value <= item.max) return { action: 'heat', id: data.id, value: data.value };
   }
+  if (data.action === 'speed' && Number.isInteger(data.value) && data.value >= 0 && data.value <= 3 && controls.speed?.writable) return { action: 'speed', value: data.value };
   if (data.action === 'fan' && Number.isInteger(data.value) && data.value >= 0 && data.value <= 100 && controls.fans.some(item => item.id === data.id && item.writable)) return { action: 'fan', id: data.id, value: data.value };
   if (controls.laser?.writable) {
     if (['laser-off','zero','unlock','reset','jog-cancel'].includes(data.action)) return { action: data.action };
@@ -177,7 +181,7 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
       return { outcome: ok ? 'accepted' : 'rejected' };
     }
     if (kind === 'elegoo') {
-      if (!['heat', 'light', 'fan', 'home', 'move'].includes(action) || !validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
+      if (!['heat', 'light', 'fan', 'speed', 'home', 'move'].includes(action) || !validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
       if (action === 'heat') {
         const ok = await request(machine, 1028, { [id === 'nozzle' ? 'extruder' : 'heater_bed']: value });
         return ok ? confirmHeat(machine, id, value) : { outcome: 'rejected' };
@@ -186,6 +190,11 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
       if (action === 'light') {
         const ok = await request(machine, 1029, { power: value ? 1 : 0 });
         return ok ? confirmReported(machine, 'light', id, value, reported => reported.lights.find(item => item.id === id)?.value === value) : { outcome: 'rejected' };
+      }
+      if (action === 'speed') {
+        // Le firmware remet « équilibré » au début de chaque changement de filament Canvas : une relecture divergente reste inconnue.
+        const ok = await request(machine, 1031, { mode: value });
+        return ok ? confirmReported(machine, 'speed', 'mode', value, reported => reported.speed?.mode === value) : { outcome: 'rejected' };
       }
       if (action === 'home') {
         const ok = await request(machine, 1026, { homed_axes: 'xyz' });

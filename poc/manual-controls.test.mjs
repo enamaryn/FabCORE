@@ -257,3 +257,21 @@ test('P2S : origine G28 depuis FabCore exigée avant tout déplacement, issues a
   online = false; await control.read(machine); online = true;
   assert.deepEqual((await control.read(machine)).motion.axes, [], 'rapport perdu : origine oubliée');
 });
+
+test('CC2 : mode de vitesse 1031 seulement en impression, confirmé par gcode_move.speed_mode, sinon inconnu sans renvoi', async () => {
+  const machine = { id: 'cc2' };
+  const report = (status, mode) => ({ machine_status: { status }, gcode_move: { x: 1, y: 2, z: 3, speed_mode: mode } });
+  assert.deepEqual(reportedControls('elegoo', report(1, 1)).speed, { mode: 1, writable: false }, 'au repos : la méthode répond 1010');
+  assert.equal(reportedControls('elegoo', report(2, 7)).speed, undefined, 'mode inconnu ignoré');
+  let state = reportedControls('elegoo', report(2, 1));
+  assert.equal(validateControl({ action: 'speed', value: 4, confirm: true }, state), null);
+  assert.equal(validateControl({ action: 'speed', value: 2, confirm: true }, reportedControls('elegoo', report(1, 1))), null);
+  assert.deepEqual(validateControl({ action: 'speed', value: 2, confirm: true }, state), { action: 'speed', value: 2 });
+  const sent = [];
+  const control = createManualControls('elegoo', { read: () => state, request: async (_machine, method, params) => { sent.push([method, params]); state = reportedControls('elegoo', report(2, params.mode)); return true; }, wait: async () => {}, confirmationAttempts: 3 });
+  assert.deepEqual(await control.execute(machine, { action: 'speed', value: 2 }, state), { outcome: 'confirmed' });
+  assert.deepEqual(sent, [[1031, { mode: 2 }]]);
+  const stuck = createManualControls('elegoo', { read: () => reportedControls('elegoo', report(2, 1)), request: async (_machine, method, params) => { sent.push([method, params]); return true; }, wait: async () => {}, confirmationAttempts: 3 });
+  await assert.rejects(stuck.execute(machine, { action: 'speed', value: 3 }, state), /command-unconfirmed/);
+  assert.equal(sent.length, 2, 'aucun renvoi');
+});
