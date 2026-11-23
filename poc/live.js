@@ -705,6 +705,42 @@ const statusLabels = {
 };
 let telemetryTimer;
 let fleetRevision = 0;
+// Temps réel (MIG-05) : le flux SSE signale les changements, le parc est relu par REST (ADR 0004).
+// Actualisation regroupée (une lecture par seconde au plus), relecture de sécurité toutes les 30 s, et retour
+// au rafraîchissement périodique de 2 s tant que le flux est indisponible.
+const liveEvents = { source: null, timer: null, safety: null, last: 0, fallback: false };
+function scheduleRefresh() {
+  if (liveEvents.timer) return;
+  liveEvents.timer = setTimeout(() => { liveEvents.timer = null; liveEvents.last = Date.now(); refresh(); }, Math.max(0, 1000 - (Date.now() - liveEvents.last)));
+}
+function pollWhileDisconnected(active) {
+  if (active === liveEvents.fallback) return;
+  liveEvents.fallback = active;
+  clearInterval(telemetryTimer);
+  telemetryTimer = active ? setInterval(refresh, 2000) : null;
+}
+function stopLiveUpdates() {
+  liveEvents.source?.close();
+  clearTimeout(liveEvents.timer); clearInterval(liveEvents.safety); clearInterval(telemetryTimer);
+  Object.assign(liveEvents, { source: null, timer: null, safety: null, fallback: false });
+}
+function startLiveUpdates() {
+  stopLiveUpdates();
+  if (typeof EventSource !== 'function') return pollWhileDisconnected(true);
+  const source = new EventSource('/api/events');
+  liveEvents.source = source;
+  for (const type of ['machine.telemetry', 'fleet.changed']) source.addEventListener(type, scheduleRefresh);
+  source.addEventListener('resync', () => refresh());
+  source.onopen = () => { if (liveEvents.fallback) { pollWhileDisconnected(false); refresh(); } };
+  // Reconnexion automatique du navigateur ; en attendant, rafraîchissement périodique. Flux refusé (session
+  // expirée) : la lecture REST détecte la déconnexion et ramène à l'écran de connexion.
+  source.onerror = () => {
+    if (liveEvents.source !== source) return;
+    pollWhileDisconnected(true);
+    if (source.readyState === EventSource.CLOSED) { liveEvents.source = null; refresh(); setTimeout(() => { if (live.phase === 'workshop' && !liveEvents.source) startLiveUpdates(); }, 5000); }
+  };
+  liveEvents.safety = setInterval(() => { if (!liveEvents.fallback) refresh(); }, 30_000);
+}
 async function refresh() {
   if (live.pending || live.phase !== 'workshop') return;
   live.pending = true;
@@ -774,7 +810,7 @@ async function refresh() {
     if (live.phase !== 'workshop') return;
     if (error.code === 'sign-in') {
       if (dialog.open) dialog.close();
-      clearInterval(telemetryTimer);
+      stopLiveUpdates();
       live.phase = 'login';
       cloudUI.data = null;
       live.error = 'sign-in';
@@ -804,9 +840,8 @@ function openWorkshop(username, role) {
   state.events = [];
   state.machines = [];
   renderLive();
-  clearInterval(telemetryTimer);
   refresh();
-  telemetryTimer = setInterval(refresh, 2000);
+  startLiveUpdates();
 }
 
 async function loadSession() {
@@ -1052,7 +1087,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'logout') {
     try {
       await api('logout', {});
-      clearInterval(telemetryTimer);
+      stopLiveUpdates();
       live.phase = 'login';
       cloudUI.data = null;
       live.refreshError = false;

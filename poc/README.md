@@ -189,6 +189,10 @@ Sauvegarde : `fabcore backup` archive `FABCORE_DATA` (dont `cloud-secret.key`, i
 
 FabCore accepte jusqu’à 512 Mo par fichier ; tous les proxys traversés doivent accepter au moins cette taille. Pour Nginx, ajouter `client_max_body_size 512m;` dans le bloc `server` FabCore existant, vérifier avec `nginx -t`, puis recharger Nginx. Conserver les restrictions d’accès, certificats et en-têtes existants. Ne pas recréer le bloc du site à l’aveugle. Une erreur HTTP 413 signifie que le serveur/proxy a refusé la taille ; vérifier aussi le proxy public s’il y en a plusieurs.
 
+### Flux temps réel (SSE) derrière un reverse proxy
+
+`GET /api/events` reste ouvert (maintien toutes les 15 s). FabCore envoie `X-Accel-Buffering: no`, que Nginx respecte ; si un autre proxy est traversé, désactiver sa mise en tampon pour ce chemin et autoriser une connexion longue (par exemple `proxy_read_timeout 1h;` pour `location /api/events`). Sans cela, les événements arrivent par paquets ou la connexion est coupée, puis rétablie automatiquement par le navigateur.
+
 Incident du 20 novembre 2026 : un fichier de 6,7 Mo était refusé par Nginx avant d’atteindre FabCore/Moonraker. La configuration du LXC a été sauvegardée puis sa limite alignée sur 512 Mo. Un envoi non authentifié de plus de 2 Mo atteint désormais le contrôle d’accès FabCore (HTTP 401), sans toucher une machine. Un petit fichier de commentaires a aussi été transféré directement par le connecteur Moonraker (HTTP 201), puis supprimé sans exécution. L’essai utilisateur du fichier initial reste à confirmer.
 
 ### Bobine simple renseignée manuellement
