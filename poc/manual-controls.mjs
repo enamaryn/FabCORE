@@ -124,8 +124,16 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
     if (!response.ok) { await response.body?.cancel(); throw new Error(response.status >= 500 ? 'command-unconfirmed' : 'command-rejected'); }
     return response.status === 204 ? null : readResponse(response);
   }
+  // P2S : aucune position ni origine dans le rapport ; l'origine faite par FabCore pendant la session débloque les
+  // déplacements, et s'oublie à la perte du rapport ou à tout envoi depuis le terminal (M84 peut libérer les moteurs).
+  const homedByFabCore = new Set();
   async function snapshot(machine) {
-    if (kind === 'bambu' || kind.startsWith('elegoo')) return await read?.(machine) ?? emptyControls();
+    if (kind === 'bambu') {
+      const controls = await read?.(machine);
+      if (!controls) { homedByFabCore.delete(machine.id); return emptyControls(); }
+      return { ...controls, motion: { homed: null, axes: homedByFabCore.has(machine.id) ? ['X', 'Y', 'Z'] : [], fabcoreHoming: true } };
+    }
+    if (kind.startsWith('elegoo')) return await read?.(machine) ?? emptyControls();
     if (kind === 'octoprint') {
       const data = await call(machine, '/api/printer');
       const out = emptyControls();
@@ -152,8 +160,16 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
     if (data.toolhead && data.gcode_move) out.motion = { homed: data.toolhead.homed_axes ?? '', position: data.toolhead.position, minimum: data.toolhead.axis_minimum, maximum: data.toolhead.axis_maximum, gcode: data.gcode_move.gcode_position };
     return out;
   }
-  return { read: snapshot, async execute(machine, command, controls) {
+  return { read: snapshot, forgetHoming: id => homedByFabCore.delete(id), async execute(machine, command, controls) {
     const { action, id, value } = command;
+    if (kind === 'bambu' && ['home', 'move'].includes(action)) {
+      // Mode développeur : G-code par `gcode_line`. Aucun retour de position : issue « acceptée », jamais confirmée.
+      if (!validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
+      const feed = command.axis === 'Z' ? 600 : 3000;
+      const ok = await send(machine, 'gcode_line', { param: action === 'home' ? 'G28\n' : `G91\nG1 ${command.axis}${command.distance} F${feed}\nG90\n` });
+      if (ok && action === 'home') homedByFabCore.add(machine.id);
+      return { outcome: ok ? 'accepted' : 'rejected' };
+    }
     if (kind === 'bambu') {
       const ok = action === 'light' ? await send(machine, 'ledctrl', { led_node: 'chamber_light', led_mode: value ? 'on' : 'off', led_on_time: 500, led_off_time: 500, loop_times: 1, interval_time: 1000 }, 'system')
         : await send(machine, 'gcode_line', { param: action === 'heat' ? `${id === 'nozzle' ? 'M104' : 'M140'} S${value}\n` : `M106 P${{ part: 1, aux: 2, chamber: 3 }[id]} S${Math.round(value / 100 * 255)}\n` });

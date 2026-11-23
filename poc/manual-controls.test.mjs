@@ -234,3 +234,26 @@ test('CC1 : chauffe, éclairage et ventilateurs par Cmd 403, formes exactes, con
   await assert.rejects(silent.execute(machine, { action: 'light', id: 'main', value: true }, state), /command-unconfirmed/);
   assert.equal(sent.length, before + 1, 'aucun renvoi');
 });
+
+test('P2S : origine G28 depuis FabCore exigée avant tout déplacement, issues acceptées seulement', async () => {
+  const machine = { id: 'p2s' };
+  let online = true;
+  const sent = [];
+  const read = () => online ? reportedControls('bambu', { nozzle_temper: 25, bed_temper: 22, gcode_state: 'IDLE' }) : undefined;
+  const control = createManualControls('bambu', { read, send: async (_machine, command, params) => { sent.push([command, params.param]); return true; } });
+  let state = await control.read(machine);
+  assert.deepEqual(state.motion, { homed: null, axes: [], fabcoreHoming: true });
+  assert.deepEqual(await control.execute(machine, { action: 'move', axis: 'Z', distance: 10 }, state), { outcome: 'rejected' }, 'aucun déplacement avant origine');
+  assert.equal(sent.length, 0);
+  assert.deepEqual(await control.execute(machine, { action: 'home' }, state), { outcome: 'accepted' });
+  state = await control.read(machine);
+  assert.deepEqual(state.motion.axes, ['X', 'Y', 'Z']);
+  assert.deepEqual(await control.execute(machine, { action: 'move', axis: 'Z', distance: 10 }, state), { outcome: 'accepted' }, 'jamais « confirmé » : aucune position relue');
+  assert.deepEqual(await control.execute(machine, { action: 'move', axis: 'X', distance: -1 }, state), { outcome: 'accepted' });
+  assert.deepEqual(sent, [['gcode_line', 'G28\n'], ['gcode_line', 'G91\nG1 Z10 F600\nG90\n'], ['gcode_line', 'G91\nG1 X-1 F3000\nG90\n']]);
+  control.forgetHoming(machine.id);
+  assert.deepEqual((await control.read(machine)).motion.axes, [], 'terminal utilisé : origine oubliée');
+  await control.execute(machine, { action: 'home' }, state);
+  online = false; await control.read(machine); online = true;
+  assert.deepEqual((await control.read(machine)).motion.axes, [], 'rapport perdu : origine oubliée');
+});

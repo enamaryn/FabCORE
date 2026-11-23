@@ -95,14 +95,25 @@ const definitions = {
   }, async ({ bambu, diagnostics, directory }) => {
     const monitor = bambu ?? (await import('./bambu.mjs')).createBambuMonitor(undefined, diagnostics);
     const { createBambuFiles } = await import('./bambu-files.mjs');
-    return {
+    const connector = {
       ...monitor, files: retainedFiles(join(directory, 'files'), createBambuFiles((...args) => monitor.send(...args)), { projects: true }), probe: (machine, { signal }) => monitor.probe(machine, signal),
+      // Terminal (mode développeur) : `gcode_line` accusé sans sortie de l'imprimante ; résultat « accepté », jamais « exécuté ».
+      async gcode(machine, script) {
+        connector.control?.forgetHoming?.(machine.id);
+        try {
+          return await monitor.send(machine, 'gcode_line', { param: script + '\n' }) ? { outcome: 'accepted', responses: null } : { outcome: 'rejected', message: '' };
+        } catch (failure) {
+          if (['bambu-authorization', 'bambu-connection'].includes(failure.message)) return { outcome: 'rejected', message: failure.message };
+          throw failure;
+        }
+      },
       async camera(machine, output, signal, frame) {
         const { streamBambuCamera } = await import('./bambu-camera.mjs');
         if (!(await streamBambuCamera(machine, output, signal, frame))) return 'no-stream';
       }
     };
-  }, { camera: true, filaments: 'AMS', controls: true, live: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, projects: true, externalFilament: true }),
+    return connector;
+  }, { camera: true, filaments: 'AMS', controls: true, live: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, projects: true, externalFilament: true, terminal: true }),
   elegoo: localConnector('Elegoo · Centauri Carbon 2', 'elegoo', (host, data, existing) => {
     const accessCode = secret(data, existing, 'accessCode', 64);
     if (/^[!-~]{1,64}$/.test(accessCode)) return { origin: `mqtt://${host}:1883`, serial: existing?.serial, accessCode };
