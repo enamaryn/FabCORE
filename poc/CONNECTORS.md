@@ -117,14 +117,14 @@ Tout nouveau connecteur à session persistante doit fournir les mêmes tests (vo
 
 ## Couverture LAN des imprimantes 3D · audit du 23 novembre 2026
 
-L’onglet Console est toujours affiché ; grisé avec la raison quand la connexion ne permet pas le G-code. « Possible, à ajouter » signifie que le protocole LAN le permet d’après la documentation, sans implémentation ni recette FabCore à ce jour.
+L’onglet Console est toujours affiché ; grisé avec la raison quand la connexion ne permet pas le G-code. « Recette à faire » : implémenté et testé hors matériel, à valider sur la machine.
 
 | Connecteur | Caméra | Commandes | Fichiers | Chauffe | Éclairage / ventilateurs | Origine / déplacements | Terminal |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Klipper (Moonraker) | Possible, à ajouter (`/server/webcams/list`) | Pause, reprise, arrêt | Natifs | Oui | Oui (LED, `fan`, `fan_generic`) | Oui | Oui, réponses relues |
-| OctoPrint | Possible, à ajouter (flux déclaré dans les réglages) | Pause, reprise, arrêt | Locaux | Oui | Ventilateur possible par M106, à ajouter | Oui (limites par le firmware) | Oui, mise en file seulement |
-| PrusaLink | À étudier | Pause, reprise, arrêt | Natifs | Non exposée par l’API | Non exposés par l’API | Non exposés par l’API | Non : pas d’envoi G-code |
-| Bambu Lab P2S (LAN) | Oui | Pause, reprise, arrêt | FTPS | Oui | Oui | Possible par `gcode_line` (mode développeur), à ajouter | Possible par `gcode_line`, sans réponse renvoyée, à ajouter |
-| Elegoo CC2 | Oui | Pause, arrêt (reprise 1023 non éprouvée) | Natifs | Oui | Oui (pièce, auxiliaire, caisson) | Oui (recette à faire) | Non : aucune méthode G-code |
-| Elegoo CC1 (SDCP) | Oui | Pause, reprise, arrêt | Copies FabCore | Possible par Cmd 403, à ajouter | Possible par Cmd 403 (vérifié par pycentauri), à ajouter | Cmd 401/402 : sondage risqué (plantage du démon `app`), non retenu | Non : pas de G-code SDCP |
+| Klipper (Moonraker) | Oui : flux MJPEG déclaré dans `/server/webcams/list`, même hôte | Pause, reprise, arrêt | Natifs | Oui | Oui (LED, `fan`, `fan_generic`) | Oui | Oui, réponses relues |
+| OctoPrint | Oui : `webcam.streamUrl` de `/api/settings`, même hôte | Pause, reprise, arrêt | Locaux | Oui | Ventilateur possible par M106, à ajouter | Oui (limites par le firmware) | Oui, mise en file seulement |
+| PrusaLink | Non : l’API locale ne sert que des instantanés (PrusaLink sur Raspberry Pi) ; les caméras des imprimantes Buddy publient vers Prusa Connect | Pause, reprise, arrêt | Natifs | Non exposée par l’API | Non exposés par l’API | Non exposés par l’API | Non : pas d’envoi G-code |
+| Bambu Lab P2S (LAN) | Oui | Pause, reprise, arrêt | FTPS | Oui | Oui | Oui par `gcode_line` (mode développeur) : origine G28 depuis FabCore exigée avant tout déplacement, issue « acceptée » (aucune position relue) | Oui par `gcode_line`, issue « acceptée », sans réponse renvoyée ; oublie l’origine FabCore |
+| Elegoo CC2 | Oui | Pause, arrêt (reprise 1023 non éprouvée) | Natifs | Oui | Oui (pièce, auxiliaire, caisson) ; mode de vitesse 1031 en impression | Oui (recette à faire) | Non : aucune méthode G-code |
+| Elegoo CC1 (SDCP) | Oui | Pause, reprise, arrêt | Copies FabCore | Oui par Cmd 403 (recette à faire) | Oui par Cmd 403, formes pycentauri (recette à faire) | Cmd 401/402 : sondage risqué (plantage du démon `app`), non retenu | Non : pas de G-code SDCP |
 | Bambu Cloud | Non | Non (lecture seule) | Non | Non | Non | Non | Non |

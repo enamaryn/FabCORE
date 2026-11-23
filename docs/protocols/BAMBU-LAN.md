@@ -16,6 +16,8 @@ Valentin confirme avoir **activé le mode développeur le 22 novembre**. Les nou
 - Pause/Reprise/Stop : `{ "print": { "command":"pause|resume|stop", "param":"", "sequence_id":"<transaction>" } }`.
 - Lancement : `command="project_file"`, paramètres construits par [connectors/bambu/src/files.ts](../../connectors/bambu/src/files.ts) pour le chemin réel du G-code/plateau.
 - Chauffe : `command="gcode_line"`, `M104 S<consigne>` pour la buse, `M140 S<consigne>` pour le plateau ; attente de la consigne réellement remontée, pas seulement d’un ACK.
+- Terminal (mode développeur) : `gcode_line`, une ligne envoyée telle quelle ; l’imprimante n’accuse que la réception, sans sortie G-code : issue « acceptée », jamais « exécutée ». Refus d’autorisation rapporté explicitement ; réponse perdue = inconnue, sans renvoi.
+- Origine et déplacements : `G28`, puis `G91` / `G1 <axe><±0,1|1|10> F3000` (F600 pour Z) / `G90` par `gcode_line`. Le rapport ne donne ni position ni axes référencés : un déplacement exige une origine faite depuis FabCore pendant la session, oubliée à la perte du rapport ou dès qu’une commande part du terminal (un `M84` peut libérer les moteurs). Issue « acceptée » ; limites tenues par le firmware. **Recette matérielle à faire**.
 - Un refus de vérification connu produit désormais `bambu-authorization` et HTTP 403, avec aide localisée dans l’interface. L’état réel de fabrication reste affiché ; ce refus ne met pas artificiellement la machine hors ligne. Les autres refus restent distincts.
 - Aucun rejeu automatique, aucune signature fabriquée ni usurpation du logiciel officiel. Une commande critique réussie ultérieure peut effacer l’avertissement ; elle ne prouve pas que toutes les autres fonctions sont autorisées.
 
