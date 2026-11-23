@@ -1,5 +1,5 @@
-// Socle HTTP Fastify (ADR 0002, MIG-03). Il ne sert que les routes migrées ; tout le reste
-// continue d'être traité par le routeur du POC, sans changement de contrat (étrangleur).
+// Socle HTTP Fastify (ADR 0002, MIG-03) : unique routeur du serveur. Les gestionnaires encore écrits
+// dans le POC sont branchés en mode brut (`guards.raw`) derrière les contrôles centralisés.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import swagger from '@fastify/swagger';
@@ -20,6 +20,18 @@ export interface HttpDependencies {
   viewer(request: IncomingMessage): Viewer | null;
   /** Appelé pour toute erreur interne (500), comme `request-failed` dans le diagnostic du POC. */
   onFailure?(): void;
+  /** Requête sans route : réponse de repli (404 ou 405 historiques), avant toute lecture du corps. */
+  fallback?: RawHandler;
+}
+
+/** Gestionnaire écrivant directement la réponse Node (flux, fichiers, caméras), corps de requête non lu. */
+export type RawHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void> | void;
+
+declare module 'fastify' {
+  interface FastifyContextConfig {
+    /** La route accepte une chaîne de requête ; sinon une requête `?…` répond 404 `missing`, comme le POC. */
+    query?: boolean;
+  }
 }
 
 export type RouteModule = (app: FastifyInstance, guards: Guards) => void;
@@ -35,6 +47,11 @@ export interface Guards {
   json(request: FastifyRequest): void;
   /** Limite de tentatives par clé : 429 `rate`. */
   rate(key: string): void;
+  /**
+   * Hook `onRequest` qui applique `guard` puis confie la requête à `handler` sans lire le corps :
+   * en-têtes de sécurité posés, erreur interne 500 `internal` signalée, flux fermé si déjà commencé.
+   */
+  raw(handler: RawHandler, guard?: (request: FastifyRequest) => unknown): (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 }
 
 /** Corps JSON attendu par une écriture : un objet, jamais un tableau ni `null` (400 `invalid`). */
@@ -50,58 +67,50 @@ const securityHeaders = {
 export interface HttpApp {
   app: FastifyInstance;
   ready: Promise<void>;
-  /** Vrai si la requête correspond exactement à une route migrée (méthode et chemin, requête comprise). */
-  handles(request: IncomingMessage): boolean;
   dispatch(request: IncomingMessage, response: ServerResponse): void;
   close(): Promise<void>;
-}
-
-/**
- * Expression du chemin complet d'une route Fastify. Un paramètre `:id(regex)` reprend sa contrainte
- * (Fastify l'ancre au segment) ; la requête n'est jamais acceptée, comme dans le routeur du POC.
- */
-export function routePattern(url: string): RegExp {
-  let source = '';
-  for (let index = 0; index < url.length;) {
-    const parameter = /^:[A-Za-z_][A-Za-z0-9_]*(?:\(((?:[^()\\]|\\.)+)\))?/.exec(url.slice(index));
-    if (parameter) {
-      source += parameter[1] ? `(?:${parameter[1].replace(/^\^/, '').replace(/\$$/, '')})` : '[^/?#]+';
-      index += parameter[0].length;
-    } else {
-      source += url[index]!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      index += 1;
-    }
-  }
-  return new RegExp(`^${source}$`);
 }
 
 export function createHttpApp(dependencies: HttpDependencies, routes: RouteModule[]): HttpApp {
   let handler: ((request: IncomingMessage, response: ServerResponse) => void) | undefined;
   const app = fastify({
     logger: false,
-    // Le serveur public reste celui du POC ; Fastify ne fait que router les requêtes déléguées.
+    // Le serveur public reste créé par le POC (délais, écoute) ; Fastify reçoit chaque requête par `dispatch`.
     serverFactory: routing => { handler = routing; return createServer(); },
     exposeHeadRoutes: false,
     return503OnClosing: false,
   });
-  const migrated: { method: string; pattern: RegExp }[] = [];
-  app.addHook('onRoute', route => {
-    for (const method of [route.method].flat()) migrated.push({ method, pattern: routePattern(route.url) });
-  });
-
   void app.register(swagger, {
     openapi: {
       openapi: '3.1.0',
-      info: { title: 'FabCore API', version: '0.1.0', description: 'Routes REST migrées vers le socle typé (MIG-03). Les autres routes restent servies par le POC jusqu’à leur migration.' },
+      info: { title: 'FabCore API', version: '0.1.0', description: 'API REST de FabCore (MIG-03). Erreurs : `{ error: code }` stable, traduit par l’interface.' },
       components: { securitySchemes: { session: { type: 'apiKey', in: 'cookie', name: 'fabcore_session' } } },
     },
     refResolver: { buildLocalReference: (json, _baseUri, _fragment, index) => typeof json.$id === 'string' ? json.$id : `def-${index}` },
   });
   app.addSchema(ErrorBody);
 
+  const writeFailure = (response: ServerResponse) => {
+    dependencies.onFailure?.();
+    if (response.headersSent) { response.end(); return; }
+    response.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({ error: 'internal' }));
+  };
+  const runRaw = async (handler: RawHandler, request: FastifyRequest, reply: FastifyReply) => {
+    reply.hijack();
+    for (const [name, value] of Object.entries(securityHeaders)) reply.raw.setHeader(name, value);
+    try { await handler(request.raw, reply.raw); } catch { writeFailure(reply.raw); }
+  };
   app.addHook('onRequest', async (request, reply) => {
     void reply.headers(securityHeaders);
     if (request.headers.host !== dependencies.allowedHost) throw new HttpError(421, 'host');
+    // Sans route : repli avant lecture du corps (un corps invalide ne change pas le 404/405 historique).
+    if (request.is404) {
+      if (dependencies.fallback) await runRaw(dependencies.fallback, request, reply);
+      else throw new HttpError(404, 'missing');
+      return;
+    }
+    if (request.url.includes('?') && !request.routeOptions.config.query) throw new HttpError(404, 'missing');
   });
   // Corps JSON comme le POC : 4 Kio au plus ; corps vide toléré (déconnexion), validé ensuite par le schéma de la route.
   app.removeContentTypeParser('application/json');
@@ -136,6 +145,10 @@ export function createHttpApp(dependencies: HttpDependencies, routes: RouteModul
     rate(key) {
       if (!dependencies.limit(key)) throw new HttpError(429, 'rate');
     },
+    raw: (handler, guard) => async (request, reply) => {
+      guard?.(request);
+      await runRaw(handler, request, reply);
+    },
   };
 
   // Routes chargées après le plugin OpenAPI, pour qu'il les enregistre toutes.
@@ -153,7 +166,6 @@ export function createHttpApp(dependencies: HttpDependencies, routes: RouteModul
   return {
     app,
     ready,
-    handles: request => migrated.some(({ method, pattern }) => method === request.method && pattern.test(request.url ?? '')),
     dispatch(request, response) {
       ready.then(() => handler!(request, response), () => {
         response.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
