@@ -6,6 +6,7 @@ import type { ActivityEntry, MachineData } from './types.js';
 import { ApiError, createApi } from './api.ts';
 import { subscribeFleet } from './events.ts';
 import { MachineDetail } from './components/machine/MachineDetail.tsx';
+import { ViewerPage } from './components/viewer/ViewerPage.tsx';
 import { parseRoute } from './route.ts';
 import type { Route } from './route.ts';
 import { recordTemperatures } from './temperature.ts';
@@ -35,7 +36,7 @@ export function App() {
   const toggleTheme = () => { const next = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark'; savePreference('fabcore-theme', next); setTheme(next); };
   if (!session.data) return <main className="setup area"><Brand /><h1 tabIndex={-1}>{session.isError ? t('failed') : t('loading')}</h1>{session.isError && <button type="button" onClick={() => { void session.refetch(); }}>{t('retry')}</button>}</main>;
   if (!session.data.authenticated || !session.data.role || !session.data.username) return <main className="setup area"><Brand /><div className="row preference-actions"><button type="button" onClick={toggleLanguage}>{i18n.resolvedLanguage?.startsWith('fr') ? 'EN' : 'FR'}</button><button type="button" onClick={toggleTheme}>{i18n.t('themeLabel', { ns: 'common', theme: i18n.t('theme.' + theme, { ns: 'common' }) })}</button></div>{!session.data.installed ? <section className="panel stack"><h1 tabIndex={-1}>{t('setup')}</h1><p>{t('setupHelp')}</p><a className="button primary" href="/">{t('setupOpen')}</a></section> : <Login api={api} oidc={session.data.oidcEnabled === true} />}</main>;
-  return <Shell username={session.data.username} role={session.data.role} page={page.kind === 'machine' ? 'machines' : page.kind} language={i18n.resolvedLanguage ?? 'fr'} theme={theme} onLanguage={toggleLanguage} onTheme={toggleTheme} onLogout={() => { if (!logout.isPending) logout.mutate(); }}>
+  return <Shell username={session.data.username} role={session.data.role} page={page.kind === 'machine' || page.kind === 'viewer' ? 'machines' : page.kind} language={i18n.resolvedLanguage ?? 'fr'} theme={theme} onLanguage={toggleLanguage} onTheme={toggleTheme} onLogout={() => { if (!logout.isPending) logout.mutate(); }}>
     {logout.isError && <p className="notice" role="alert">{t('error.internal')}</p>}
     {logout.isPending ? <p role="status">{t('loggingOut')}</p> : <Workshop key={session.data.username + ':' + session.data.role} api={api} username={session.data.username} role={session.data.role} page={page} />}
   </Shell>;
@@ -69,5 +70,10 @@ function Workshop({ api, username, role, page }: { api: ReturnType<typeof create
     if (changes.length) setEvents(items => [...changes, ...items].slice(0, 30));
   }, [fleet.data]);
   if (!fleet.data) return <section className="panel stack"><h1 tabIndex={-1}>{fleet.isError ? t('failed') : t('loading')}</h1>{fleet.isError && <button type="button" onClick={() => { void fleet.refetch(); }}>{t('retry')}</button>}</section>;
+  if (page.kind === 'viewer') {
+    const machine = fleet.data.find(item => item.id === page.id);
+    // Clé : changer de fichier ou de session démonte le visualiseur et libère lecture, animation et écouteurs.
+    return <>{fleet.isError && <p className="notice" role="status">{t('refreshFailed')}</p>}{machine ? <ViewerPage key={page.id + ':' + role + ':' + JSON.stringify(page.source)} machine={machine} source={page.source} role={role} stale={fleet.isError} api={api} /> : <MachineDetail id={page.id} machines={fleet.data} api={api} actor={username + ':' + role} role={role} samples={[]} stale={fleet.isError} />}</>;
+  }
   return <>{fleet.isError && <p className="notice" role="status">{t('refreshFailed')}</p>}{page.kind === 'machine' ? <MachineDetail key={page.id + ':' + role} id={page.id} tab={page.tab} machines={fleet.data} api={api} actor={username + ':' + role} role={role} samples={temperatures.get(page.id) ?? []} stale={fleet.isError} /> : page.kind === 'history' ? <HistoryPage events={events} /> : <FleetPage machines={fleet.data} overview={page.kind === 'home'} role={role} events={events} />}</>;
 }
