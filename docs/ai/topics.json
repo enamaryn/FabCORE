@@ -672,5 +672,30 @@
     "docs": [
       "docs/MIG-06-PARITY.md"
     ]
+  },
+  {
+    "id": "version",
+    "title": "Version installée et annonce de mise à jour",
+    "files": [
+      "src/application/version.ts",
+      "src/http/routes/version.ts",
+      "web/src/components/UpdatePrompt.tsx",
+      "web/src/update.ts",
+      "web/src/components/Shell.tsx"
+    ],
+    "symbols": [
+      "createVersionService",
+      "installedCommit",
+      "versionRoutes",
+      "UpdatePrompt",
+      "shouldPrompt"
+    ],
+    "tests": [
+      "src/application/version.test.ts",
+      "web/test/update-prompt.test.ts"
+    ],
+    "docs": [
+      "docs/MIG-06-PARITY.md"
+    ]
   }
 ]

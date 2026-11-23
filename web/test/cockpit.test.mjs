@@ -32,7 +32,7 @@ test('Cockpit : six blocs stables, aucun flux automatique ni fabrication invent�
 });
 test('Cockpit : pause/stop selon état et capacités, aucun bouton d’écriture pour observateur ou cloud', () => {
   assert.match(render(), />Pause<\/button>/); assert.match(render(), />Stop<\/button>/); assert.doesNotMatch(render(), />Reprendre<\/button>/);
-  const observer = render(machine, 'observer'); assert.doesNotMatch(observer, />Pause<\/button>|>Stop<\/button>|tab=logs|Renseigner la bobine|Paramètres de la machine/);
+  const observer = render(machine, 'observer'); assert.doesNotMatch(observer, />Pause<\/button>|>Stop<\/button>|\/logs"|Renseigner la bobine|Paramètres de la machine/);
   const paused = render({ ...machine, status: 'paused' }); assert.match(paused, />Reprendre<\/button>/); assert.doesNotMatch(paused, />Pause<\/button>/);
   const cloud = render({ ...machine, kind: 'bambu-cloud', capabilities: { filaments: 'AMS' } }); assert.match(cloud, /lecture seule/); assert.doesNotMatch(cloud, />Pause<\/button>|>Stop<\/button>/);
   assert.doesNotMatch(render({ ...machine, status: 'offline' }), />Pause<\/button>|>Stop<\/button>/);
@@ -40,7 +40,7 @@ test('Cockpit : pause/stop selon état et capacités, aucun bouton d’écriture
 test('Cockpit : quatre modules compacts, humidité bornée et priorité sur bobine manuelle', () => {
   const html = render({ ...machine, manualSpool: { material: 'ABS', color: '#AABBCC' }, filaments: Array.from({ length: 4 }, (_, i) => ({ id: i, humidity: i === 3 ? 120 : 28, slots: [{ id: 0, material: 'PETG', occupied: true, color: '#FFFFFF' }, { id: 1, occupied: false }] })) });
   assert.equal((html.match(/class="react-filament-module"/g) ?? []).length, 4); assert.equal((html.match(/Humidité : 28 %/g) ?? []).length, 3);
-  assert.doesNotMatch(html, /120 %|#AABBCC|>ABS<|Modifier la bobine/); assert.match(html, /#machine\/11111111-1111-4111-8111-111111111111\/files/); assert.match(html, /tab=logs/);
+  assert.doesNotMatch(html, /120 %|#AABBCC|>ABS<|Modifier la bobine/); assert.match(html, /#machine\/11111111-1111-4111-8111-111111111111\/files/); assert.match(html, /#machine\/11111111-1111-4111-8111-111111111111\/logs/);
 });
 test('Températures : ruptures pointillées et historique vide explicite', () => {
   const renderChart = samples => renderToStaticMarkup(createElement(I18nextProvider, { i18n }, createElement(TemperatureChart, { samples })));

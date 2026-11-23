@@ -1,0 +1,74 @@
+{
+  "refresh": "Actualiser",
+  "loading": "Chargement…",
+  "diagnostics": {
+    "title": "Diagnostics",
+    "unavailable": "Journal de diagnostic indisponible.",
+    "scopeHelp": "Jusqu’à 300 événements depuis le dernier démarrage.",
+    "scope": "Afficher les événements de",
+    "all": "Tout le parc et FabCore",
+    "lastReport": "Dernier rapport MQTT · {date}",
+    "lastFrame": "Dernière image reçue · {date}",
+    "removed": "Machine supprimée",
+    "empty": "Aucun événement.",
+    "area": {
+      "server": "FabCore",
+      "mqtt": "MQTT",
+      "camera": "Caméra",
+      "status": "État",
+      "files": "Fichiers",
+      "controls": "Contrôles",
+      "terminal": "Terminal",
+      "command": "Commande",
+      "cloud": "Cloud"
+    }
+  },
+  "access": {
+    "title": "Ajouter un observateur",
+    "help": "Un observateur voit le parc, les fiches, les fichiers et les caméras, sans aucune commande ni administration.",
+    "username": "Identifiant",
+    "password": "Mot de passe",
+    "passwordHelp": "12 caractères au moins.",
+    "confirm": "Confirmer le mot de passe",
+    "create": "Créer le compte",
+    "mismatch": "Les mots de passe diffèrent.",
+    "created": "Compte observateur « {username} » créé. Transmettez-lui son mot de passe par un canal sûr.",
+    "error": {
+      "credentials": "Identifiant de 3 caractères et mot de passe de 12 caractères au moins.",
+      "observer-duplicate": "Cet identifiant existe déjà.",
+      "observer-limit": "Limite de 16 observateurs atteinte.",
+      "storage-unavailable": "Stockage indisponible : compte non créé.",
+      "forbidden": "Réservé à un administrateur.",
+      "sign-in": "Session expirée : reconnectez-vous.",
+      "network": "Serveur FabCore injoignable."
+    }
+  },
+  "logs": {
+    "title": "Logs de la machine",
+    "download": "Télécharger le fichier log",
+    "cloud": "Connexion cloud : les échanges MQTT sont dans le journal du compte.",
+    "help": "Requêtes, réponses filtrées et délais ; aucun mot de passe, jeton ou code LAN. Les rapports MQTT périodiques sont échantillonnés toutes les dix secondes, les réponses de commande sont toutes conservées.",
+    "search": "Rechercher dans les logs",
+    "searchPlaceholder": "chauffe, gcode_line, reason, MQTT…",
+    "unavailable": "Journal indisponible. Vérifiez le stockage ou reconnectez-vous.",
+    "count": "{count, plural, =0 {Aucune entrée affichée} one {# entrée affichée} other {# entrées affichées}} · 500 dernières conservées",
+    "empty": "Aucune entrée conservée pour cette machine.",
+    "noMatch": "Aucune entrée ne correspond à cette recherche."
+  },
+  "setup": {
+    "title": "Première installation",
+    "help": "Récupérez le jeton d’activation dans le terminal de FabCore pour créer l’administrateur local.",
+    "token": "Jeton d’activation",
+    "submit": "Activer FabCore",
+    "error": {
+      "token": "Jeton incorrect.",
+      "expired": "Jeton expiré : redémarrez FabCore pour en obtenir un nouveau.",
+      "installed": "FabCore est déjà activé : connectez-vous.",
+      "credentials": "Identifiant de 3 caractères et mot de passe de 12 caractères au moins.",
+      "mismatch": "Les mots de passe diffèrent.",
+      "rate": "Trop de tentatives : patientez une minute.",
+      "storage-unavailable": "Stockage indisponible : activation non enregistrée.",
+      "network": "Serveur FabCore injoignable."
+    }
+  }
+}

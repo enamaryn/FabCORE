@@ -47,7 +47,7 @@ test('React pastilles : priorité des modules réels, actif, multi-module compac
 test('React navigation : rôle observateur sans administration et interface conservée reliée explicitement', () => {
   const props = { username: 'Atelier', page: 'machines', language: 'fr', theme: 'system', onLanguage() {}, onTheme() {}, onLogout() {} };
   const observer = render(Shell, { ...props, role: 'observer' });
-  assert.doesNotMatch(observer, /screen=cloud|screen=observer|screen=diagnostics/);
+  assert.doesNotMatch(observer, /screen=cloud|#access|#diagnostics|#notifications/);
   assert.match(observer, /Navigation mobile/); assert.match(observer, /aria-current="page"/);
   const admin = render(Shell, { ...props, role: 'admin' }); assert.match(admin, /screen=cloud/); assert.match(admin, /href="#notifications"/, "notifications : écran React (#121)");
 });

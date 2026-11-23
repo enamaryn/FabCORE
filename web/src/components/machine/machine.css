@@ -17,3 +17,4 @@
 .filament-material{font-size:15px;text-align:center;overflow-wrap:anywhere}
 .filament-active{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent);color:var(--card)}
 .filament-manual{display:flex;align-items:center;gap:16px}.filament-manual .react-filament-slot{padding:0}
+.react-log-entries{max-height:60vh;overflow:auto;min-width:0}.react-log-entries details{padding:8px 0;border-bottom:1px solid var(--line)}.react-log-entries pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;margin:6px 0}.react-log-entries summary{cursor:pointer;overflow-wrap:anywhere;font-size:13px}

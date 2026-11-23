@@ -10,6 +10,13 @@ export type NotificationView = {
   smtp: { enabled: boolean; host?: string; port?: number; tls?: 'tls' | 'starttls'; from?: string; to?: string; auth?: boolean; username?: string };
   internal: { url: string; topic: string } | null;
 };
+export type Diagnostics = {
+  fleet: { id: string; name: string }[];
+  events: { at: string; area: string; code: string; id: string | null }[];
+  machines?: Record<string, { reportAt?: string | null; frameAt?: string | null }>;
+};
+export type MachineLog = { machine: { id: string; name: string; kind?: string; mode?: string }; lines: { at?: string; event?: string; level?: string; requestId?: string; details?: Record<string, unknown> }[] };
+export type VersionStatus = { current: string | null; latest: string | null; updateAvailable: boolean; checkedAt: string | null };
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -123,6 +130,27 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
       return value as NotificationView;
     },
     testNotification(channel: 'ntfy' | 'smtp', signal?: AbortSignal) { return request('notifications/test', { channel }, signal, 20000); },
+    async diagnostics(signal?: AbortSignal): Promise<Diagnostics> {
+      const value = await request('diagnostics', undefined, signal);
+      if (!value || typeof value !== 'object' || !('fleet' in value) || !Array.isArray(value.fleet) || !('events' in value) || !Array.isArray(value.events)) throw new ApiError('response', 502);
+      return value as Diagnostics;
+    },
+    async machineLog(id: string, signal?: AbortSignal): Promise<MachineLog> {
+      const value = await request('machines/' + encodeURIComponent(id) + '/logs', undefined, signal, 15000);
+      if (!value || typeof value !== 'object' || !('lines' in value) || !Array.isArray(value.lines)) throw new ApiError('logs-unavailable', 503);
+      return value as MachineLog;
+    },
+    async addObserver(username: string, password: string): Promise<{ username: string }> {
+      const value = await request('observers', { username, password });
+      if (!value || typeof value !== 'object' || !('username' in value) || typeof value.username !== 'string') throw new ApiError('response', 502);
+      return { username: value.username };
+    },
+    setup(token: string, username: string, password: string) { return request('setup', { token, username, password }); },
+    async version(signal?: AbortSignal): Promise<VersionStatus> {
+      const value = await request('version', undefined, signal, 15000);
+      if (!value || typeof value !== 'object' || !('updateAvailable' in value) || typeof value.updateAvailable !== 'boolean') throw new ApiError('response', 502);
+      return value as VersionStatus;
+    },
     login(username: string, password: string) { return request('login', { username, password }); },
     logout() { return request('logout', {}); },
   };
