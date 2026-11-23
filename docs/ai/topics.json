@@ -538,5 +538,33 @@
     "docs": [
       "docs/MIGRATION-MVP.md"
     ]
+  },
+  {
+    "id": "events",
+    "title": "Temps réel SSE : bus d'événements, télémétrie et flux /api/events (MIG-05)",
+    "files": [
+      "src/application/events.ts",
+      "src/application/fleet-events.ts",
+      "src/http/routes/events.ts",
+      "src/domain/event.ts",
+      "poc/server.mjs",
+      "poc/live.js"
+    ],
+    "symbols": [
+      "createEventHub",
+      "createFleetWatcher",
+      "observeFleet",
+      "toTelemetry",
+      "eventRoutes",
+      "DomainEvent"
+    ],
+    "tests": [
+      "src/application/events.test.ts",
+      "poc/events-http.test.mjs"
+    ],
+    "docs": [
+      "docs/adr/0004-sse.md",
+      "docs/MIGRATION-MVP.md"
+    ]
   }
 ]

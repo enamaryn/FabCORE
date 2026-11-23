@@ -16,6 +16,8 @@ export const DomainEvent = Type.Union([
   envelope('machine.telemetry', Telemetry),
   envelope('machine.connection', Connection),
   envelope('command.result', CommandResult),
+  /** Parc modifié (ajout, édition, suppression, bobine manuelle) : `machineId` concerné, `null` si plusieurs. */
+  envelope('fleet.changed', Type.Object({ machineId: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]) }, { additionalProperties: false })),
   /** Le client doit recharger l'état complet : identifiant de reprise trop ancien ou serveur redémarré. */
   envelope('resync', Type.Object({}, { additionalProperties: false })),
 ]);

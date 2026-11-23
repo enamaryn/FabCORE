@@ -22,6 +22,8 @@ import { createAccountService } from '../src/application/accounts.ts';
 import { createMachineMetadata } from '../src/application/machines.ts';
 import { createNotificationService } from '../src/application/notifications.ts';
 import { createPersist } from '../src/application/state-store.ts';
+import { createEventHub } from '../src/application/events.ts';
+import { createFleetWatcher, observeFleet } from '../src/application/fleet-events.ts';
 import { openStore } from './store.mjs';
 import { createCloudAccounts, CloudError } from './cloud-accounts.mjs';
 import { validateControl } from './manual-controls.mjs';
@@ -110,13 +112,16 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, store = openStore(directory), origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification, logLevel = 'debug' } = {}) {
+export function createFabCore({ directory, store: storage = openStore(directory), origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification, logLevel = 'debug', eventHeartbeatMs = 15_000 } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
   }
   const secure = publicUrl.protocol === 'https:';
   const allowedHost = publicUrl.host;
+  // Événements SSE (MIG-05) : bus borné ; le magasin observé publie fleet.changed après chaque écriture durable.
+  const events = createEventHub();
+  const store = observeFleet(storage, events);
   // Écriture attendue avant toute réponse ; base indisponible : 503, état précédent conservé (PostgreSQL, MIG-04).
   const persist = createPersist(store);
   const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt, context: currentRequestId });
@@ -144,6 +149,8 @@ export function createFabCore({ directory, store = openStore(directory), origin,
   let discoveryActive = false;
   const cameraStreams = new Map();
   const stopCameraStreams = (sessionId) => {
+    // Session révoquée (déconnexion, nouvelle connexion, éviction) : ses flux d'événements sont fermés aussi.
+    events.close(subscriber => subscriber.session === sessionId);
     for (const relay of cameraStreams.values()) {
       for (const [res, viewer] of relay.viewers) {
         if (viewer.owner === sessionId) res.destroy();
@@ -600,6 +607,29 @@ export function createFabCore({ directory, store = openStore(directory), origin,
   }
 
   // Repli des requêtes sans route : réponses historiques (405 après contrôle des droits, sinon 404).
+  // Flux SSE (ADR 0004) : session obligatoire (garde du socle), reprise par Last-Event-ID, maintien toutes les
+  // 15 s, fermeture à l'expiration ou à la révocation de la session ; quatre flux au plus par session.
+  function handleEvents(req, res) {
+    const key = session(req);
+    const entry = key ? sessions.get(key) : null;
+    if (!entry) return error(res, 401, 'sign-in');
+    let existing = 0;
+    events.close(subscriber => { if (subscriber.session === key) existing += 1; return false; });
+    let excess = existing - 3;
+    events.close(subscriber => subscriber.session === key && excess-- > 0);
+    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no', Connection: 'keep-alive' });
+    res.write('retry: 3000\n\n');
+    const subscriber = { session: key, viewer: { role: entry.role === 'admin' ? 'admin' : 'observer' }, write: frame => res.write(frame), close: () => res.end() };
+    const lastEventId = typeof req.headers['last-event-id'] === 'string' && req.headers['last-event-id'].length <= 64 ? req.headers['last-event-id'] : null;
+    const unsubscribe = events.subscribe(subscriber, lastEventId);
+    void fleetWatcher.tick();
+    const heartbeat = setInterval(() => {
+      if (!(sessions.get(key)?.expires > Date.now())) return res.end();
+      res.write(': ping\n\n');
+    }, eventHeartbeatMs);
+    res.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
+  }
+
   async function handleFallback(req, res) {
     const path = req.url;
     const activeSession = session(req);
@@ -756,17 +786,23 @@ export function createFabCore({ directory, store = openStore(directory), origin,
   // Services des notifications, appelés par src/http/routes/notifications.ts.
   const notificationService = createNotificationService({ store, persist, internal: () => internalNtfy(directory), send: notify, withinLimit });
   // Service de lecture du parc, appelé par la route typée GET /api/machines.
+  // Télémétrie d'une machine telle que servie par GET /api/machines (lecture directe ou instantané en cache).
+  async function telemetryOf(machine) {
+    try {
+      const telemetry = (connectorDefinition(machine.kind ?? 'klipper')?.live ? await connectors.read(machine.kind, machine) : null) ?? snapshot(machine);
+      if (!['connecting', 'ready', 'printing', 'paused', 'done', 'offline', 'error'].includes(telemetry?.status)) throw new Error('invalid-telemetry');
+      return telemetry;
+    } catch {
+      // One failed connector must not hide the rest of the fleet.
+      return { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' };
+    }
+  }
+  // Une seule boucle de lecture pour tous les navigateurs abonnés ; arrêtée sans abonné (MIG-05).
+  const fleetWatcher = createFleetWatcher({ hub: events, machines: () => store.state.machines, read: telemetryOf });
   async function listFleet(activeSession) {
     const machines = await Promise.all(store.state.machines.map(async (machine) => {
       const definition = connectorDefinition(machine.kind ?? 'klipper');
-      let telemetry;
-      try {
-        telemetry = (definition?.live ? await connectors.read(machine.kind, machine) : null) ?? snapshot(machine);
-        if (!['connecting', 'ready', 'printing', 'paused', 'done', 'offline', 'error'].includes(telemetry?.status)) throw new Error('invalid-telemetry');
-      } catch {
-        // One failed connector must not hide the rest of the fleet.
-        telemetry = { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' };
-      }
+      const telemetry = await telemetryOf(machine);
       if (!store.state.machines.includes(machine)) return null;
       diagnostics.status(machine.id, telemetry);
       return {
@@ -804,11 +840,12 @@ export function createFabCore({ directory, store = openStore(directory), origin,
       cloudLog: id => cloud.logs(id),
       cloudFailure: failure => new HttpError(failure instanceof CloudError ? failure.status : 500, failure instanceof CloudError ? failure.message : 'cloud-storage')
     },
+    events: { stream: handleEvents },
     operations: { cloudAction: handleCloudAction, camera: handleCamera, command: handleCommand, controls: handleControls, terminal: handleTerminal, files: handleFiles },
     pages: { asset: handleAsset, oidc: handleOidc }
   }));
   const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => http.dispatch(req, res));
-  server.on('close', () => { connectors.close(); cloud.close(); void http.close(); });
+  server.on('close', () => { fleetWatcher.stop(); events.close(() => true); connectors.close(); cloud.close(); void http.close(); });
   return { server, token };
 }
 

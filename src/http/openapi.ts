@@ -12,6 +12,7 @@ export async function openApiDocument(): Promise<unknown> {
     machines: { write: unused, spool: unused, networks: unused, discover: unused },
     notifications: { view: unused, save: unused, test: unused },
     logs: { machine: unused, machineLog: unused, cloudAccounts: unused, cloudLog: unused, cloudFailure: unused },
+    events: { stream: unused },
     operations: { cloudAction: unused, camera: unused, command: unused, controls: unused, terminal: unused, files: unused },
     pages: { asset: unused, oidc: unused },
   }));

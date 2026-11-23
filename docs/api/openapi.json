@@ -2758,6 +2758,52 @@
         }
       }
     },
+    "/api/events": {
+      "get": {
+        "summary": "Flux d’événements temps réel (SSE) : machine.telemetry, fleet.changed, resync",
+        "tags": [
+          "temps réel"
+        ],
+        "description": "Authentifié par le cookie de session. `Last-Event-ID` permet la reprise ; `resync` demande de recharger l’état par REST. Commentaire de maintien toutes les 15 s.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Flux `text/event-stream`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Flux `text/event-stream`."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "421": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cloud-accounts/{id}/{action}": {
       "post": {
         "summary": "Action sur un compte : connexion, vérification, appareils, import, télémétrie, déconnexion, suppression",

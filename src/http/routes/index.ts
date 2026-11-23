@@ -1,6 +1,7 @@
 import type { RouteModule } from '../app.ts';
 import { accountRoutes, type AccountDependencies } from './accounts.ts';
 import { diagnosticsRoutes, type DiagnosticsDependencies } from './diagnostics.ts';
+import { eventRoutes, type EventHandlers } from './events.ts';
 import { fleetRoutes, type FleetDependencies } from './fleet.ts';
 import { logRoutes, type LogDependencies } from './logs.ts';
 import { machineRoutes, type MachineDependencies } from './machines.ts';
@@ -17,6 +18,7 @@ export interface RouteDependencies {
   machines: MachineDependencies;
   notifications: NotificationDependencies;
   logs: LogDependencies;
+  events: EventHandlers;
   operations: OperationHandlers;
   pages: PageHandlers;
 }
@@ -30,6 +32,7 @@ export const migratedRoutes = (dependencies: RouteDependencies): RouteModule[] =
   machineRoutes(dependencies.machines),
   notificationRoutes(dependencies.notifications),
   logRoutes(dependencies.logs),
+  eventRoutes(dependencies.events),
   operationRoutes(dependencies.operations),
   pageRoutes(dependencies.pages),
 ];
