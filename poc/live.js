@@ -706,6 +706,23 @@ const statusLabels = {
 };
 let telemetryTimer;
 let fleetRevision = 0;
+// Mobile : une actualisation reconstruit la page du parc ; jamais pendant un geste tactile ni son élan (iOS
+// interrompt le défilement), et toujours à la même position de défilement.
+let touchActive = false, touchTimer = null, deferredRender = false;
+function redrawKeepingScroll() {
+  const x = scrollX, y = scrollY;
+  renderLive();
+  scrollTo(x, y);
+}
+addEventListener('touchstart', () => { touchActive = true; clearTimeout(touchTimer); }, { passive: true });
+for (const type of ['touchend', 'touchcancel']) addEventListener(type, () => {
+  clearTimeout(touchTimer);
+  touchTimer = setTimeout(() => {
+    touchActive = false;
+    if (deferredRender && live.phase === 'workshop' && !dialog.open) redrawKeepingScroll();
+    deferredRender = false;
+  }, 800);
+}, { passive: true });
 let workshopEpoch = 0;
 // Temps réel (MIG-05) : le flux SSE signale les changements, le parc est relu par REST (ADR 0004).
 // Actualisation regroupée (une lecture par seconde au plus), relecture de sécurité toutes les 30 s, et retour
@@ -805,8 +822,9 @@ async function refresh() {
         if (current && app.querySelector('[data-files]')?.dataset.fileStart !== String(canStart(current))) renderFiles(current.id);
         const target = app.querySelector('[data-terminal-target]');
         if (target && current) target.innerHTML = terminalTarget(current);
-      } else renderLive();
-      if (action) [...app.querySelectorAll('[data-action]')].find(button => button.dataset.action === action && button.getClientRects().length)?.focus();
+      } else if (touchActive) deferredRender = true;
+      else redrawKeepingScroll();
+      if (action) [...app.querySelectorAll('[data-action]')].find(button => button.dataset.action === action && button.getClientRects().length)?.focus({ preventScroll: true });
     }
   } catch (error) {
     if (live.phase !== 'workshop') return;
