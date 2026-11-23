@@ -1,5 +1,5 @@
 import type { Static } from 'typebox';
-import type { FleetMachine } from '../../src/http/routes/fleet.js';
+import type { FleetMachine, FleetCapabilities } from '../../src/http/routes/fleet.js';
 
 export interface FilamentSlot {
   id: number;
@@ -20,9 +20,17 @@ export interface ManualSpool {
   name?: string | null;
   color?: string | null;
 }
+export type MachineCapabilities = Static<typeof FleetCapabilities>;
 /** Stable API contract plus optional, reported presentation telemetry. */
 export type MachineData = Static<typeof FleetMachine> & {
   model?: string | null;
+  origin?: string;
+  capabilities?: MachineCapabilities;
+  transport?: string;
+  nativeState?: string;
+  firmware?: string;
+  feedRate?: number | null;
+  spindle?: number | null;
   nozzle?: number | null;
   bed?: number | null;
   progress?: number | null;

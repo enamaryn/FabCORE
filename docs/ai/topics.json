@@ -294,7 +294,12 @@
     "files": [
       "poc/manual-controls.mjs",
       "poc/server.mjs",
-      "poc/live.js"
+      "poc/live.js",
+      "src/domain/control.ts",
+      "web/src/components/controls/shared.tsx",
+      "web/src/components/controls/HeaterControls.tsx",
+      "web/src/components/controls/QuickControls.tsx",
+      "web/src/components/controls/MotionControls.tsx"
     ],
     "symbols": [
       "createManualControls",
@@ -304,7 +309,8 @@
     "tests": [
       "poc/manual-controls.test.mjs",
       "poc/manual-controls-http.test.mjs",
-      "poc/cc2-light-fan.test.mjs"
+      "poc/cc2-light-fan.test.mjs",
+      "web/test/controls.test.mjs"
     ],
     "docs": [
       "poc/CONNECTORS.md"
@@ -569,7 +575,7 @@
   },
   {
     "id": "react",
-    "title": "Interface React : sessions, parc, i18n et SSE",
+    "title": "Interface React : sessions, parc, cockpit, i18n et SSE",
     "files": [
       "web/src/App.tsx",
       "web/src/main.tsx",
@@ -579,20 +585,33 @@
       "web/src/components/FleetPage.tsx",
       "web/src/components/FilamentDots.tsx",
       "src/http/web-build.ts",
-      "src/http/routes/pages.ts"
+      "src/http/routes/pages.ts",
+      "web/src/components/machine/MachineDetail.tsx",
+      "web/src/components/machine/CameraPanel.tsx",
+      "web/src/components/machine/MaterialsPanel.tsx",
+      "web/src/route.ts",
+      "web/src/temperature.ts"
     ],
     "symbols": [
       "App",
       "createApi",
       "subscribeFleet",
       "ensureWebBuild",
-      "readWebAssets"
+      "readWebAssets",
+      "MachineDetail",
+      "CameraPanel",
+      "MaterialsPanel",
+      "parseRoute",
+      "recordTemperatures"
     ],
     "tests": [
       "web/test/api.test.ts",
       "web/test/events.test.ts",
       "web/test/components.test.mjs",
-      "poc/react-pages.test.mjs"
+      "poc/react-pages.test.mjs",
+      "web/test/cockpit.test.mjs",
+      "web/test/cockpit-data.test.ts",
+      "web/test/controls.test.mjs"
     ],
     "docs": [
       "docs/MIG-06-PARITY.md",

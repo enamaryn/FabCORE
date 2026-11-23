@@ -16,7 +16,7 @@ Les connecteurs et leurs comportements sont conservés, les tests existants rest
 | MIG-03 | Services backend et API | MIG-02 | Fusionné jusqu'à #114 ; dernière étape (routage complet, corrélation, niveaux) en revue |
 | MIG-04 | PostgreSQL et reprise des données | MIG-03 | En revue (04.1, 04.2, services, configuration et mise en place) |
 | MIG-05 | Événements et SSE | MIG-03/04 | En revue |
-| MIG-06 | Interface React par parcours | MIG-05 | Premier lot en revue : socle, sessions, navigation et parc sur `/app` |
+| MIG-06 | Interface React par parcours | MIG-05 | Socle et parc fusionnés (#126) ; cockpit six blocs en revue |
 | MIG-07 | Documentation et extensibilité | MIG-02 à 06 | À faire |
 | MIG-08 | Installation, recette et bascule | MIG-04 à 07 | À faire |
 
@@ -174,7 +174,7 @@ Validation locale Node 24 : types, lint, **154 tests**, licences et navigation. 
 
 ## MIG-06 · React sans régression des parcours
 
-Premier lot en revue sur `mig/06-react-shell` : Vite 7.3 maintenu, React, TypeScript, TanStack Query invalidé par SSE et i18next/ICU. Vue d’ensemble, parc complet et activité de session dans `/app` ; sessions locales, rôles, FR/EN et thèmes. Liens vers les fiches et outils existants conservés à `/`, sans deuxième implémentation de commandes. Compilation locale automatique au premier accès, artefacts non versionnés ; installation/mise à jour conserve les outils de build. La phase MIG-06 reste ouverte : cockpit, fichiers, visualiseur, caméras, formulaires et dialogues avancés suivent par parcours. État précis et vérifications : [matrice MIG-06](MIG-06-PARITY.md). Aucune recette matérielle ni navigateur complet revendiquée par ce premier lot.
+Premier lot fusionné dans #126 : React, TypeScript, TanStack Query invalidé par SSE et i18next/ICU, parc complet sur `/app`. Deuxième lot en revue sur `mig/06-machine-cockpit` : fiche à six blocs stables, modules et humidité, bobine informative, chauffe/éclairage/ventilation/vitesse/déplacements et commandes de fabrication selon les capacités existantes. Le cloud reste en lecture seule. La caméra utilise les relais serveur, avec aperçu à l’ouverture et direct uniquement à la demande. Aucune réécriture des protocoles : la validation pure des paramètres est partagée entre React et le chemin HTTP existant. Fichiers, logs et consoles sont reliés à l’interface conservée par liens entrants contrôlés. Compilation locale automatique au premier accès ; la mise à jour habituelle conserve les outils de build. MIG-06 reste ouverte : fichiers/transferts, visualiseur et administration suivent. État précis et recette restante : [matrice MIG-06](MIG-06-PARITY.md). Aucune recette physique ni navigateur complète revendiquée.
 
 ### MIG-06.1 · Interface commune
 

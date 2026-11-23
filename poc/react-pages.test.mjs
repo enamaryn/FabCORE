@@ -26,8 +26,9 @@ test('React HTTP : build servi sans CDN, assets confinés, shell public et API a
   for (const path of assets) { const asset = await get(server, path); assert.equal(asset.status, 200, path); assert.equal(asset.headers['cache-control'], 'no-store'); assert.ok(asset.body.length > 0); }
   assert.equal((await get(server, '/api/machines')).status, 401);
   assert.equal((await get(server, '/app', 'evil.test')).status, 421);
-  for (const path of ['/app?debug=1', '/app/assets/../../package.json', '/app/assets/missing.js', '/app/assets/missing.js?x=1', '/?screen=invalid', '/?machine=invalid', '/?screen=add&x=1']) assert.equal((await get(server, path)).status, 404, path);
+  for (const path of ['/app?debug=1', '/app/assets/../../package.json', '/app/assets/missing.js', '/app/assets/missing.js?x=1', '/?screen=invalid', '/?machine=invalid', '/?screen=add&x=1', '/?machine=11111111-1111-4111-8111-111111111111&tab=invalid', '/?machine=11111111-1111-4111-8111-111111111111&tab=files&x=1']) assert.equal((await get(server, path)).status, 404, path);
   assert.equal((await get(server, '/?screen=add')).status, 200);
   assert.equal((await get(server, '/?screen=cloud')).status, 200);
   assert.equal((await get(server, '/?machine=11111111-1111-4111-8111-111111111111')).status, 200);
+  for (const tab of ['files', 'logs', 'console']) assert.equal((await get(server, '/?machine=11111111-1111-4111-8111-111111111111&tab=' + tab)).status, 200);
 });
