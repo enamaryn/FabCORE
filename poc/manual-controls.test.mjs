@@ -202,3 +202,76 @@ test('CC2 : mise à l’origine 1026 puis déplacements 1027 bornés, confirmés
   const refused = createManualControls('elegoo', { read, request: async () => false, wait: async () => {}, confirmationAttempts: 3 });
   assert.deepEqual(await refused.execute(machine, { action: 'move', axis: 'X', distance: 1 }, state), { outcome: 'rejected' }, 'error_code 1003 : refus');
 });
+
+test('CC1 : chauffe, éclairage et ventilateurs par Cmd 403, formes exactes, confirmés par le rapport SDCP', async () => {
+  const machine = { id: 'cc1' };
+  let report = { PrintInfo: { Status: 0 }, TempOfNozzle: 25.4, TempTargetNozzle: 0, TempOfHotbed: [0, 22.1], TempTargetHotbed: 0, CurrentFanSpeed: { ModelFan: 0, AuxiliaryFan: 0, BoxFan: 40 }, LightStatus: { SecondLight: 1, RgbLight: [0, 0, 0] } };
+  const state = reportedControls('elegoo-cc1', report);
+  assert.deepEqual(state.heaters.map(({ id, current, target, writable }) => [id, current, target, writable]), [['nozzle', 25.4, 0, true], ['bed', 22.1, 0, true]], 'nombre ou paire [consigne, mesure]');
+  assert.deepEqual(state.lights, [{ id: 'main', value: true, writable: true }]);
+  assert.deepEqual(state.fans.map(({ id, percent }) => [id, percent]), [['fan', 0], ['aux_fan', 0], ['box_fan', 40]]);
+  assert.equal(reportedControls('elegoo-cc1', { ...report, PrintInfo: { Status: 1 } }).fans[0].writable, false, 'mise à l’origine en cours : lecture seule');
+  const sent = [], pauses = [];
+  const apply = (params) => {
+    if (params.TempTargetNozzle !== undefined) report = { ...report, TempTargetNozzle: params.TempTargetNozzle };
+    if (params.LightStatus) report = { ...report, LightStatus: { ...report.LightStatus, ...params.LightStatus } };
+    if (params.TargetFanSpeed) report = { ...report, CurrentFanSpeed: { ...report.CurrentFanSpeed, ...params.TargetFanSpeed } };
+  };
+  const control = createManualControls('elegoo-cc1', { read: () => reportedControls('elegoo-cc1', report), wait: async ms => { pauses.push(ms); },
+    request: async (_machine, command, params) => { sent.push([command, params]); apply(params); return true; } });
+  assert.deepEqual(await control.execute(machine, { action: 'heat', id: 'nozzle', value: 200 }, state), { outcome: 'confirmed' });
+  assert.deepEqual(await control.execute(machine, { action: 'light', id: 'main', value: false }, state), { outcome: 'confirmed' });
+  assert.deepEqual(await control.execute(machine, { action: 'fan', id: 'box_fan', value: 70 }, state), { outcome: 'confirmed' });
+  assert.deepEqual(sent, [[403, { TempTargetNozzle: 200 }], [403, { LightStatus: { SecondLight: 0 } }], [403, { TargetFanSpeed: { BoxFan: 70 } }]]);
+  assert.ok(pauses.every(ms => ms === 1000), 'une relecture SDCP par seconde');
+  const silent = createManualControls('elegoo-cc1', { read: () => reportedControls('elegoo-cc1', report), wait: async () => {},
+    request: async (_machine, command, params) => { sent.push([command, params]); return true; } });
+  const before = sent.length;
+  let reads = 0;
+  const counted = createManualControls('elegoo-cc1', { read: () => { reads++; return reportedControls('elegoo-cc1', report); }, wait: async () => {}, request: async () => true });
+  await assert.rejects(counted.execute(machine, { action: 'fan', id: 'fan', value: 50 }, state), /command-unconfirmed/);
+  assert.equal(reads, 6, 'six relectures au plus');
+  await assert.rejects(silent.execute(machine, { action: 'light', id: 'main', value: true }, state), /command-unconfirmed/);
+  assert.equal(sent.length, before + 1, 'aucun renvoi');
+});
+
+test('P2S : origine G28 depuis FabCore exigée avant tout déplacement, issues acceptées seulement', async () => {
+  const machine = { id: 'p2s' };
+  let online = true;
+  const sent = [];
+  const read = () => online ? reportedControls('bambu', { nozzle_temper: 25, bed_temper: 22, gcode_state: 'IDLE' }) : undefined;
+  const control = createManualControls('bambu', { read, send: async (_machine, command, params) => { sent.push([command, params.param]); return true; } });
+  let state = await control.read(machine);
+  assert.deepEqual(state.motion, { homed: null, axes: [], fabcoreHoming: true });
+  assert.deepEqual(await control.execute(machine, { action: 'move', axis: 'Z', distance: 10 }, state), { outcome: 'rejected' }, 'aucun déplacement avant origine');
+  assert.equal(sent.length, 0);
+  assert.deepEqual(await control.execute(machine, { action: 'home' }, state), { outcome: 'accepted' });
+  state = await control.read(machine);
+  assert.deepEqual(state.motion.axes, ['X', 'Y', 'Z']);
+  assert.deepEqual(await control.execute(machine, { action: 'move', axis: 'Z', distance: 10 }, state), { outcome: 'accepted' }, 'jamais « confirmé » : aucune position relue');
+  assert.deepEqual(await control.execute(machine, { action: 'move', axis: 'X', distance: -1 }, state), { outcome: 'accepted' });
+  assert.deepEqual(sent, [['gcode_line', 'G28\n'], ['gcode_line', 'G91\nG1 Z10 F600\nG90\n'], ['gcode_line', 'G91\nG1 X-1 F3000\nG90\n']]);
+  control.forgetHoming(machine.id);
+  assert.deepEqual((await control.read(machine)).motion.axes, [], 'terminal utilisé : origine oubliée');
+  await control.execute(machine, { action: 'home' }, state);
+  online = false; await control.read(machine); online = true;
+  assert.deepEqual((await control.read(machine)).motion.axes, [], 'rapport perdu : origine oubliée');
+});
+
+test('CC2 : mode de vitesse 1031 seulement en impression, confirmé par gcode_move.speed_mode, sinon inconnu sans renvoi', async () => {
+  const machine = { id: 'cc2' };
+  const report = (status, mode) => ({ machine_status: { status }, gcode_move: { x: 1, y: 2, z: 3, speed_mode: mode } });
+  assert.deepEqual(reportedControls('elegoo', report(1, 1)).speed, { mode: 1, writable: false }, 'au repos : la méthode répond 1010');
+  assert.equal(reportedControls('elegoo', report(2, 7)).speed, undefined, 'mode inconnu ignoré');
+  let state = reportedControls('elegoo', report(2, 1));
+  assert.equal(validateControl({ action: 'speed', value: 4, confirm: true }, state), null);
+  assert.equal(validateControl({ action: 'speed', value: 2, confirm: true }, reportedControls('elegoo', report(1, 1))), null);
+  assert.deepEqual(validateControl({ action: 'speed', value: 2, confirm: true }, state), { action: 'speed', value: 2 });
+  const sent = [];
+  const control = createManualControls('elegoo', { read: () => state, request: async (_machine, method, params) => { sent.push([method, params]); state = reportedControls('elegoo', report(2, params.mode)); return true; }, wait: async () => {}, confirmationAttempts: 3 });
+  assert.deepEqual(await control.execute(machine, { action: 'speed', value: 2 }, state), { outcome: 'confirmed' });
+  assert.deepEqual(sent, [[1031, { mode: 2 }]]);
+  const stuck = createManualControls('elegoo', { read: () => reportedControls('elegoo', report(2, 1)), request: async (_machine, method, params) => { sent.push([method, params]); return true; }, wait: async () => {}, confirmationAttempts: 3 });
+  await assert.rejects(stuck.execute(machine, { action: 'speed', value: 3 }, state), /command-unconfirmed/);
+  assert.equal(sent.length, 2, 'aucun renvoi');
+});

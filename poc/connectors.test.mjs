@@ -41,3 +41,33 @@ test('PrusaLink lit le statut local et le fichier actif sans suivre de redirecti
   const denied = await readPrusaLink({ origin, apiKey: 'invalid' }, { fetcher: async () => new Response(null, { status: 401 }) });
   assert.equal(denied.issue, 'prusalink-access');
 });
+
+test('P2S : terminal par gcode_line, accepté sans sortie, refus d’autorisation explicite, origine oubliée', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const directory = await mkdtemp(join(tmpdir(), 'fabcore-p2s-terminal-'));
+  const sent = [];
+  let refuse = null;
+  const bambu = {
+    read: () => ({ status: 'ready' }), probe: async () => ({ ok: true }), close() {},
+    controlState: () => ({ lights: [], heaters: [], fans: [], motion: null }),
+    send: async (_machine, command, params) => { sent.push([command, params.param]); if (refuse) throw new Error(refuse); return true; },
+  };
+  const registry = createConnectorRegistry({ bambu, directory });
+  try {
+    const connector = await registry.get('bambu');
+    const machine = { id: 'p2s', origin: 'mqtts://192.168.1.50:8883', serial: 'P2STEST01', accessCode: '12345678' };
+    await connector.control.execute(machine, { action: 'home' }, await connector.control.read(machine));
+    assert.deepEqual((await connector.control.read(machine)).motion.axes, ['X', 'Y', 'Z']);
+    assert.deepEqual(await connector.gcode(machine, 'M105'), { outcome: 'accepted', responses: null });
+    assert.deepEqual(sent.at(-1), ['gcode_line', 'M105\n']);
+    assert.deepEqual((await connector.control.read(machine)).motion.axes, [], 'toute commande du terminal oublie l’origine');
+    refuse = 'bambu-authorization';
+    assert.deepEqual(await connector.gcode(machine, 'M105'), { outcome: 'rejected', message: 'bambu-authorization' });
+    refuse = 'command-unconfirmed';
+    await assert.rejects(connector.gcode(machine, 'M105'), /command-unconfirmed/, 'réponse perdue : inconnue, jamais renvoyée');
+    assert.equal(sent.filter(([, line]) => line === 'M105\n').length, 3);
+    assert.equal(connectorCatalog.bambu.terminal, true);
+  } finally { registry.close(); await rm(directory, { recursive: true, force: true }); }
+});

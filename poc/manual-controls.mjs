@@ -47,6 +47,23 @@ export function reportedControls(kind, report) {
       const homed = typeof report.tool_head?.homed_axes === 'string' ? report.tool_head.homed_axes.toLowerCase() : '';
       out.motion = { homed, position, gcode: position, minimum: [0, 0, 0], maximum: position.map(value => Math.max(256, value)), home: report.machine_status?.status === 1 };
     }
+    // Mode de vitesse (méthode 1031) : 0 silencieux, 1 équilibré, 2 sport, 3 ludicrous ; refusé au repos (code 1010).
+    const mode = report.gcode_move?.speed_mode;
+    if (Number.isInteger(mode) && mode >= 0 && mode <= 3) out.speed = { mode, writable: report.machine_status?.status === 2 };
+  }
+  if (kind === 'elegoo-cc1') {
+    // SDCP CC1 : PrintInfo.Status 0 repos, 6 pause, 8 arrêtée, 9 terminée, 13 impression ; ailleurs lecture seule.
+    const canControl = [0, 6, 8, 9, 13].includes(report.PrintInfo?.Status);
+    // Températures : nombre (V1.1.x) ou paire [consigne, mesure] (ancien schéma).
+    const temp = (value, target) => Array.isArray(value) ? [numeric(value[1]), numeric(target ?? value[0])] : [numeric(value), numeric(target)];
+    const [nozzle, nozzleTarget] = temp(report.TempOfNozzle, report.TempTargetNozzle);
+    const [bed, bedTarget] = temp(report.TempOfHotbed, report.TempTargetHotbed);
+    if (nozzle !== null || nozzleTarget !== null) out.heaters.push(heater('nozzle', nozzle, nozzleTarget, 260, canControl));
+    if (bed !== null || bedTarget !== null) out.heaters.push(heater('bed', bed, bedTarget, 100, canControl));
+    if ([0, 1].includes(report.LightStatus?.SecondLight)) out.lights.push({ id: 'main', value: report.LightStatus.SecondLight === 1, writable: canControl });
+    for (const [id, key] of [['fan', 'ModelFan'], ['aux_fan', 'AuxiliaryFan'], ['box_fan', 'BoxFan']]) {
+      if (report.CurrentFanSpeed && key in report.CurrentFanSpeed) out.fans.push({ id, percent: percent(report.CurrentFanSpeed[key]), rpm: null, writable: canControl });
+    }
   }
   return out;
 }
@@ -58,6 +75,7 @@ export function validateControl(data, controls) {
     const item = controls.heaters.find(item => item.id === data.id && item.writable);
     if (item && data.value >= 0 && data.value <= item.max) return { action: 'heat', id: data.id, value: data.value };
   }
+  if (data.action === 'speed' && Number.isInteger(data.value) && data.value >= 0 && data.value <= 3 && controls.speed?.writable) return { action: 'speed', value: data.value };
   if (data.action === 'fan' && Number.isInteger(data.value) && data.value >= 0 && data.value <= 100 && controls.fans.some(item => item.id === data.id && item.writable)) return { action: 'fan', id: data.id, value: data.value };
   if (controls.laser?.writable) {
     if (['laser-off','zero','unlock','reset','jog-cancel'].includes(data.action)) return { action: data.action };
@@ -80,22 +98,25 @@ export function validateControl(data, controls) {
 }
 
 export function createManualControls(kind, { fetcher = fetch, send, request, read, wait = delay, confirmationAttempts = 25, trace } = {}) {
+  // CC1 : chaque relecture ouvre une connexion SDCP ; une relecture par seconde, six au plus.
+  const pause = kind === 'elegoo-cc1' ? 1000 : 200;
+  const attempts = kind === 'elegoo-cc1' ? Math.min(confirmationAttempts, 6) : confirmationAttempts;
   async function confirmHeat(machine, id, value) {
     // An acknowledgement alone does not prove the setpoint changed.
-    for (let attempt = 0; attempt < confirmationAttempts; attempt++) {
-      await wait(200);
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      await wait(pause);
       const reported = await snapshot(machine);
       const actual = reported.heaters.find(item => item.id === id)?.target;
-      if (attempt === 0 || attempt === confirmationAttempts - 1 || actual === value) trace?.(machine.id, 'heater-confirmation', { id, expected: value, actual, attempt, confirmed: actual === value });
+      if (attempt === 0 || attempt === attempts - 1 || actual === value) trace?.(machine.id, 'heater-confirmation', { id, expected: value, actual, attempt, confirmed: actual === value });
       if (actual === value) return { outcome: 'confirmed' };
     }
     throw new Error('heater-unconfirmed');
   }
   async function confirmReported(machine, control, id, value, matches) {
-    for (let attempt = 0; attempt < confirmationAttempts; attempt++) {
-      await wait(200);
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      await wait(pause);
       const confirmed = matches(await snapshot(machine));
-      if (attempt === 0 || attempt === confirmationAttempts - 1 || confirmed) trace?.(machine.id, 'control-confirmation', { control, id, expected: value, attempt, confirmed });
+      if (attempt === 0 || attempt === attempts - 1 || confirmed) trace?.(machine.id, 'control-confirmation', { control, id, expected: value, attempt, confirmed });
       if (confirmed) return { outcome: 'confirmed' };
     }
     throw new Error('command-unconfirmed');
@@ -107,8 +128,16 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
     if (!response.ok) { await response.body?.cancel(); throw new Error(response.status >= 500 ? 'command-unconfirmed' : 'command-rejected'); }
     return response.status === 204 ? null : readResponse(response);
   }
+  // P2S : aucune position ni origine dans le rapport ; l'origine faite par FabCore pendant la session débloque les
+  // déplacements, et s'oublie à la perte du rapport ou à tout envoi depuis le terminal (M84 peut libérer les moteurs).
+  const homedByFabCore = new Set();
   async function snapshot(machine) {
-    if (kind === 'bambu' || kind.startsWith('elegoo')) return await read?.(machine) ?? emptyControls();
+    if (kind === 'bambu') {
+      const controls = await read?.(machine);
+      if (!controls) { homedByFabCore.delete(machine.id); return emptyControls(); }
+      return { ...controls, motion: { homed: null, axes: homedByFabCore.has(machine.id) ? ['X', 'Y', 'Z'] : [], fabcoreHoming: true } };
+    }
+    if (kind.startsWith('elegoo')) return await read?.(machine) ?? emptyControls();
     if (kind === 'octoprint') {
       const data = await call(machine, '/api/printer');
       const out = emptyControls();
@@ -135,8 +164,16 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
     if (data.toolhead && data.gcode_move) out.motion = { homed: data.toolhead.homed_axes ?? '', position: data.toolhead.position, minimum: data.toolhead.axis_minimum, maximum: data.toolhead.axis_maximum, gcode: data.gcode_move.gcode_position };
     return out;
   }
-  return { read: snapshot, async execute(machine, command, controls) {
+  return { read: snapshot, forgetHoming: id => homedByFabCore.delete(id), async execute(machine, command, controls) {
     const { action, id, value } = command;
+    if (kind === 'bambu' && ['home', 'move'].includes(action)) {
+      // Mode développeur : G-code par `gcode_line`. Aucun retour de position : issue « acceptée », jamais confirmée.
+      if (!validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
+      const feed = command.axis === 'Z' ? 600 : 3000;
+      const ok = await send(machine, 'gcode_line', { param: action === 'home' ? 'G28\n' : `G91\nG1 ${command.axis}${command.distance} F${feed}\nG90\n` });
+      if (ok && action === 'home') homedByFabCore.add(machine.id);
+      return { outcome: ok ? 'accepted' : 'rejected' };
+    }
     if (kind === 'bambu') {
       const ok = action === 'light' ? await send(machine, 'ledctrl', { led_node: 'chamber_light', led_mode: value ? 'on' : 'off', led_on_time: 500, led_off_time: 500, loop_times: 1, interval_time: 1000 }, 'system')
         : await send(machine, 'gcode_line', { param: action === 'heat' ? `${id === 'nozzle' ? 'M104' : 'M140'} S${value}\n` : `M106 P${{ part: 1, aux: 2, chamber: 3 }[id]} S${Math.round(value / 100 * 255)}\n` });
@@ -144,7 +181,7 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
       return { outcome: ok ? 'accepted' : 'rejected' };
     }
     if (kind === 'elegoo') {
-      if (!['heat', 'light', 'fan', 'home', 'move'].includes(action) || !validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
+      if (!['heat', 'light', 'fan', 'speed', 'home', 'move'].includes(action) || !validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
       if (action === 'heat') {
         const ok = await request(machine, 1028, { [id === 'nozzle' ? 'extruder' : 'heater_bed']: value });
         return ok ? confirmHeat(machine, id, value) : { outcome: 'rejected' };
@@ -153,6 +190,11 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
       if (action === 'light') {
         const ok = await request(machine, 1029, { power: value ? 1 : 0 });
         return ok ? confirmReported(machine, 'light', id, value, reported => reported.lights.find(item => item.id === id)?.value === value) : { outcome: 'rejected' };
+      }
+      if (action === 'speed') {
+        // Le firmware remet « équilibré » au début de chaque changement de filament Canvas : une relecture divergente reste inconnue.
+        const ok = await request(machine, 1031, { mode: value });
+        return ok ? confirmReported(machine, 'speed', 'mode', value, reported => reported.speed?.mode === value) : { outcome: 'rejected' };
       }
       if (action === 'home') {
         const ok = await request(machine, 1026, { homed_axes: 'xyz' });
@@ -171,6 +213,21 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
         const actual = reported.fans.find(item => item.id === id)?.percent;
         return Number.isFinite(actual) && Math.abs(actual - value) <= 1;
       }) : { outcome: 'rejected' };
+    }
+    if (kind === 'elegoo-cc1') {
+      // Cmd 403 SDCP, une seule clé par commande, formes exactes vérifiées (une forme inattendue peut faire planter le démon).
+      if (!['heat', 'light', 'fan'].includes(action) || !validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
+      if (action === 'heat') {
+        const ok = await request(machine, 403, { [id === 'nozzle' ? 'TempTargetNozzle' : 'TempTargetHotbed']: value });
+        return ok ? confirmHeat(machine, id, value) : { outcome: 'rejected' };
+      }
+      if (action === 'light') {
+        const ok = await request(machine, 403, { LightStatus: { SecondLight: value ? 1 : 0 } });
+        return ok ? confirmReported(machine, 'light', id, value, reported => reported.lights.find(item => item.id === id)?.value === value) : { outcome: 'rejected' };
+      }
+      const key = { fan: 'ModelFan', aux_fan: 'AuxiliaryFan', box_fan: 'BoxFan' }[id];
+      const ok = await request(machine, 403, { TargetFanSpeed: { [key]: value } });
+      return ok ? confirmReported(machine, 'fan', id, value, reported => Math.abs((reported.fans.find(item => item.id === id)?.percent ?? NaN) - value) <= 1) : { outcome: 'rejected' };
     }
     if (kind === 'octoprint') {
       if (action === 'heat') await call(machine, id === 'nozzle' ? '/api/printer/tool' : '/api/printer/bed', id === 'nozzle' ? { command: 'target', targets: { tool0: value } } : { command: 'target', target: value });

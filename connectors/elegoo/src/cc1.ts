@@ -87,21 +87,30 @@ const temperature = (value: unknown) => {
   return Number.isFinite(actual) ? Math.round((actual as number) * 10) / 10 : null;
 };
 
-export async function readElegooCC1(machine: CC1Connection, { discoverPrinter = discover, Socket = WebSocket, signal }: CC1Options = {}): Promise<CC2Snapshot> {
+export async function readElegooCC1(machine: CC1Connection, options: CC1Options = {}): Promise<CC2Snapshot> {
+  return (await readCC1(machine, options)).snapshot;
+}
+
+/** Rapport d'état SDCP brut (`Data.Status`) pour les contrôles manuels, ou `null` si aucun rapport n'a été reçu. */
+export async function readElegooCC1Status(machine: CC1Connection, options: CC1Options = {}): Promise<Record<string, unknown> | null> {
+  return (await readCC1(machine, options)).status;
+}
+
+async function readCC1(machine: CC1Connection, { discoverPrinter = discover, Socket = WebSocket, signal }: CC1Options = {}): Promise<{ snapshot: CC2Snapshot; status: Record<string, unknown> | null }> {
   const serial = machine.serial ?? await discoverPrinter(new URL(machine.origin).hostname, signal);
-  if (!serialPattern.test(serial ?? '')) return empty('offline', 'cc1-discovery');
-  return new Promise<CC2Snapshot>((resolve) => {
+  if (!serialPattern.test(serial ?? '')) return { snapshot: empty('offline', 'cc1-discovery'), status: null };
+  return new Promise<{ snapshot: CC2Snapshot; status: Record<string, unknown> | null }>((resolve) => {
     const ws = new Socket(machine.origin + '/websocket');
     let finished = false;
     const timer = setTimeout(() => finish(empty('error', 'cc1-report')), 4000);
     const disconnect = () => finish(empty('offline', 'cc1-connection'));
-    function finish(result: CC2Snapshot) {
+    function finish(result: CC2Snapshot, status: Record<string, unknown> | null = null) {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
       signal?.removeEventListener('abort', disconnect);
       ws.close();
-      resolve({ ...result, serial: serial! });
+      resolve({ snapshot: { ...result, serial: serial! }, status });
     }
     ws.addEventListener('open', () => {
       if (finished) return;
@@ -127,7 +136,7 @@ export async function readElegooCC1(machine: CC1Connection, { discoverPrinter = 
         progress: status === 'done' ? 100 : Number.isFinite(print!.Progress!)
           ? Math.round(Math.max(0, Math.min(100, print!.Progress!))) : 0,
         file: typeof print!.Filename === 'string' ? print!.Filename.slice(0, 200) : ''
-      });
+      }, data as Record<string, unknown>);
     });
     if (signal?.aborted) disconnect();
     else signal?.addEventListener('abort', disconnect, { once: true });

@@ -33,6 +33,14 @@ const probeStatus = (read, allowed = [], keepIssue = false) => async (machine, {
   const ok = !result.issue || allowed.includes(result.issue);
   return { ok, issue: ok && !keepIssue ? null : result.issue };
 };
+// Caméra déclarée par la machine (Moonraker, OctoPrint) : aucune caméra configurée → 'no-stream' ; flux non MJPEG → 'invalid-stream'.
+async function declaredCamera(found, output, signal, onFrame) {
+  let url;
+  try { url = await found; } catch { return 'no-stream'; }
+  if (!url || signal.aborted) return url ? undefined : 'no-stream';
+  const { streamCamera } = await import('./camera.mjs');
+  if (!(await streamCamera(url, output, signal, undefined, onFrame))) return 'invalid-stream';
+}
 async function elegooCamera(machine, output, signal, onFrame, openCamera, identify) {
   const { cameraURL, streamCamera } = await import('./camera.mjs');
   const url = cameraURL(machine);
@@ -65,14 +73,16 @@ const definitions = {
     const mod = await import('./moonraker.mjs');
     const read = readPrinter ?? mod.readMoonraker;
     return { read: machine => read(machine), probe: probeStatus(machine => read(machine), ['print']), command: sendCommand ?? mod.commandMoonraker,
-      files: mod.createMoonrakerFiles(fetchFiles), gcode: sendGcode ?? mod.sendMoonrakerGcode };
-  }, { commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true, controls: true }),
+      files: mod.createMoonrakerFiles(fetchFiles), gcode: sendGcode ?? mod.sendMoonrakerGcode,
+      camera: (machine, output, signal, frame) => declaredCamera(mod.moonrakerWebcam(machine, fetchFiles), output, signal, frame) };
+  }, { camera: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true, controls: true }),
   octoprint: httpConnector('OctoPrint', 5000, true, async ({ readOcto, sendGcode, fetchFiles, sendCommand }) => {
     const mod = await import('./octoprint.mjs');
     const read = readOcto ?? mod.readOctoPrint;
     return { read, probe: probeStatus(read, ['octoprint-disconnected', 'octoprint-printer-error'], true), files: mod.createOctoPrintFiles(fetchFiles),
-      gcode: sendGcode ?? mod.sendOctoPrintGcode, command: sendCommand ?? ((machine, action) => mod.commandOctoPrint(machine, action, fetchFiles)) };
-  }, { interval: 5000, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true, controls: true }),
+      gcode: sendGcode ?? mod.sendOctoPrintGcode, command: sendCommand ?? ((machine, action) => mod.commandOctoPrint(machine, action, fetchFiles)),
+      camera: (machine, output, signal, frame) => declaredCamera(mod.octoPrintWebcam(machine, fetchFiles), output, signal, frame) };
+  }, { interval: 5000, camera: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true, controls: true }),
   prusalink: httpConnector('PrusaLink', 80, true, async ({ readPrusa, fetchFiles }) => {
     const mod = await import('./prusalink.mjs');
     const read = readPrusa ?? mod.readPrusaLink;
@@ -85,14 +95,25 @@ const definitions = {
   }, async ({ bambu, diagnostics, directory }) => {
     const monitor = bambu ?? (await import('./bambu.mjs')).createBambuMonitor(undefined, diagnostics);
     const { createBambuFiles } = await import('./bambu-files.mjs');
-    return {
+    const connector = {
       ...monitor, files: retainedFiles(join(directory, 'files'), createBambuFiles((...args) => monitor.send(...args)), { projects: true }), probe: (machine, { signal }) => monitor.probe(machine, signal),
+      // Terminal (mode développeur) : `gcode_line` accusé sans sortie de l'imprimante ; résultat « accepté », jamais « exécuté ».
+      async gcode(machine, script) {
+        connector.control?.forgetHoming?.(machine.id);
+        try {
+          return await monitor.send(machine, 'gcode_line', { param: script + '\n' }) ? { outcome: 'accepted', responses: null } : { outcome: 'rejected', message: '' };
+        } catch (failure) {
+          if (['bambu-authorization', 'bambu-connection'].includes(failure.message)) return { outcome: 'rejected', message: failure.message };
+          throw failure;
+        }
+      },
       async camera(machine, output, signal, frame) {
         const { streamBambuCamera } = await import('./bambu-camera.mjs');
         if (!(await streamBambuCamera(machine, output, signal, frame))) return 'no-stream';
       }
     };
-  }, { camera: true, filaments: 'AMS', controls: true, live: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, projects: true, externalFilament: true }),
+    return connector;
+  }, { camera: true, filaments: 'AMS', controls: true, live: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, projects: true, externalFilament: true, terminal: true }),
   elegoo: localConnector('Elegoo · Centauri Carbon 2', 'elegoo', (host, data, existing) => {
     const accessCode = secret(data, existing, 'accessCode', 64);
     if (/^[!-~]{1,64}$/.test(accessCode)) return { origin: `mqtt://${host}:1883`, serial: existing?.serial, accessCode };
@@ -124,13 +145,20 @@ const definitions = {
     const mod = await import('./elegoo-cc1.mjs');
     const read = readCC1 ?? mod.readElegooCC1;
     const { createElegooFiles } = await import('./elegoo-files.mjs');
+    const { reportedControls } = await import('./manual-controls.mjs');
     return {
       read, command: mod.commandElegooCC1,
+      // Contrôles manuels : rapport SDCP brut relu à chaque lecture, commandes Cmd 403 par connexion ponctuelle.
+      request: (machine, command, params) => mod.requestElegooCC1(machine, command, params),
+      controlState: async machine => {
+        const status = await mod.readElegooCC1Status(machine);
+        return status ? reportedControls('elegoo-cc1', status) : undefined;
+      },
       files: retainedFiles(join(directory, 'files'), createElegooFiles(mod.requestElegooCC1, { cc1: true, fetcher: fetchFiles })),
       probe: async (machine, options) => identified(await read(machine, options), ['elegoo-print']),
       camera: (machine, output, signal, frame) => elegooCamera(machine, output, signal, frame, openCamera, read)
     };
-  }, { camera: true, interval: 7000, verify: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, retainedOnly: true, externalFilament: true }),
+  }, { camera: true, interval: 7000, verify: true, controls: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, retainedOnly: true, externalFilament: true }),
   'xtool-m2': localConnector('xTool · M2', 'xtool-m2', (host, _data, existing) => ({
     origin: `wss://${host}:28900`, serial: existing?.serial, fingerprint: existing?.fingerprint,
     ...(existing?.origin === `wss://${host}:28900` && existing.pairingToken ? { pairingToken: existing.pairingToken } : {})

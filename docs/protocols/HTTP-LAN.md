@@ -60,3 +60,10 @@ Proposée en PR, non déployée. Code canonique : [OctoPrint](../../connectors/o
 | Terminal | POST `/api/printer/command` : mise en file `accepted`, jamais « exécutée » ; 409 = déconnecté | Non pris en charge |
 
 4xx = refus certain ; 5xx ou réponse perdue = inconnu, sans renvoi. Six nouveaux tests directs des modules ; tests HTTP, terminal et fichiers existants conservés. Aucun ordre matériel envoyé. Recette réelle par imprimante toujours à établir (instance OctoPrint de test sans imprimante, pas de recette Prusa) : après mise à jour demandée, vérifier lecture, liste, téléchargement, envoi sans lancement, puis Pause/Reprise/Arrêt sous supervision.
+
+## Caméras locales · ajout du 23 novembre 2026
+
+- **Moonraker** : `GET /server/webcams/list`, premier flux activé, services MJPEG d’abord ; URL relative résolue sur `http://<hôte>/`.
+- **OctoPrint** : `GET /api/settings`, `webcam.streamUrl` si `webcamEnabled` n’est pas faux.
+- Dans les deux cas le flux doit être en HTTP, sur le même hôte que la machine, sans identifiants dans l’URL ; sinon `invalid-stream`. Sans flux déclaré : `no-stream`, réponse 502 `camera-unavailable`.
+- **PrusaLink** : non retenu. L’API v1 n’offre que des instantanés (`/api/v1/cameras/snap`) sur PrusaLink pour Raspberry Pi ; sur les imprimantes Buddy (MK4, XL, MINI, CORE One) la caméra publie directement vers Prusa Connect, sans point d’accès local. Un relais d’instantanés serait un autre pipeline, à envisager seulement avec une machine de recette.

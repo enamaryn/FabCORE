@@ -1,4 +1,4 @@
-import type { HttpFilePorts, MachineFile } from '../../../packages/connector-sdk/src/index.ts';
+import { sameHostStream, type HttpFilePorts, type MachineFile } from '../../../packages/connector-sdk/src/index.ts';
 
 export interface OctoPrintConnection { origin: string; apiKey?: string | undefined }
 export type OctoPrintStatus = 'connecting' | 'ready' | 'printing' | 'paused' | 'error' | 'offline';
@@ -161,5 +161,17 @@ export function createOctoPrintServices({ encodePath, filePath, validOrigin, mul
     return { outcome: 'rejected', message: response.status === 409 ? 'octoprint-disconnected' : '' };
   }
 
-  return { readOctoPrint, createOctoPrintFiles, commandOctoPrint, sendOctoPrintGcode };
+  /** Flux caméra déclaré dans les réglages OctoPrint (`webcam.streamUrl`), s'il est activé ; URL relative = même origine. */
+  async function octoPrintWebcam(machine: OctoPrintConnection, fetcher: OctoPrintFetch = fetch): Promise<URL | null> {
+    if (!valid(machine)) return null;
+    const response = await fetcher(machine.origin + '/api/settings', {
+      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(3000), headers: { 'X-Api-Key': machine.apiKey! },
+    });
+    if (!response.ok) { await response.body?.cancel(); return null; }
+    const webcam = (await readResponse(response) as { webcam?: { webcamEnabled?: unknown; streamUrl?: unknown } } | null)?.webcam;
+    if (!webcam || webcam.webcamEnabled === false) return null;
+    return sameHostStream(webcam.streamUrl, machine.origin + '/', machine.origin, validOrigin);
+  }
+
+  return { readOctoPrint, createOctoPrintFiles, commandOctoPrint, sendOctoPrintGcode, octoPrintWebcam };
 }

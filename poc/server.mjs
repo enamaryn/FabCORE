@@ -383,8 +383,8 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
     if (req.method === 'POST') {
       const now = Date.now(), key = 'controls:' + machine.id;
       const recent = (terminalUse.get(key) ?? []).filter(at => now - at < minute);
-      // La CC2 coupe ses réponses environ 5 s au-delà de trois requêtes rapprochées : 2 s minimum entre deux contrôles.
-      if (recent.length >= 30 || (recent.length && now - recent.at(-1) < (machine.kind === 'elegoo' ? 2000 : 500))) return error(res, 429, 'rate');
+      // CC2 (limite de débit du broker) et CC1 (une connexion SDCP par commande) : 2 s minimum entre deux contrôles.
+      if (recent.length >= 30 || (recent.length && now - recent.at(-1) < (machine.kind?.startsWith('elegoo') ? 2000 : 500))) return error(res, 429, 'rate');
       terminalUse.set(key, [...recent, now]);
       pendingCommands.add(machine.id);
     }
@@ -398,7 +398,7 @@ export function createFabCore({ directory, origin, readPrinter, readOcto, readPr
       const command = validateControl(data, controls);
       if (!command) return error(res, 400, 'control-invalid');
       if (['move', 'home', 'zero', 'laser-pulse'].includes(command.action) && !['ready', 'done'].includes(status)) return error(res, 409, 'command-state');
-      if (['printing', 'paused'].includes(status) && ['heat', 'fan'].includes(command.action) && data.duringPrint !== true) return error(res, 409, 'control-confirm');
+      if (['printing', 'paused'].includes(status) && ['heat', 'fan', 'speed'].includes(command.action) && data.duringPrint !== true) return error(res, 409, 'control-confirm');
       if (res.destroyed) return;
       if (!session(req)) return error(res, 401, 'sign-in');
       attempted = true;

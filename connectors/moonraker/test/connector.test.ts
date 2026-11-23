@@ -109,3 +109,23 @@ test('Moonraker typé : JSON illisible, réseau perdu et Klippy indisponible res
   const startup = await api.readMoonraker(one, () => Promise.resolve(Response.json({ result: { status: { webhooks: { state: 'startup' } } } })));
   assert.equal(startup.status, 'connecting'); assert.equal(startup.issue, 'klippy');
 });
+
+test('Moonraker : flux caméra déclaré, MJPEG d’abord, même hôte uniquement', async () => {
+  // Comme en production : toute origine HTTP(S) privée est valide, le contrôle de même hôte fait le reste.
+  const api = createMoonrakerServices({ ...ports(), validOrigin: origin => /^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin) ? origin : null });
+  const list = (webcams: unknown[]): MoonrakerFetch => async (url, options) => {
+    assert.equal(new URL(url).pathname, '/server/webcams/list');
+    assert.equal(options.redirect, 'error');
+    return Response.json({ result: { webcams } });
+  };
+  const url = await api.moonrakerWebcam(one, list([
+    { name: 'webrtc', enabled: true, service: 'webrtc-camerastreamer', stream_url: '/webcam2/webrtc' },
+    { name: 'off', enabled: false, service: 'mjpegstreamer', stream_url: '/off/?action=stream' },
+    { name: 'cam', enabled: true, service: 'mjpegstreamer-adaptive', stream_url: '/webcam/?action=stream' },
+  ]));
+  assert.equal(url?.href, 'http://192.168.1.176/webcam/?action=stream', 'URL relative servie par l’interface web du même hôte');
+  for (const stream_url of ['http://192.168.1.99/webcam/?action=stream', 'http://user:pw@192.168.1.176/cam', 'https://192.168.1.176/cam', 'file:///etc/passwd']) {
+    assert.equal(await api.moonrakerWebcam(one, list([{ enabled: true, service: 'mjpegstreamer', stream_url }])), null, `refusé : ${stream_url}`);
+  }
+  assert.equal(await api.moonrakerWebcam(one, async () => new Response('', { status: 404 })), null);
+});

@@ -6,7 +6,7 @@ import { connectorCatalog } from './connectors.mjs';
 const source = readFileSync(new URL('./live.js', import.meta.url), 'utf8');
 
 test('cockpit : onglets isolés et mémorisés par machine, console limitée aux capacités', () => {
-  const machines = [{ id: 'one', kind: 'bambu', name: 'P2S', model: 'Bambu Lab', status: 'ready' }, { id: 'two', kind: 'klipper', name: 'Ender', model: 'Klipper', status: 'ready' }];
+  const machines = [{ id: 'one', kind: 'bambu', name: 'P2S', model: 'Bambu Lab', status: 'ready' }, { id: 'two', kind: 'klipper', name: 'Ender', model: 'Klipper', status: 'ready' }, { id: 'three', kind: 'prusalink', name: 'MK4', model: 'PrusaLink', status: 'ready' }];
   let renders = 0;
   const sandbox = { state: { machine: 'one', role: 'admin' }, machine: id => machines.find(m => m.id === id), machineConnectors: connectorCatalog,
     t: fr => fr, esc: String, icon: () => '', badge: () => '', btn: (action, label) => `<button data-action="${action}">${label}</button>`,
@@ -21,8 +21,12 @@ test('cockpit : onglets isolés et mémorisés par machine, console limitée aux
   assert.doesNotMatch(html, /data-files|data-terminal/);
   sandbox.select('files'); html = sandbox.render();
   assert.match(html, /data-files/); assert.doesNotMatch(html, /data-camera-panel|data-control-test=/);
-  assert.match(html, /id="machine-tab-console"[^>]*aria-disabled="true" title="Terminal pas encore pris en charge pour la P2S[^"]*" class="tab-unavailable">Console</, 'console visible, grisée et expliquée');
-  sandbox.select('console'); assert.equal(renders, 1, 'console Bambu non ouverte');
+  assert.doesNotMatch(html, /id="machine-tab-console"[^>]*aria-disabled/, 'console P2S active (gcode_line, mode développeur)');
+  sandbox.state.machine = 'three'; html = sandbox.render();
+  assert.match(html, /id="machine-tab-console"[^>]*aria-disabled="true" title="L’API PrusaLink ne propose pas d’envoi de G-code\." class="tab-unavailable">Console</, 'console visible, grisée et expliquée');
+  const before = renders;
+  sandbox.select('console'); assert.equal(renders, before, 'console PrusaLink non ouverte');
+  sandbox.state.machine = 'one';
   sandbox.state.machine = 'two'; sandbox.select('console'); html = sandbox.render();
   assert.match(html, /data-terminal/); assert.doesNotMatch(html, /data-files|data-camera-panel/);
   assert.doesNotMatch(html, /id="machine-tab-console"[^>]*aria-disabled/, 'console active pour Klipper');

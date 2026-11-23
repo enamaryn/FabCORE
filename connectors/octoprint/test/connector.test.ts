@@ -73,3 +73,12 @@ test('OctoPrint typé : inventaire local récursif limité au G-code', async () 
     { path: 'parts/gear.gcode', size: null, modified: null },
   ]);
 });
+
+test('OctoPrint typé : flux caméra des réglages, désactivé ou autre hôte refusé', async () => {
+  const settings = (webcam: unknown) => replies({ '/api/settings': Response.json({ webcam }) });
+  assert.equal((await api.octoPrintWebcam(machine, settings({ webcamEnabled: true, streamUrl: '/webcam/?action=stream' })))?.href, 'http://192.168.1.40:5000/webcam/?action=stream');
+  assert.equal((await api.octoPrintWebcam(machine, settings({ webcamEnabled: true, streamUrl: 'http://192.168.1.40:8080/?action=stream' })))?.href, 'http://192.168.1.40:8080/?action=stream', 'autre port du même hôte accepté');
+  assert.equal(await api.octoPrintWebcam(machine, settings({ webcamEnabled: false, streamUrl: '/webcam/?action=stream' })), null);
+  assert.equal(await api.octoPrintWebcam(machine, settings({ webcamEnabled: true, streamUrl: 'http://evil.example/cam' })), null);
+  assert.equal(await api.octoPrintWebcam({ ...machine, apiKey: '' }), null, 'clé absente : aucune requête');
+});
