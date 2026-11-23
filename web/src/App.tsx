@@ -48,7 +48,13 @@ export function App() {
   const toggleLanguage = () => { const language = i18n.resolvedLanguage?.startsWith('fr') ? 'en' : 'fr'; savePreference('fabcore-lang', language); void i18n.changeLanguage(language); };
   const toggleTheme = () => { const next = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark'; savePreference('fabcore-theme', next); setTheme(next); };
   if (!session.data) return <main className="setup area"><Brand /><h1 tabIndex={-1}>{session.isError ? t('failed') : t('loading')}</h1>{session.isError && <button type="button" onClick={() => { void session.refetch(); }}>{t('retry')}</button>}</main>;
-  if (!session.data.authenticated || !session.data.role || !session.data.username) return <main className="setup area"><Brand /><div className="row preference-actions"><button type="button" onClick={toggleLanguage}>{i18n.resolvedLanguage?.startsWith('fr') ? 'EN' : 'FR'}</button><button type="button" onClick={toggleTheme}>{i18n.t('themeLabel', { ns: 'common', theme: i18n.t('theme.' + theme, { ns: 'common' }) })}</button></div>{!session.data.installed ? <Setup api={api} /> : <Login api={api} oidc={session.data.oidcEnabled === true} />}</main>;
+  // Page unique de connexion et d'installation (l'interface historique renvoie ici) : carte centrée, préférences en bas.
+  if (!session.data.authenticated || !session.data.role || !session.data.username) return <main className="auth-page">
+    <div className="auth-column"><Brand />
+      {!session.data.installed ? <Setup api={api} /> : <Login api={api} oidc={session.data.oidcEnabled === true} />}
+      <div className="row auth-preferences"><button type="button" className="ghost" onClick={toggleLanguage}>{i18n.resolvedLanguage?.startsWith('fr') ? 'English' : 'Français'}</button><button type="button" className="ghost" onClick={toggleTheme}>{i18n.t('themeLabel', { ns: 'common', theme: i18n.t('theme.' + theme, { ns: 'common' }) })}</button></div>
+    </div>
+  </main>;
   return <Shell username={session.data.username} role={session.data.role} page={page.kind === 'machine' || page.kind === 'viewer' ? 'machines' : ['notifications', 'diagnostics', 'access'].includes(page.kind) ? 'home' : page.kind as 'home' | 'machines' | 'history'} language={i18n.resolvedLanguage ?? 'fr'} theme={theme} onLanguage={toggleLanguage} onTheme={toggleTheme} onLogout={() => { if (!logout.isPending) logout.mutate(); }} version={version.data} onUpdate={() => setPrompt(true)}>
     {session.data.role === 'admin' && version.data?.updateAvailable && <UpdatePrompt version={version.data} open={prompt} onClose={() => setPrompt(false)} />}
     {logout.isError && <p className="notice" role="alert">{t('error.internal')}</p>}
@@ -63,7 +69,7 @@ function Setup({ api }: { api: ReturnType<typeof createApi> }) {
   const setup = useMutation({ mutationFn: () => api.setup(token.trim(), username.trim(), password), retry: false,
     onSuccess: async () => { setToken(''); setPassword(''); setConfirm(''); await client.invalidateQueries({ queryKey: ['session'] }); },
     onError: failure => { const code = failure instanceof ApiError ? failure.code : 'network'; setError(['token', 'expired', 'installed', 'credentials', 'rate', 'storage-unavailable'].includes(code) ? code : 'network'); } });
-  return <form className="panel stack" onSubmit={event => {
+  return <form className="panel stack auth-card" onSubmit={event => {
     event.preventDefault(); if (setup.isPending) return;
     if (username.trim().length < 3 || password.length < 12) return setError('credentials');
     if (password !== confirm) return setError('mismatch');
@@ -75,7 +81,7 @@ function Setup({ api }: { api: ReturnType<typeof createApi> }) {
     <label className="stack">{t('access.password')}<input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={password} aria-describedby="setup-password-help" onChange={event => setPassword(event.target.value)} /></label><small id="setup-password-help">{t('access.passwordHelp')}</small>
     <label className="stack">{t('access.confirm')}<input type="password" autoComplete="new-password" required maxLength={128} value={confirm} onChange={event => setConfirm(event.target.value)} /></label>
     {error && <p className="error" role="alert">{t('setup.error.' + error)}</p>}
-    <button type="submit" className="primary" disabled={setup.isPending}>{t('setup.submit')}</button>
+    <button type="submit" className="primary auth-submit" disabled={setup.isPending}>{t('setup.submit')}</button>
   </form>;
 }
 function Login({ api, oidc }: { api: ReturnType<typeof createApi>; oidc: boolean }) {
@@ -85,11 +91,22 @@ function Login({ api, oidc }: { api: ReturnType<typeof createApi>; oidc: boolean
   const login = useMutation({ mutationFn: () => api.login(username, password), retry: false, onSuccess: async () => { setPassword(''); setVisible(false); await client.cancelQueries(); client.removeQueries({ predicate: query => query.queryKey[0] !== 'session' }); await client.invalidateQueries({ queryKey: ['session'] }); } });
   useEffect(() => { const conceal = () => { if (document.hidden) setVisible(false); }; document.addEventListener('visibilitychange', conceal); return () => document.removeEventListener('visibilitychange', conceal); }, []);
   const error = login.error instanceof ApiError && ['credentials', 'rate', 'response'].includes(login.error.code) ? login.error.code : 'network';
-  return <form className="panel stack" onSubmit={event => { event.preventDefault(); if (!login.isPending) { setVisible(false); login.mutate(); } }}>
-    <h1 tabIndex={-1}>{t('login')}</h1><label>{t('username')}<input autoComplete="username" required maxLength={40} value={username} onChange={event => setUsername(event.target.value)} /></label>
-    <label htmlFor="login-password">{t('password')}</label><div className="secret-field"><input id="login-password" type={visible ? 'text' : 'password'} autoComplete="current-password" required maxLength={128} value={password} onChange={event => setPassword(event.target.value)} /><button type="button" aria-label={t(visible ? 'hide' : 'show')} aria-pressed={visible} onClick={() => setVisible(value => !value)}><svg viewBox="0 0 24 24" className="ico" fill="none" stroke="currentColor" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />{visible && <path d="m3 3 18 18" />}</svg></button></div>
-    {login.isError && <p className="error" role="alert">{t('error.' + error)}</p>}<button type="submit" className="primary" disabled={login.isPending}>{login.isPending ? t('loading') : t('submit')}</button>{oidc && <a href="/api/oidc/start">{t('oidc')}</a>}
-  </form>;
+  // Échec Pocket ID signalé par le serveur dans le fragment (#oidc-failed), retiré aussitôt de l'adresse.
+  const [oidcFailed] = useState(() => location.hash === '#oidc-failed');
+  useEffect(() => { if (oidcFailed) history.replaceState(null, '', location.pathname); }, [oidcFailed]);
+  return <section className="panel auth-card">
+    <h1 tabIndex={-1}>{t('login')}</h1>
+    <form className="stack auth-form" onSubmit={event => { event.preventDefault(); if (!login.isPending) { setVisible(false); login.mutate(); } }}>
+      <label className="auth-field" htmlFor="login-username">{t('username')}</label><input id="login-username" autoComplete="username" required maxLength={40} value={username} onChange={event => setUsername(event.target.value)} />
+      <label className="auth-field" htmlFor="login-password">{t('password')}</label>
+      <div className="secret-field auth-secret"><input id="login-password" type={visible ? 'text' : 'password'} autoComplete="current-password" required maxLength={128} value={password} onChange={event => setPassword(event.target.value)} /><button type="button" className="ghost" aria-label={t(visible ? 'hide' : 'show')} aria-pressed={visible} onClick={() => setVisible(value => !value)}><svg viewBox="0 0 24 24" className="ico" fill="none" stroke="currentColor" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />{visible && <path d="m3 3 18 18" />}</svg></button></div>
+      {login.isError && <p className="error" role="alert">{t('error.' + error)}</p>}
+      {oidcFailed && !login.isError && <p className="error" role="alert">{t('error.oidc')}</p>}
+      <button type="submit" className="primary auth-submit" disabled={login.isPending}>{login.isPending ? t('loading') : t('submit')}</button>
+    </form>
+    {oidc && <><div className="auth-divider" role="separator"><span>{t('or')}</span></div>
+      <a className="button auth-oidc" href="/api/oidc/start"><svg viewBox="0 0 24 24" className="ico" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="8" cy="15" r="4" /><path d="m11 12 9-9M17 6l3 3M14 9l2 2" /></svg>{t('oidc')}</a></>}
+  </section>;
 }
 function Workshop({ api, username, role, page }: { api: ReturnType<typeof createApi>; username: string; role: 'admin' | 'observer'; page: Route }) {
   const { t } = useTranslation('auth'); const client = useQueryClient();

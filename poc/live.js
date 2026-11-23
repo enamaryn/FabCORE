@@ -665,6 +665,11 @@ async function openNotifications() {
 }
 
 function renderLive() {
+  // Page de connexion unique : l'interface React (/app) gère connexion, installation et retour Pocket ID.
+  if (live.phase === 'login' || live.phase === 'setup') {
+    location.replace('/app' + (live.error === 'oidc-failed' ? '#oidc-failed' : ''));
+    return;
+  }
   pauseGcode();
   app.querySelector('[data-live-camera] img')?.removeAttribute('src');
   document.documentElement.lang = state.lang;
