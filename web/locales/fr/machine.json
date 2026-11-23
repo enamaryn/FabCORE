@@ -101,5 +101,9 @@
     "spool-invalid": "Information de bobine invalide.",
     "storage-unavailable": "Enregistrement indisponible. Réessayez plus tard."
   },
-  "machineSettings": "Paramètres de la machine"
+  "machineSettings": "Paramètres de la machine",
+  "cameraEnlarge": "Agrandir la caméra",
+  "cameraReduce": "Réduire la caméra",
+  "cameraPage": "Pleine page",
+  "cameraExitPage": "Quitter la pleine page (Échap)"
 }
