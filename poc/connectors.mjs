@@ -134,13 +134,20 @@ const definitions = {
     const mod = await import('./elegoo-cc1.mjs');
     const read = readCC1 ?? mod.readElegooCC1;
     const { createElegooFiles } = await import('./elegoo-files.mjs');
+    const { reportedControls } = await import('./manual-controls.mjs');
     return {
       read, command: mod.commandElegooCC1,
+      // Contrôles manuels : rapport SDCP brut relu à chaque lecture, commandes Cmd 403 par connexion ponctuelle.
+      request: (machine, command, params) => mod.requestElegooCC1(machine, command, params),
+      controlState: async machine => {
+        const status = await mod.readElegooCC1Status(machine);
+        return status ? reportedControls('elegoo-cc1', status) : undefined;
+      },
       files: retainedFiles(join(directory, 'files'), createElegooFiles(mod.requestElegooCC1, { cc1: true, fetcher: fetchFiles })),
       probe: async (machine, options) => identified(await read(machine, options), ['elegoo-print']),
       camera: (machine, output, signal, frame) => elegooCamera(machine, output, signal, frame, openCamera, read)
     };
-  }, { camera: true, interval: 7000, verify: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, retainedOnly: true, externalFilament: true }),
+  }, { camera: true, interval: 7000, verify: true, controls: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, retainedOnly: true, externalFilament: true }),
   'xtool-m2': localConnector('xTool · M2', 'xtool-m2', (host, _data, existing) => ({
     origin: `wss://${host}:28900`, serial: existing?.serial, fingerprint: existing?.fingerprint,
     ...(existing?.origin === `wss://${host}:28900` && existing.pairingToken ? { pairingToken: existing.pairingToken } : {})

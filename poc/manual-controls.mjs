@@ -48,6 +48,20 @@ export function reportedControls(kind, report) {
       out.motion = { homed, position, gcode: position, minimum: [0, 0, 0], maximum: position.map(value => Math.max(256, value)), home: report.machine_status?.status === 1 };
     }
   }
+  if (kind === 'elegoo-cc1') {
+    // SDCP CC1 : PrintInfo.Status 0 repos, 6 pause, 8 arrêtée, 9 terminée, 13 impression ; ailleurs lecture seule.
+    const canControl = [0, 6, 8, 9, 13].includes(report.PrintInfo?.Status);
+    // Températures : nombre (V1.1.x) ou paire [consigne, mesure] (ancien schéma).
+    const temp = (value, target) => Array.isArray(value) ? [numeric(value[1]), numeric(target ?? value[0])] : [numeric(value), numeric(target)];
+    const [nozzle, nozzleTarget] = temp(report.TempOfNozzle, report.TempTargetNozzle);
+    const [bed, bedTarget] = temp(report.TempOfHotbed, report.TempTargetHotbed);
+    if (nozzle !== null || nozzleTarget !== null) out.heaters.push(heater('nozzle', nozzle, nozzleTarget, 260, canControl));
+    if (bed !== null || bedTarget !== null) out.heaters.push(heater('bed', bed, bedTarget, 100, canControl));
+    if ([0, 1].includes(report.LightStatus?.SecondLight)) out.lights.push({ id: 'main', value: report.LightStatus.SecondLight === 1, writable: canControl });
+    for (const [id, key] of [['fan', 'ModelFan'], ['aux_fan', 'AuxiliaryFan'], ['box_fan', 'BoxFan']]) {
+      if (report.CurrentFanSpeed && key in report.CurrentFanSpeed) out.fans.push({ id, percent: percent(report.CurrentFanSpeed[key]), rpm: null, writable: canControl });
+    }
+  }
   return out;
 }
 
@@ -80,22 +94,25 @@ export function validateControl(data, controls) {
 }
 
 export function createManualControls(kind, { fetcher = fetch, send, request, read, wait = delay, confirmationAttempts = 25, trace } = {}) {
+  // CC1 : chaque relecture ouvre une connexion SDCP ; une relecture par seconde, six au plus.
+  const pause = kind === 'elegoo-cc1' ? 1000 : 200;
+  const attempts = kind === 'elegoo-cc1' ? Math.min(confirmationAttempts, 6) : confirmationAttempts;
   async function confirmHeat(machine, id, value) {
     // An acknowledgement alone does not prove the setpoint changed.
-    for (let attempt = 0; attempt < confirmationAttempts; attempt++) {
-      await wait(200);
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      await wait(pause);
       const reported = await snapshot(machine);
       const actual = reported.heaters.find(item => item.id === id)?.target;
-      if (attempt === 0 || attempt === confirmationAttempts - 1 || actual === value) trace?.(machine.id, 'heater-confirmation', { id, expected: value, actual, attempt, confirmed: actual === value });
+      if (attempt === 0 || attempt === attempts - 1 || actual === value) trace?.(machine.id, 'heater-confirmation', { id, expected: value, actual, attempt, confirmed: actual === value });
       if (actual === value) return { outcome: 'confirmed' };
     }
     throw new Error('heater-unconfirmed');
   }
   async function confirmReported(machine, control, id, value, matches) {
-    for (let attempt = 0; attempt < confirmationAttempts; attempt++) {
-      await wait(200);
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      await wait(pause);
       const confirmed = matches(await snapshot(machine));
-      if (attempt === 0 || attempt === confirmationAttempts - 1 || confirmed) trace?.(machine.id, 'control-confirmation', { control, id, expected: value, attempt, confirmed });
+      if (attempt === 0 || attempt === attempts - 1 || confirmed) trace?.(machine.id, 'control-confirmation', { control, id, expected: value, attempt, confirmed });
       if (confirmed) return { outcome: 'confirmed' };
     }
     throw new Error('command-unconfirmed');
@@ -171,6 +188,21 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
         const actual = reported.fans.find(item => item.id === id)?.percent;
         return Number.isFinite(actual) && Math.abs(actual - value) <= 1;
       }) : { outcome: 'rejected' };
+    }
+    if (kind === 'elegoo-cc1') {
+      // Cmd 403 SDCP, une seule clé par commande, formes exactes vérifiées (une forme inattendue peut faire planter le démon).
+      if (!['heat', 'light', 'fan'].includes(action) || !validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
+      if (action === 'heat') {
+        const ok = await request(machine, 403, { [id === 'nozzle' ? 'TempTargetNozzle' : 'TempTargetHotbed']: value });
+        return ok ? confirmHeat(machine, id, value) : { outcome: 'rejected' };
+      }
+      if (action === 'light') {
+        const ok = await request(machine, 403, { LightStatus: { SecondLight: value ? 1 : 0 } });
+        return ok ? confirmReported(machine, 'light', id, value, reported => reported.lights.find(item => item.id === id)?.value === value) : { outcome: 'rejected' };
+      }
+      const key = { fan: 'ModelFan', aux_fan: 'AuxiliaryFan', box_fan: 'BoxFan' }[id];
+      const ok = await request(machine, 403, { TargetFanSpeed: { [key]: value } });
+      return ok ? confirmReported(machine, 'fan', id, value, reported => Math.abs((reported.fans.find(item => item.id === id)?.percent ?? NaN) - value) <= 1) : { outcome: 'rejected' };
     }
     if (kind === 'octoprint') {
       if (action === 'heat') await call(machine, id === 'nozzle' ? '/api/printer/tool' : '/api/printer/bed', id === 'nozzle' ? { command: 'target', targets: { tool0: value } } : { command: 'target', target: value });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { commandElegooCC1, readElegooCC1, requestElegooCC1 } from '../src/cc1.ts';
+import { commandElegooCC1, readElegooCC1, readElegooCC1Status, requestElegooCC1 } from '../src/cc1.ts';
 import { createElegooFileServices, stagedUpload } from '../src/upload.ts';
 import { Readable } from 'node:stream';
 import { access, readFile } from 'node:fs/promises';
@@ -82,4 +82,18 @@ test('Elegoo : le staging supprime le temporaire après erreur du transport', as
   let called = false;
   await assert.rejects(stagedUpload(Readable.from([Buffer.from('short')]), 7, async () => { called = true; }), /upload-truncated/);
   assert.equal(called, false);
+});
+
+test('CC1 : rapport SDCP brut relu pour les contrôles manuels, résumé inchangé', async () => {
+  const status = { PrintInfo: { Status: 0, Progress: 0, Filename: '' }, TempOfNozzle: 25, TempTargetNozzle: 0, TempOfHotbed: 22, TempTargetHotbed: 0,
+    CurrentFanSpeed: { ModelFan: 0, AuxiliaryFan: 0, BoxFan: 40 }, LightStatus: { SecondLight: 1 } };
+  class Socket extends EventTarget {
+    constructor(_url: string) { super(); queueMicrotask(() => this.dispatchEvent(new Event('open'))); }
+    close() { this.dispatchEvent(new Event('close')); }
+    send(_payload: string) {
+      queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ Topic: 'sdcp/status/' + machine.serial, Status: status }) })));
+    }
+  }
+  assert.deepEqual(await readElegooCC1Status(machine, { Socket }), status);
+  assert.deepEqual(await readElegooCC1(machine, { Socket }), { status: 'ready', issue: null, nozzle: 25, bed: 22, progress: 0, file: '', serial: machine.serial });
 });
