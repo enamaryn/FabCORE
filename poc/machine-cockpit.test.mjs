@@ -21,9 +21,11 @@ test('cockpit : onglets isolés et mémorisés par machine, console limitée aux
   assert.doesNotMatch(html, /data-files|data-terminal/);
   sandbox.select('files'); html = sandbox.render();
   assert.match(html, /data-files/); assert.doesNotMatch(html, /data-camera-panel|data-control-test=/);
-  sandbox.select('console'); assert.equal(renders, 1, 'console Bambu non proposée');
+  assert.match(html, /id="machine-tab-console"[^>]*aria-disabled="true" title="Terminal pas encore pris en charge pour la P2S[^"]*" class="tab-unavailable">Console</, 'console visible, grisée et expliquée');
+  sandbox.select('console'); assert.equal(renders, 1, 'console Bambu non ouverte');
   sandbox.state.machine = 'two'; sandbox.select('console'); html = sandbox.render();
   assert.match(html, /data-terminal/); assert.doesNotMatch(html, /data-files|data-camera-panel/);
+  assert.doesNotMatch(html, /id="machine-tab-console"[^>]*aria-disabled/, 'console active pour Klipper');
   sandbox.state.machine = 'one'; assert.match(sandbox.render(), /data-files/, 'onglet conservé par machine');
 });
 

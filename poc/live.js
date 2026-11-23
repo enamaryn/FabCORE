@@ -486,6 +486,16 @@ function machineTab(id = state.machine) {
   if (tab === 'logs' && state.role !== 'admin') return 'overview';
   return tab === 'console' && !machineConnectors[machine(id)?.kind]?.terminal ? 'overview' : tab;
 }
+// Console G-code toujours visible ; grisée avec la raison quand la connexion ne permet pas d'envoyer du G-code.
+function consoleUnavailable(kind) {
+  return ({
+    elegoo: t('La Centauri Carbon 2 n’accepte pas de G-code dans son API LAN d’origine (aucune méthode prévue par le SDK Elegoo).', 'The Centauri Carbon 2 accepts no G-code through its stock LAN API (no method in the Elegoo SDK).'),
+    'elegoo-cc1': t('La Centauri Carbon n’accepte pas de G-code par son protocole LAN SDCP.', 'The Centauri Carbon accepts no G-code through its SDCP LAN protocol.'),
+    prusalink: t('L’API PrusaLink ne propose pas d’envoi de G-code.', 'The PrusaLink API offers no G-code command.'),
+    bambu: t('Terminal pas encore pris en charge pour la P2S : le mode développeur accepte des lignes G-code mais ne renvoie aucune réponse.', 'Terminal not yet supported for the P2S: developer mode accepts G-code lines but returns no output.'),
+    'bambu-cloud': t('Connexion cloud en lecture seule : aucune commande envoyée.', 'Read-only cloud connection: no command is sent.')
+  })[kind] || t('Terminal G-code non pris en charge par cette connexion.', 'G-code terminal not supported by this connection.');
+}
 function selectMachineTab(tab) {
   if (!['overview', 'files', 'console', 'logs'].includes(tab)) return;
   if (tab === 'logs' && state.role !== 'admin') return;
@@ -508,7 +518,7 @@ function liveDetail() {
       <p data-camera-status role="status" hidden></p>
       <div class="row wrap camera-toolbar">${btn('camera-start',t('Voir la caméra','View camera'),'camera')}${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
     </section>` : unavailablePanel(t('Caméra','Camera'), t('Caméra non prise en charge par cette connexion.', 'Camera not supported by this connection.'), 'machine-camera');
-  const tabs = [['overview', t('Vue machine','Machine view')], ['files', t('Fichiers','Files')], ...(state.role === 'admin' ? [['logs', t('Logs','Logs')]] : []), ...(machineConnectors[m.kind]?.terminal ? [['console', t('Console','Console')]] : [])];
+  const tabs = [['overview', t('Vue machine','Machine view')], ['files', t('Fichiers','Files')], ...(state.role === 'admin' ? [['logs', t('Logs','Logs')]] : []), ['console', t('Console','Console'), machineConnectors[m.kind]?.terminal ? null : consoleUnavailable(m.kind)]];
   return `<div class="machine-cockpit">
     <style>
       .machine-workspace .top{min-height:48px;padding:6px 20px}.machine-workspace .area{max-width:1600px;padding:16px 20px 24px}
@@ -520,14 +530,14 @@ function liveDetail() {
       .filament-modules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.filament-modules>.filament-module:only-child{grid-column:1/-1;justify-self:start}.machine-cockpit .filament-module{gap:5px;padding:8px;background:var(--raised);border:1px solid var(--line);border-radius:8px;min-width:0}.machine-cockpit .filament-rack{width:auto;max-width:100%;padding:2px 0;gap:5px;background:transparent;border:0;grid-template-columns:repeat(var(--slots),minmax(28px,42px))}.machine-cockpit .filament-spool{width:19px;height:31px}.machine-cockpit .filament-slot{gap:3px;grid-template-rows:auto auto auto}.machine-cockpit .filament-position{font-size:10px;padding:1px 4px}.machine-cockpit .filament-material{font-size:10px;max-width:46px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.machine-cockpit .filament-active{display:none}.machine-cockpit .filament-slot[data-active=true]:after{display:none}.machine-cockpit .filament-slot[data-active=true]{outline:1px solid var(--accent);outline-offset:2px;border-radius:4px}
       .jog-layout{display:flex;gap:16px;align-items:center;justify-content:center}.jog-pad{display:grid;grid-template:repeat(3,32px)/repeat(3,38px);gap:3px}.jog-pad button{padding:3px;min-height:32px}.jog-pad span{display:grid;place-items:center;color:var(--dim);font-size:11px}.jog-z{display:grid;gap:5px;border-left:1px solid var(--line);padding-left:16px}.jog-options{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.jog-options label{font-size:12px}.jog-note{font-size:11px;color:var(--dim)}
       .machine-cockpit .machine-filaments{width:100%;min-width:0}.unavailable-control{position:relative;min-height:66px;display:grid;place-items:center;border-radius:8px;background:var(--raised);overflow:hidden}.unavailable-skeleton{display:flex;gap:8px;justify-content:center;align-items:center;padding:12px;filter:blur(2px);opacity:.25;pointer-events:none;user-select:none}.unavailable-skeleton input{width:70px}.unavailable-message{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:10px;color:var(--dim);font-size:12px;line-height:1.4;background:color-mix(in srgb,var(--card) 65%,transparent)}.machine-camera.machine-unavailable .unavailable-control{min-height:150px}.machine-cockpit .machine-unavailable{min-width:0}
-      .cockpit-bottom{display:grid;gap:12px;min-width:0}.cockpit-bottom>.panel{min-width:0}
+      .machine-tabs .tab-unavailable{opacity:.45;cursor:not-allowed}.cockpit-bottom{display:grid;gap:12px;min-width:0}.cockpit-bottom>.panel{min-width:0}
       @media(min-width:1100px) and (max-height:900px){.cockpit-bottom{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.machine-temperature [data-temperature-plot] svg{max-height:85px}.jog-layout{gap:8px}.jog-z{padding-left:8px}.jog-options{gap:5px}.machine-cockpit [data-live-telemetry] .panel{gap:6px}}
       @media(max-width:1000px){.cockpit-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.control-heater form{width:100%}.machine-workspace .area{padding:12px}}
       @media(max-width:760px){.machine-workspace{display:block}.machine-workspace .sidebar{display:none}.cockpit-grid{grid-template-columns:1fr}.machine-workspace .area{padding-bottom:80px}.camera-stage{max-height:none}.cockpit-header{align-items:flex-start}.machine-tabs{overflow:auto}.machine-tabs button{white-space:nowrap}.machine-account summary{max-width:120px;overflow:hidden;text-overflow:ellipsis}.machine-workspace .top{padding:6px 12px}}
       @media(max-width:380px){.filament-modules{grid-template-columns:1fr}}
     </style>
     <header class="cockpit-header row between"><div class="row">${btn('nav:machines', '←', '', 'ghost', `aria-label="${t('Retour au parc','Back to fleet')}"`)}<div><h1>${esc(m.name)}</h1><small>${esc(m.model)}</small></div><span data-machine-status>${badge(m.status)}</span></div>${state.role === 'admin' ? btn(m.kind === 'bambu-cloud' ? 'cloud-open' : 'edit', '', 'control', 'ghost', `aria-label="${t('Modifier la machine','Edit machine')}"`) : ''}</header>
-    <div class="machine-tabs" role="tablist" aria-label="${t('Fiche machine','Machine details')}">${tabs.map(([key, label]) => `<button type="button" id="machine-tab-${key}" role="tab" aria-selected="${tab === key}" aria-controls="machine-tab-panel" tabindex="${tab === key ? 0 : -1}" data-action="machine-tab:${key}">${label}</button>`).join('')}</div>
+    <div class="machine-tabs" role="tablist" aria-label="${t('Fiche machine','Machine details')}">${tabs.map(([key, label, reason]) => `<button type="button" id="machine-tab-${key}" role="tab" aria-selected="${tab === key}" aria-controls="machine-tab-panel" tabindex="${tab === key ? 0 : -1}" data-action="machine-tab:${key}"${reason ? ` aria-disabled="true" title="${esc(reason)}" class="tab-unavailable"` : ''}>${label}</button>`).join('')}</div>
     <div role="tabpanel" id="machine-tab-panel" aria-labelledby="machine-tab-${tab}">
       ${tab === 'logs' ? machineLogPanel(m) : tab === 'files' ? filesPanel(m) : tab === 'console' ? terminalPanel(m) : `<div class="cockpit-grid"><div class="cockpit-column">${camera}<div data-live-filaments>${liveMaterials(m)}</div></div><div class="cockpit-column"><div data-live-telemetry>${liveFabrication(m)}</div>${machineConnectors[m.kind]?.controls ? manualControlsPanel(m, 'heat') : liveTemperatures(m)}<div class="cockpit-bottom">${manualControlsPanel(m, 'quick')}${manualControlsPanel(m, 'motion')}</div></div></div>`}
     </div>
@@ -2072,7 +2082,8 @@ app.addEventListener('keydown', event => {
   const tab = event.target.closest('[role="tab"][data-action^="machine-tab:"]');
   if (!tab || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
   event.preventDefault();
-  const tabs = [...app.querySelectorAll('[role="tab"][data-action^="machine-tab:"]')];
+  const tabs = [...app.querySelectorAll('[role="tab"][data-action^="machine-tab:"]:not([aria-disabled="true"])')];
+  if (!tabs.includes(tab)) return;
   const at = tabs.indexOf(tab);
   const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (at + (event.key === 'ArrowLeft' ? -1 : 1) + tabs.length) % tabs.length;
   selectMachineTab(tabs[next].dataset.action.split(':')[1]);

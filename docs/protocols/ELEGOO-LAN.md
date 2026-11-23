@@ -10,6 +10,8 @@ Relevé : 19 novembre 2026, base FabCore `7d1e6a4`. CC1 et CC2 utilisent des pro
 | Chauffe | Non exposée dans FabCore | 1028, un champ par action : `extruder` OU `heater_bed`, zéro pour couper |
 | Éclairage | Non exposé | 1029 `{power: 0|1}`, état relu dans `led.status` ; recette à faire |
 | Ventilateurs | Non exposés | 1030, un seul champ `fan` (pièce), `aux_fan` ou `box_fan` (caisson), PWM 0–255 ; `heater_fan` et `controller_fan` en lecture seule ; recette à faire |
+| Origine / déplacements | Non exposés | 1026 `{homed_axes: "xyz"}` puis 1027 `{axes: "x"|"y"|"z", distance: mm}` ; recette à faire |
+| Terminal G-code | Aucun | Aucune méthode dans l’API LAN d’origine ; onglet Console grisé et expliqué |
 | Caméra | MJPEG 3031 | MJPEG 8080 |
 | Fichiers | Copies des transferts FabCore réussis | Inventaire interne natif 1044 proposé, téléchargement HTTP et lancement 1020 ; recette à faire |
 | Filaments | Pas de CANVAS validé ici | CANVAS par lecture 2005 ; aucun % d’humidité inventé |
@@ -101,3 +103,10 @@ Jusqu’ici la session ne conservait que `machine_status`, `extruder`, `heater_b
 Commandes ajoutées, au repos (status 1) ou en fabrication (status 2) uniquement, comme la chauffe : `1029 {"power": 0|1}` et `1030 {"<canal>": 0-255}` pour `fan`, `aux_fan`, `box_fan`. Un seul champ par commande, QoS 0 sans rétention, aucun renvoi ; succès seulement quand l’état relu correspond. **Deux secondes minimum** entre deux contrôles d’une CC2 : au-delà de trois requêtes rapprochées, le broker cesse de répondre pendant environ cinq secondes.
 
 Sources : notes de protocole [pycentauri](https://github.com/bjan/pycentauri) (méthodes vérifiées sur matériel et captures OrcaSlicer, limite de débit), [elegoo-web](https://github.com/runnane/elegoo-web) (`1029 {power}`, `1030` en 0–255) et adaptateur CC2 du SDK officiel [elegoo-link](https://github.com/ELEGOO-3D/elegoo-link) (correspondance `model→fan`, `aux→aux_fan`, `chamber→box_fan`, lecture `led.status`, `fans.*.speed/rpm`). Dans ce SDK, 1029 et 1030 sont commentées dans la table active, comme 1028 avant sa validation : **à confirmer sur les deux CC2 et à noter avec la version exacte du firmware** (pycentauri signale des méthodes muettes sur 01.03.02.51).
+
+## Origine, déplacements et terminal CC2 · ajout du 23 novembre 2026
+
+- **Mise à l’origine** : `1026 {"homed_axes": "xyz"}` (le firmware met toujours les trois axes à l’origine). Au repos uniquement (status 1), confirmation demandée par l’interface. Réponse attendue jusqu’à 50 s (le firmware répond en fin de mouvement), puis succès seulement si `tool_head.homed_axes` (ou `toolhead` selon le firmware) contient `x`, `y` et `z`.
+- **Déplacements** : `1027 {"axes": "x"|"y"|"z", "distance": ±0.1|1|10}`, format du SDK officiel et d’elegoo-web. pycentauri documente `{"axis","step"}` et obtient `1003` : probablement un mauvais format, non retenu. Au repos, axes à l’origine, un déplacement à la fois ; réponse attendue jusqu’à 25 s ; succès seulement si `gcode_move.<axe>` (ou l’ancien `gcode_move_inf`) relu vaut la cible à 0,05 mm près, sinon inconnu sans renvoi. Limites : 0 à 256 mm, jamais au-delà d’une position déjà relue (la tête se gare à Y ≈ 264 hors volume) ; le firmware garde ses propres butées.
+- **Terminal G-code** : impossible avec le firmware d’origine. Le SDK officiel énumère toutes les méthodes LAN (impression, origine, déplacement, température, vitesse, ventilateurs, fichiers, CANVAS) sans aucune méthode G-code ; pycentauri et elegoo-web non plus. L’accès G-code passe par SSH et un firmware communautaire, exclus par le contrat des connecteurs. L’onglet Console reste visible, grisé, avec cette explication.
+- Non exposés à ce jour : mode de vitesse `1031` et reprise `1023` (commentée dans le SDK, jamais éprouvée en pause).

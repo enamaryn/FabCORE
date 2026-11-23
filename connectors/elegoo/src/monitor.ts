@@ -239,7 +239,9 @@ export function createCC2Services({ reportedControls, canvasFilaments, readRespo
           entry.rpc = (method: number, params: Record<string, unknown>, raw = false) => new Promise<boolean | CC2Result>((resolve, reject) => {
             if (!entry.close || !client.connected) return reject(new Error('elegoo-connection'));
             const id = ++transaction;
-            const timer = setTimeout(() => { pending.delete(id); reject(new Error('command-unconfirmed')); }, 6000);
+            // Mise à l'origine (1026) et déplacement (1027) ne répondent qu'une fois le mouvement terminé.
+            const limit = method === 1026 ? 50_000 : method === 1027 ? 25_000 : 6000;
+            const timer = setTimeout(() => { pending.delete(id); reject(new Error('command-unconfirmed')); }, limit);
             pending.set(id, { method, raw, resolve, reject, timer });
             diagnostics?.trace?.(machine.id, 'mqtt-send', { topic: request, method, sequence_id: id, params });
             client.publish(request, JSON.stringify({ id, method, params }), { qos: 0, retain: false }, error => {
@@ -283,6 +285,11 @@ export function createCC2Services({ reportedControls, canvasFilaments, readRespo
           }
         }
         if (message.result.led && typeof message.result.led === 'object') latest.led = { ...latest.led, ...message.result.led };
+        // Position (`gcode_move`, ancien nom `gcode_move_inf`) et axes à l'origine (`tool_head`, ou `toolhead` selon le firmware).
+        for (const [field, target] of [['gcode_move', 'gcode_move'], ['gcode_move_inf', 'gcode_move'], ['tool_head', 'tool_head'], ['toolhead', 'tool_head']] as const) {
+          const value = message.result[field];
+          if (value && typeof value === 'object' && !Array.isArray(value)) latest[target] = { ...latest[target], ...(value as Record<string, unknown>) };
+        }
         // Ventilateurs : mises à jour partielles par canal (`fans.box_fan.speed` seul, par exemple).
         const fans = message.result.fans;
         if (fans && typeof fans === 'object' && !Array.isArray(fans)) {

@@ -57,7 +57,7 @@ Chaque module normalisé peut fournir `humidity` : pourcentage réel numérique 
 
 ### Chauffe, éclairage et ventilateurs CC2
 
-`elegoo` désigne la CC2. Le registre transmet `request` du moniteur à `createManualControls`, qui envoie `1028` avec uniquement `{extruder: value}` ou `{heater_bed: value}`. Les chauffages sont réglables pour les états natifs 1 (idle) et 2 (printing, incluant pause), avec plafonds 260/100 °C. Éclairage (`1029 {power}`) et ventilateurs pièce, auxiliaire et caisson (`1030`, un seul champ, PWM 0–255) suivent les mêmes états et la même règle : succès seulement quand le rapport relu correspond, sinon `command-unconfirmed` sans renvoi ; ventilateurs tête et électronique en lecture seule. Deux secondes minimum entre deux contrôles CC2. La méthode est documentée dans [pycentauri](https://github.com/bjan/pycentauri/blob/main/docs/PROTOCOL.md#centauri-carbon-2-cc2-protocol-notes) et utilisée par [elegoo-web](https://github.com/runnane/elegoo-web/blob/main/src/ui/controls.ts), en complément du constructeur de paramètres de `elegoo-link` ; elle n’est pas déduite du seul mapping commenté.
+`elegoo` désigne la CC2. Le registre transmet `request` du moniteur à `createManualControls`, qui envoie `1028` avec uniquement `{extruder: value}` ou `{heater_bed: value}`. Les chauffages sont réglables pour les états natifs 1 (idle) et 2 (printing, incluant pause), avec plafonds 260/100 °C. Éclairage (`1029 {power}`) et ventilateurs pièce, auxiliaire et caisson (`1030`, un seul champ, PWM 0–255) suivent les mêmes états et la même règle : succès seulement quand le rapport relu correspond, sinon `command-unconfirmed` sans renvoi ; ventilateurs tête et électronique en lecture seule. Origine `1026 {homed_axes:"xyz"}` au repos et déplacements `1027 {axes, distance}` après origine, bornés et confirmés par la position relue (délais RPC 50 s et 25 s). Deux secondes minimum entre deux contrôles CC2. Aucun terminal : pas de méthode G-code dans l’API LAN d’origine. La méthode est documentée dans [pycentauri](https://github.com/bjan/pycentauri/blob/main/docs/PROTOCOL.md#centauri-carbon-2-cc2-protocol-notes) et utilisée par [elegoo-web](https://github.com/runnane/elegoo-web/blob/main/src/ui/controls.ts), en complément du constructeur de paramètres de `elegoo-link` ; elle n’est pas déduite du seul mapping commenté.
 
 `error_code: 0` est un accusé, pas une mesure : l’exécuteur exige aussi la cible remontée par la supervision (jusqu’à cinq secondes). Refus et résultat inconnu restent distincts ; aucun rejeu. `controlState` ne renvoie pas les anciennes consignes après fermeture ou après 30 secondes sans rapport. L’intégration ne nécessite ni firmware communautaire ni console SSH. Recette sur le firmware matériel installé requise avant de déclarer cette chauffe validée.
 
@@ -114,3 +114,17 @@ Les projections partagées, validation IPv4, transport WebSocket et observation 
 - **Supervision** : le serveur lit par `registry.read(kind, machine)`, qui refuse une machine supprimée ou remplacée pendant le chargement du connecteur (`machine-removed`) pour ne jamais rouvrir une session avec une configuration périmée.
 
 Tout nouveau connecteur à session persistante doit fournir les mêmes tests (voir `connectors/bambu/test/lifecycle.test.ts`).
+
+## Couverture LAN des imprimantes 3D · audit du 23 novembre 2026
+
+L’onglet Console est toujours affiché ; grisé avec la raison quand la connexion ne permet pas le G-code. « Possible, à ajouter » signifie que le protocole LAN le permet d’après la documentation, sans implémentation ni recette FabCore à ce jour.
+
+| Connecteur | Caméra | Commandes | Fichiers | Chauffe | Éclairage / ventilateurs | Origine / déplacements | Terminal |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Klipper (Moonraker) | Possible, à ajouter (`/server/webcams/list`) | Pause, reprise, arrêt | Natifs | Oui | Oui (LED, `fan`, `fan_generic`) | Oui | Oui, réponses relues |
+| OctoPrint | Possible, à ajouter (flux déclaré dans les réglages) | Pause, reprise, arrêt | Locaux | Oui | Ventilateur possible par M106, à ajouter | Oui (limites par le firmware) | Oui, mise en file seulement |
+| PrusaLink | À étudier | Pause, reprise, arrêt | Natifs | Non exposée par l’API | Non exposés par l’API | Non exposés par l’API | Non : pas d’envoi G-code |
+| Bambu Lab P2S (LAN) | Oui | Pause, reprise, arrêt | FTPS | Oui | Oui | Possible par `gcode_line` (mode développeur), à ajouter | Possible par `gcode_line`, sans réponse renvoyée, à ajouter |
+| Elegoo CC2 | Oui | Pause, arrêt (reprise 1023 non éprouvée) | Natifs | Oui | Oui (pièce, auxiliaire, caisson) | Oui (recette à faire) | Non : aucune méthode G-code |
+| Elegoo CC1 (SDCP) | Oui | Pause, reprise, arrêt | Copies FabCore | Possible par Cmd 403, à ajouter | Possible par Cmd 403 (vérifié par pycentauri), à ajouter | Cmd 401/402 : sondage risqué (plantage du démon `app`), non retenu | Non : pas de G-code SDCP |
+| Bambu Cloud | Non | Non (lecture seule) | Non | Non | Non | Non | Non |

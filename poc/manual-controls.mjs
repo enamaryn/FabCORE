@@ -40,6 +40,13 @@ export function reportedControls(kind, report) {
       const pwm = Number.isFinite(fan?.speed) && fan.speed >= 0 && fan.speed <= 255 ? fan.speed : null;
       out.fans.push({ id, percent: pwm === null ? null : Math.round(pwm / 255 * 100), rpm: numeric(fan?.rpm), writable: canControl && ['fan', 'aux_fan', 'box_fan'].includes(id) });
     }
+    // Déplacements : position relue, axes à l'origine exigés ; limites = volume 256 mm, jamais au-delà
+    // d'une position déjà relue (la tête se gare hors volume), le firmware gardant ses propres butées.
+    const position = ['x', 'y', 'z'].map(axis => numeric(report.gcode_move?.[axis]));
+    if (position.every(Number.isFinite)) {
+      const homed = typeof report.tool_head?.homed_axes === 'string' ? report.tool_head.homed_axes.toLowerCase() : '';
+      out.motion = { homed, position, gcode: position, minimum: [0, 0, 0], maximum: position.map(value => Math.max(256, value)), home: report.machine_status?.status === 1 };
+    }
   }
   return out;
 }
@@ -137,7 +144,7 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
       return { outcome: ok ? 'accepted' : 'rejected' };
     }
     if (kind === 'elegoo') {
-      if (!['heat', 'light', 'fan'].includes(action) || !validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
+      if (!['heat', 'light', 'fan', 'home', 'move'].includes(action) || !validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
       if (action === 'heat') {
         const ok = await request(machine, 1028, { [id === 'nozzle' ? 'extruder' : 'heater_bed']: value });
         return ok ? confirmHeat(machine, id, value) : { outcome: 'rejected' };
@@ -146,6 +153,16 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
       if (action === 'light') {
         const ok = await request(machine, 1029, { power: value ? 1 : 0 });
         return ok ? confirmReported(machine, 'light', id, value, reported => reported.lights.find(item => item.id === id)?.value === value) : { outcome: 'rejected' };
+      }
+      if (action === 'home') {
+        const ok = await request(machine, 1026, { homed_axes: 'xyz' });
+        return ok ? confirmReported(machine, 'home', 'xyz', 'xyz', reported => ['x', 'y', 'z'].every(axis => reported.motion?.homed?.includes(axis))) : { outcome: 'rejected' };
+      }
+      if (action === 'move') {
+        const index = ['X', 'Y', 'Z'].indexOf(command.axis);
+        const target = controls.motion.position[index] + command.distance;
+        const ok = await request(machine, 1027, { axes: command.axis.toLowerCase(), distance: command.distance });
+        return ok ? confirmReported(machine, 'move', command.axis, target, reported => Math.abs((reported.motion?.position?.[index] ?? NaN) - target) <= 0.05) : { outcome: 'rejected' };
       }
       const pwm = Math.round(value / 100 * 255);
       const ok = await request(machine, 1030, { [id]: pwm });
