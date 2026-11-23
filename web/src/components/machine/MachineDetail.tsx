@@ -15,14 +15,16 @@ import { Unavailable } from './Unavailable.tsx';
 import { MachineHeader } from './MachineHeader.tsx';
 import { connectionSignature } from '../../file-batch.ts';
 import { FilesPanel } from '../files/FilesPanel.tsx';
+import { LogsPanel } from './LogsPanel.tsx';
+import { codeLabel } from '../admin/codes.ts';
 import './machine.css';
 
-type Props = { id: string; machines: MachineData[]; api: ReturnType<typeof createApi>; actor: string; role: 'admin' | 'observer'; samples: TemperatureSample[]; stale: boolean; tab?: 'files' | undefined };
+type Props = { id: string; machines: MachineData[]; api: ReturnType<typeof createApi>; actor: string; role: 'admin' | 'observer'; samples: TemperatureSample[]; stale: boolean; tab?: 'files' | 'logs' | undefined };
 export function MachineDetail(props: Props) {
   const { t } = useTranslation('machine');
   const machine = props.machines.find(item => item.id === props.id);
   if (!machine) return <section className="panel stack"><h1 tabIndex={-1}>{t('missing')}</h1><a href="#machines">{t('back')}</a></section>;
-  return <div className="react-detail"><MachineHeader machine={machine} role={props.role} tab={props.tab ?? 'overview'} />{props.tab === 'files' ? <FilesPanel key={machine.id + ':' + connectionSignature(machine)} machine={machine} machines={props.machines} actor={props.actor} role={props.role} stale={props.stale} api={props.api} /> : <Cockpit key={machine.id + ':' + connectionSignature(machine)} {...props} machine={machine} />}</div>;
+  return <div className="react-detail"><MachineHeader machine={machine} role={props.role} tab={props.tab ?? 'overview'} />{props.tab === 'logs' && props.role === 'admin' ? <LogsPanel machine={machine} api={props.api} /> : props.tab === 'files' ? <FilesPanel key={machine.id + ':' + connectionSignature(machine)} machine={machine} machines={props.machines} actor={props.actor} role={props.role} stale={props.stale} api={props.api} /> : <Cockpit key={machine.id + ':' + connectionSignature(machine)} {...props} machine={machine} />}</div>;
 }
 function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machine: MachineData }) {
   const { t, i18n } = useTranslation('machine'); const client = useQueryClient();
@@ -72,7 +74,7 @@ function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machin
       <section className="panel stack" data-machine-block="fabrication"><div className="row between wrap"><h2>{t('fabrication')}</h2><div className="row wrap"><StatusBadge status={machine.status} />{role === 'admin' && ['pause', 'resume', 'stop', 'start'].filter(action => commandAllowed(action, machine)).map(action => <button type="button" key={action} className={action === 'stop' ? 'danger' : 'primary'} disabled={busy || stale} onClick={() => { if (['start', 'stop'].includes(action)) setConfirm(action); else void runCommand(action); }}>{t('actions.' + action)}</button>)}{role === 'admin' && capabilities.files && ['ready', 'done'].includes(machine.status) && <a className="button ghost" href={'#machine/' + machine.id + '/files'}>{t('chooseFile')}</a>}</div></div>
         <p className="react-job-file">{machine.file || t('noFile')}</p>{capabilities.printJob !== false && (progress === null ? <p>{t('progressUnknown')}</p> : <><strong>{new Intl.NumberFormat(i18n.resolvedLanguage).format(progress)} %</strong><progress value={progress} max={100} aria-label={t('progress')} /></>)}
         {machine.kind === 'bambu-cloud' && <p className="notice">{t('cloudReadOnly')}</p>}{machine.kind === 'xtool-m2' && <p>{t('preparedProject')}</p>}{machine.kind === 'longer-ray5' && <small>GRBL · {machine.nativeState || t('notReported')}{machine.firmware ? ' · ' + machine.firmware : ''}</small>}
-        {machine.issue && <p className="notice">{t('machineIssue')} <code>{machine.issue}</code></p>}<small>{t('checkedAt')}: <time dateTime={machine.checkedAt ?? undefined}>{date}</time></small>
+        {machine.issue && <p className="notice">{t('machineIssue')} {codeLabel(t, machine.issue, ['issue']) === machine.issue ? <code>{machine.issue}</code> : codeLabel(t, machine.issue, ['issue'])}</p>}<small>{t('checkedAt')}: <time dateTime={machine.checkedAt ?? undefined}>{date}</time></small>
       </section>
       <section className="panel stack machine-temperature" data-machine-block="temperature"><h2>{t('temperatures')}</h2>{capabilities.temperatures === false ? <Unavailable message={t('notApplicable')} /> : <><div className="row wrap"><span>{t('nozzle')} <strong>{temperature(machine.nozzle)}</strong></span><span>{t('bed')} <strong>{temperature(machine.bed)}</strong></span></div><div hidden={!controls}><HeaterControls {...props} /></div>{!controls && <Unavailable message={t(capabilities.controls ? controlsQuery.isError ? 'controlsUnavailable' : ['offline', 'connecting'].includes(machine.status) ? 'offline' : 'readingControls' : 'heatUnsupported')} />}<TemperatureChart samples={samples} /></>}</section>
       <div className="react-cockpit-bottom"><section className="panel stack" data-machine-block="quick"><div className="row between wrap"><h2>{t('quick')}</h2>{capabilities.controls && <button type="button" disabled={busy || controlsQuery.isFetching} onClick={() => { void controlsQuery.refetch(); }}>{t('refresh')}</button>}</div><div hidden={!controls}><QuickControls {...props} /></div>{!controls && <Unavailable message={t(capabilities.controls ? controlsQuery.isError ? 'controlsUnavailable' : ['offline', 'connecting'].includes(machine.status) ? 'offline' : 'readingControls' : 'controlsUnsupported')} />}</section>
