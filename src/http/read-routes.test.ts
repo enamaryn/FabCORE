@@ -23,6 +23,7 @@ function build(overrides: Partial<RouteDependencies> = {}) {
     fleet: { list: async current => { sessions.push(current.session); return [{ id, name: 'P2S', kind: 'bambu', status: 'printing', cameraOpen: false, nozzle: null, filaments: [{ slots: [] }] }]; } },
     notifications: { view: () => ({ ntfy: { mode: 'external', url: 'https://ntfy.example.test', topic: 'fabcore' }, smtp: { enabled: false }, internal: null }), save: () => { throw new Error('unused'); }, test: async () => ({ accepted: true as const }) },
     events: { stream: () => undefined },
+    version: { status: async () => ({ current: null, latest: null, updateAvailable: false, checkedAt: null }) },
     operations: { cloudAction: () => undefined, camera: () => undefined, command: () => undefined, controls: () => undefined, terminal: () => undefined, files: () => undefined },
     pages: { asset: () => undefined, oidc: () => undefined },
     logs: {

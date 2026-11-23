@@ -28,5 +28,25 @@
   "languageName": {
     "fr": "Français",
     "en": "Anglais"
+  },
+  "version": {
+    "installed": "Version {version}",
+    "unknown": "Version inconnue",
+    "upToDate": "à jour",
+    "unchecked": "vérification impossible",
+    "checked": "Vérifiée le {date}",
+    "available": "Mise à jour disponible"
+  },
+  "update": {
+    "title": "Mise à jour de FabCore disponible",
+    "text": "Version installée : {current}. Nouvelle version : {latest}.",
+    "never": "Ne pas me rappeler",
+    "later": "Me rappeler plus tard",
+    "now": "Faire la mise à jour",
+    "how": "Sur le serveur FabCore (en root), lancez la commande suivante. Elle sauvegarde les données, met à jour puis redémarre FabCore ; la page se reconnectera d’elle-même.",
+    "copy": "Copier",
+    "copied": "Copié",
+    "after": "L’interface ne lance pas la mise à jour elle-même : elle demande les droits d’administration du serveur.",
+    "close": "Fermer"
   }
 }

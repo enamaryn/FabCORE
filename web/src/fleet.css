@@ -10,3 +10,11 @@
 @media(min-width:1600px){.fleet-overview{grid-template-columns:minmax(0,1fr) 290px;align-items:start}}
 @media(max-width:760px){.mobile{grid-template-columns:repeat(3,minmax(0,1fr))}.mobile a{display:grid;justify-items:center;align-content:center;gap:3px;font-size:11px;padding:6px 3px;min-width:0}.react-shell .hero{flex-wrap:wrap}.react-shell .top .crumb{min-width:0;overflow-wrap:anywhere}.react-shell .top{padding-inline:14px}.react-shell .area{padding-inline:14px}}
 @media(max-width:440px){.fleet-filament-dot{width:21px;height:21px}.react-shell .top .avatar{display:none}}
+/* Rôle à côté du menu Compte ; version et mise à jour en bas de la barre latérale. */
+.account-zone{gap:10px;align-items:center;flex-wrap:nowrap}.role-badge{font-size:12px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;color:var(--dim);white-space:nowrap}
+.version-foot small{color:var(--dim)}.update-available{display:grid;gap:2px;width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:2px solid var(--amber);background:color-mix(in srgb,var(--amber) 18%,transparent);color:var(--text);animation:update-pulse 2.4s ease-in-out 3}.update-available strong{color:var(--amber)}.update-available small{color:var(--dim)}
+@keyframes update-pulse{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--amber) 25%,transparent)}}
+@media (prefers-reduced-motion:reduce){.update-available{animation:none}}
+.update-dialog{max-width:min(520px,calc(100vw - 32px));border:1px solid var(--line);border-radius:var(--radius);background:var(--card);color:var(--text);padding:20px}.update-dialog::backdrop{background:#0008}.update-command{padding:8px 12px;border-radius:8px;background:var(--raised);font-size:15px}
+@media (max-width:900px){.role-badge{display:none}}
+.menu-version{display:none}@media (max-width:900px){.menu-version{display:block}}

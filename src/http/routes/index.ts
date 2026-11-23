@@ -9,6 +9,7 @@ import { notificationRoutes, type NotificationDependencies } from './notificatio
 import { operationRoutes, type OperationHandlers } from './operations.ts';
 import { pageRoutes, type PageHandlers } from './pages.ts';
 import { sessionRoutes, type SessionDependencies } from './session.ts';
+import { versionRoutes, type VersionDependencies } from './version.ts';
 
 export interface RouteDependencies {
   accounts: AccountDependencies;
@@ -19,6 +20,7 @@ export interface RouteDependencies {
   notifications: NotificationDependencies;
   logs: LogDependencies;
   events: EventHandlers;
+  version: VersionDependencies;
   operations: OperationHandlers;
   pages: PageHandlers;
 }
@@ -33,6 +35,7 @@ export const migratedRoutes = (dependencies: RouteDependencies): RouteModule[] =
   notificationRoutes(dependencies.notifications),
   logRoutes(dependencies.logs),
   eventRoutes(dependencies.events),
+  versionRoutes(dependencies.version),
   operationRoutes(dependencies.operations),
   pageRoutes(dependencies.pages),
 ];

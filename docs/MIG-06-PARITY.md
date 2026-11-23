@@ -81,3 +81,10 @@ Recette après fusion : liste native CC2/P2S, envoi puis relecture et téléchar
 - Libellés : catalogue `codes` (problèmes machine, messages de diagnostic, événements de journal, états) extrait des tables de l’interface conservée, aussi utilisé pour le problème affiché sur la fiche. Un code inconnu reste affiché tel quel.
 - Vérifications : Chromium local : jeton refusé puis activation, observateur créé puis doublon refusé, diagnostics traduits, logs machine, déconnexion/reconnexion React ; aucune erreur console.
 - Ce document, vidé par erreur lors de #131, est restauré depuis sa version précédente avec les ajouts de #131.
+
+## Version, mise à jour et menu Compte
+
+- `GET /api/version` (toute session) : commit installé lu directement dans `.git` (HEAD détachée, branche, références regroupées ; aucun lancement de git, impossible pour un service à utilisateur dédié), dernier commit de `main` lu sur GitHub en HTTPS (protocole Git, sans quota d’API), cache serveur de 10 min, 5 min après échec ; une mise à jour faite entre-temps est relue aussitôt. `src/application/version.ts`.
+- Interface : version relue à chaque changement de page. En bas à gauche, « Version abc1234 · à jour », ou un encadré « Mise à jour disponible » bien visible (et dans le menu Compte sur mobile). Administrateur : fenêtre « Ne pas me rappeler » (cette version ; une version plus récente est annoncée à nouveau), « Me rappeler plus tard » (24 h au plus une fois), « Faire la mise à jour » (commande `fabcore update` à copier : l’interface ne lance pas la mise à jour, qui demande les droits root du serveur). Choix gardés dans le navigateur.
+- Menu Compte refermé à chaque changement de page ; rôle affiché à côté du menu, plus en bas de la barre latérale.
+- Vérifications : `src/application/version.test.ts`, `web/test/update-prompt.test.ts` ; Chromium local avec dépôt d’origine simulé : fenêtre affichée puis « plus tard » respecté au changement de page, encadré visible, menu refermé après un lien et après la navigation latérale, une seule interrogation de GitHub.

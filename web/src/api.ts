@@ -16,6 +16,7 @@ export type Diagnostics = {
   machines?: Record<string, { reportAt?: string | null; frameAt?: string | null }>;
 };
 export type MachineLog = { machine: { id: string; name: string; kind?: string; mode?: string }; lines: { at?: string; event?: string; level?: string; requestId?: string; details?: Record<string, unknown> }[] };
+export type VersionStatus = { current: string | null; latest: string | null; updateAvailable: boolean; checkedAt: string | null };
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -145,6 +146,11 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
       return { username: value.username };
     },
     setup(token: string, username: string, password: string) { return request('setup', { token, username, password }); },
+    async version(signal?: AbortSignal): Promise<VersionStatus> {
+      const value = await request('version', undefined, signal, 15000);
+      if (!value || typeof value !== 'object' || !('updateAvailable' in value) || typeof value.updateAvailable !== 'boolean') throw new ApiError('response', 502);
+      return value as VersionStatus;
+    },
     login(username: string, password: string) { return request('login', { username, password }); },
     logout() { return request('logout', {}); },
   };

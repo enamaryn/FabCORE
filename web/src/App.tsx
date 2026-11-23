@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Brand, FleetPage, HistoryPage, Shell } from './components/index.js';
+import { UpdatePrompt } from './components/UpdatePrompt.tsx';
+import { shouldPrompt } from './update.ts';
 import type { ActivityEntry, MachineData } from './types.js';
 import { ApiError, createApi } from './api.ts';
 import { subscribeFleet } from './events.ts';
@@ -34,12 +36,21 @@ export function App() {
   useEffect(() => applyTheme(theme), [theme]);
   useEffect(() => { document.documentElement.lang = i18n.resolvedLanguage ?? 'fr'; }, [i18n.resolvedLanguage]);
   const session = useQuery({ queryKey: ['session'], queryFn: ({ signal }) => api.session(signal), refetchInterval: 30000 });
+  // Version : relue à chaque changement de page (le serveur met en cache la vérification auprès de GitHub, 10 min).
+  const signedIn = session.data?.authenticated === true;
+  const version = useQuery({ queryKey: ['version'], queryFn: ({ signal }) => api.version(signal), enabled: signedIn, staleTime: 0, retry: false });
+  const pageKey = JSON.stringify(page);
+  useEffect(() => { if (signedIn) void client.invalidateQueries({ queryKey: ['version'] }); }, [client, pageKey, signedIn]);
+  // Annonce de mise à jour : administrateur seulement, selon « plus tard » / « ne pas me rappeler ».
+  const [prompt, setPrompt] = useState(false);
+  useEffect(() => { if (session.data?.role === 'admin' && shouldPrompt(version.data, Date.now())) setPrompt(true); }, [version.data, session.data?.role, pageKey]);
   const logout = useMutation({ mutationFn: () => api.logout(), retry: false, onSuccess: async () => { await client.cancelQueries(); client.clear(); client.setQueryData(['session'], { installed: true, authenticated: false, username: null }); } });
   const toggleLanguage = () => { const language = i18n.resolvedLanguage?.startsWith('fr') ? 'en' : 'fr'; savePreference('fabcore-lang', language); void i18n.changeLanguage(language); };
   const toggleTheme = () => { const next = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark'; savePreference('fabcore-theme', next); setTheme(next); };
   if (!session.data) return <main className="setup area"><Brand /><h1 tabIndex={-1}>{session.isError ? t('failed') : t('loading')}</h1>{session.isError && <button type="button" onClick={() => { void session.refetch(); }}>{t('retry')}</button>}</main>;
   if (!session.data.authenticated || !session.data.role || !session.data.username) return <main className="setup area"><Brand /><div className="row preference-actions"><button type="button" onClick={toggleLanguage}>{i18n.resolvedLanguage?.startsWith('fr') ? 'EN' : 'FR'}</button><button type="button" onClick={toggleTheme}>{i18n.t('themeLabel', { ns: 'common', theme: i18n.t('theme.' + theme, { ns: 'common' }) })}</button></div>{!session.data.installed ? <Setup api={api} /> : <Login api={api} oidc={session.data.oidcEnabled === true} />}</main>;
-  return <Shell username={session.data.username} role={session.data.role} page={page.kind === 'machine' || page.kind === 'viewer' ? 'machines' : ['notifications', 'diagnostics', 'access'].includes(page.kind) ? 'home' : page.kind as 'home' | 'machines' | 'history'} language={i18n.resolvedLanguage ?? 'fr'} theme={theme} onLanguage={toggleLanguage} onTheme={toggleTheme} onLogout={() => { if (!logout.isPending) logout.mutate(); }}>
+  return <Shell username={session.data.username} role={session.data.role} page={page.kind === 'machine' || page.kind === 'viewer' ? 'machines' : ['notifications', 'diagnostics', 'access'].includes(page.kind) ? 'home' : page.kind as 'home' | 'machines' | 'history'} language={i18n.resolvedLanguage ?? 'fr'} theme={theme} onLanguage={toggleLanguage} onTheme={toggleTheme} onLogout={() => { if (!logout.isPending) logout.mutate(); }} version={version.data} onUpdate={() => setPrompt(true)}>
+    {session.data.role === 'admin' && version.data?.updateAvailable && <UpdatePrompt version={version.data} open={prompt} onClose={() => setPrompt(false)} />}
     {logout.isError && <p className="notice" role="alert">{t('error.internal')}</p>}
     {logout.isPending ? <p role="status">{t('loggingOut')}</p> : <Workshop key={session.data.username + ':' + session.data.role} api={api} username={session.data.username} role={session.data.role} page={page} />}
   </Shell>;
