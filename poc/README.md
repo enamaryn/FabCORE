@@ -159,6 +159,23 @@ FabCore lit le numéro de série et l’état de la M2. À l’ajout, il mémori
 
 ### Passer de state.json à PostgreSQL (MIG-04)
 
+**Tout-en-un (LXC Debian/Ubuntu, root) :** `fabcore database setup`. La commande installe PostgreSQL ≥ 16 (dépôt officiel PGDG si la distribution fournit une version plus ancienne), crée le rôle et la base `fabcore` avec un mot de passe aléatoire, écrit `/etc/fabcore/database.env` (0600, root), vérifie la base, puis arrête le service, sauvegarde, importe `state.json` et ajoute au service `fabcore` le complément `database.conf` (`EnvironmentFile`). Si le service ne redémarre pas, le complément est retiré et FabCore repart sur `state.json`. Elle refuse si une base est déjà configurée ou si le fichier existe.
+
+**Base externe :** définir les variables ci-dessous (environnement du service ou fichier `FABCORE_CONFIG`), contrôler avec `fabcore database check`, puis suivre les étapes manuelles.
+
+| Variable | Défaut | Usage |
+| --- | --- | --- |
+| `FABCORE_DATABASE_URL` | absent | `postgresql://utilisateur:motdepasse@hôte:5432/base` ; `?options=-c%20search_path%3Dschema` pour un schéma dédié |
+| `FABCORE_DATABASE_SSL` | selon l'URL | `disable`, `require` (chiffré sans vérification) ou `verify-full` (certificat et nom vérifiés, recommandé hors réseau local) ; pas à la fois ici et dans l'URL |
+| `FABCORE_DATABASE_CA_FILE` | magasin système | Autorité de certification PEM, avec `verify-full` |
+| `FABCORE_DATABASE_POOL_MAX` | `4` | Connexions simultanées (2 à 50) |
+| `FABCORE_DATABASE_CONNECT_TIMEOUT_MS` | `10000` | Délai de connexion (1 000 à 60 000 ms) |
+| `FABCORE_CONFIG` | absent | Fichier `NOM=valeur` (mode 0600 exigé) lu après l'environnement |
+
+Configuration invalide : FabCore refuse de démarrer en nommant la variable, jamais sa valeur. `fabcore database check` contrôle connexion, TLS (refusé sur le réseau sans chiffrement), version ≥ 16, création de tables dans le schéma courant, et indique si la base contient déjà une installation.
+
+**Étapes manuelles :**
+
 1. Arrêter FabCore et sauvegarder tout `FABCORE_DATA` : `fabcore backup`.
 2. Simulation (écrit, vérifie les contraintes, relit et compare, puis annule) : `fabcore import` (ou `FABCORE_DATABASE_URL=… node scripts/import-state.mjs --data <dossier>`). Le rapport JSON donne les comptes et les anomalies (codes et chemins, jamais de valeur). Code de sortie 2 si une anomalie bloque.
 3. Import réel : `fabcore import --apply`. Relancer est sans effet (`already-imported`) ; une base contenant d’autres données est refusée (`database-not-empty`).

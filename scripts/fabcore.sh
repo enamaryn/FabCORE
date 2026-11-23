@@ -21,10 +21,12 @@ Usage : fabcore <commande> [options]
   restore <archive> [--check] [--yes]
                                   Remet une sauvegarde en place (--check : vérifie seulement, sans rien modifier)
   import [--apply]                Importe state.json dans PostgreSQL (simulation sans --apply)
+  database check                  Vérifie la base configurée : connexion, TLS, version ≥ 16, droits
+  database setup [--yes]          Tout-en-un : installe PostgreSQL local, crée la base, importe et bascule le service
   status                          Version, service, stockage et dernière sauvegarde
   help                            Cette aide
 
-Variables : FABCORE_DATA (données, .fabcore par défaut), FABCORE_DATABASE_URL (PostgreSQL),
+Variables : FABCORE_DATA (données, .fabcore par défaut), FABCORE_DATABASE_URL (PostgreSQL ; ou fichier FABCORE_CONFIG),
 FABCORE_BACKUPS (archives, .fabcore-backups par défaut), FABCORE_BACKUP_KEEP (10 par défaut).
 EOF
 }
@@ -36,24 +38,36 @@ own_service() {
 }
 service_running() { own_service && systemctl is-active --quiet "$service"; }
 
-# Valeur d'une variable : environnement, puis Environment= et EnvironmentFile= du service.
+# Fichier NOM=valeur (EnvironmentFile de systemd ou FABCORE_CONFIG) : dernière valeur de la variable.
+env_file_value() {
+  local name=$1 file=$2 line value=''
+  [[ -r $file ]] || return 0
+  while IFS= read -r line; do
+    line=${line#export }
+    if [[ $line == "$name="* ]]; then value=${line#*=}; value=${value#[\"\']}; value=${value%[\"\']}; fi
+  done < "$file"
+  printf '%s' "$value"
+}
+
+# Valeur d'une variable : environnement, puis Environment= et EnvironmentFile= du service, puis FABCORE_CONFIG.
 config() {
-  local name=$1 value=${!1:-} file line
+  local name=$1 value=${!1:-} file line found
   if [[ -n $value ]]; then printf '%s' "$value"; return; fi
-  own_service || return 0
-  local words=()
-  read -r -a words <<< "$(systemctl show "$service" -p Environment --value 2>/dev/null)"
-  for line in "${words[@]}"; do
-    if [[ $line == "$name="* ]]; then value=${line#*=}; fi
-  done
-  while read -r file _; do
-    file=${file#-}
-    [[ -r $file ]] || continue
-    while IFS= read -r line; do
-      line=${line#export }
-      if [[ $line == "$name="* ]]; then value=${line#*=}; value=${value#[\"\']}; value=${value%[\"\']}; fi
-    done < "$file"
-  done < <(systemctl show "$service" -p EnvironmentFiles --value 2>/dev/null | tr ' ' '\n' | grep -v '^(' || true)
+  if own_service; then
+    local words=()
+    read -r -a words <<< "$(systemctl show "$service" -p Environment --value 2>/dev/null)"
+    for line in "${words[@]}"; do
+      if [[ $line == "$name="* ]]; then value=${line#*=}; fi
+    done
+    while read -r file _; do
+      found=$(env_file_value "$name" "${file#-}")
+      [[ -z $found ]] || value=$found
+    done < <(systemctl show "$service" -p EnvironmentFiles --value 2>/dev/null | tr ' ' '\n' | grep -v '^(' || true)
+  fi
+  if [[ -z $value && $name != FABCORE_CONFIG ]]; then
+    file=$(config FABCORE_CONFIG)
+    [[ -z $file ]] || value=$(env_file_value "$name" "$file")
+  fi
   printf '%s' "$value"
 }
 
@@ -61,12 +75,18 @@ absolute() { if [[ $1 == /* ]]; then printf '%s' "$1"; else printf '%s' "$root/$
 data=$(absolute "$(config FABCORE_DATA)"); [[ $data != "$root/" ]] || data="$root/.fabcore"
 backups=$(absolute "${FABCORE_BACKUPS:-.fabcore-backups}")
 database_url=$(config FABCORE_DATABASE_URL)
+# Configuration de la base transmise aux outils Node par l'environnement du processus, jamais en argument.
+for variable in FABCORE_CONFIG FABCORE_DATABASE_URL FABCORE_DATABASE_SSL FABCORE_DATABASE_CA_FILE FABCORE_DATABASE_POOL_MAX FABCORE_DATABASE_CONNECT_TIMEOUT_MS; do
+  value=$(config "$variable")
+  if [[ -n $value ]]; then export "$variable=$value"; fi
+done
+unset variable value
 
 with_database() {
   [[ -n $database_url ]] || fail 'FABCORE_DATABASE_URL non configuré.'
   command -v node >/dev/null || fail 'Node.js introuvable.'
   local env
-  env=$(FABCORE_DATABASE_URL=$database_url node scripts/pg-env.mjs "$@") || fail 'base PostgreSQL inaccessible ou encore utilisée.'
+  env=$(node scripts/database.mjs env "$@") || fail 'base PostgreSQL inaccessible ou encore utilisée.'
   eval "$env"
 }
 
@@ -245,9 +265,94 @@ cmd_update() {
   exec bash scripts/update.sh
 }
 
+# Tout-en-un (ADR 0007) : PostgreSQL ≥ 16 local, rôle et base `fabcore`, configuration 0600, import de state.json
+# et bascule du service. Chaque étape est vérifiée ; avant la bascule, rien ne change pour le service en place.
+cmd_database_setup() (
+  local yes=false cluster version name port status password file dropin was_running=false candidate
+  for argument in "$@"; do
+    case $argument in --yes) yes=true ;; *) fail "option inconnue : $argument" ;; esac
+  done
+  (( EUID == 0 )) || fail 'à lancer en root (installation de paquets, rôle PostgreSQL, service).'
+  [[ -z $database_url ]] || fail 'une base est déjà configurée : vérifier avec fabcore database check.'
+  command -v apt-get >/dev/null && command -v node >/dev/null || fail 'Debian ou Ubuntu avec Node.js requis.'
+  file=${FABCORE_DATABASE_ENV:-/etc/fabcore/database.env}
+  # Jamais de rotation implicite du mot de passe d'une base déjà utilisée.
+  [[ ! -e $file ]] || fail "$file existe déjà : base déjà préparée (fabcore database check). Le supprimer d'abord pour tout refaire."
+  if ! "$yes"; then
+    [[ -t 0 ]] || fail 'confirmation requise : relancer avec --yes.'
+    printf 'Installer PostgreSQL local (paquets), créer le rôle et la base « fabcore », écrire %s,\npuis importer %s et basculer le service. Tapez POSTGRESQL : ' "$file" "$data/state.json"
+    local answer; read -r answer
+    [[ $answer == POSTGRESQL ]] || fail 'installation annulée.'
+  fi
+
+  # 1. Serveur : cluster en ligne ≥ 16, sinon installation (dépôt PGDG si la distribution fournit moins de 16).
+  cluster() { pg_lsclusters --no-header 2>/dev/null | awk '$1 >= 16' | sort -k4,4r -k1,1nr | head -n 1; }
+  if [[ -z $(cluster) ]]; then
+    apt-get update -q
+    candidate=$(apt-cache policy postgresql | awk '/Candidate:/ { print $2 }')
+    if [[ ${candidate%%[!0-9]*} -ge 16 ]] 2>/dev/null; then apt-get install -y -q postgresql
+    else
+      apt-get install -y -q ca-certificates curl postgresql-common
+      install -d /usr/share/postgresql-common/pgdg
+      curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+      echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+      apt-get update -q && apt-get install -y -q postgresql-16
+    fi
+  fi
+  read -r version name port status _ <<< "$(cluster)"
+  [[ -n ${version:-} ]] || fail 'aucun cluster PostgreSQL 16 ou plus après installation.'
+  if [[ $status != online ]]; then pg_ctlcluster "$version" "$name" start || fail "démarrage du cluster $version/$name impossible."; fi
+  echo "PostgreSQL $version ($name, port $port)."
+
+  # 2. Rôle et base ; mot de passe aléatoire transmis par l'entrée standard, jamais en argument.
+  password=$(node -e 'process.stdout.write(require("crypto").randomBytes(24).toString("hex"))')
+  runuser -u postgres -- psql -X -q -p "$port" -v ON_ERROR_STOP=1 -d postgres <<SQL || fail 'création du rôle ou de la base refusée.'
+do \$\$ begin
+  if exists (select from pg_roles where rolname = 'fabcore') then alter role fabcore login password '$password';
+  else create role fabcore login password '$password'; end if;
+end \$\$;
+select 'create database fabcore owner fabcore' where not exists (select from pg_database where datname = 'fabcore') \gexec
+SQL
+
+  # 3. Configuration lue par systemd (EnvironmentFile, lu en root) ou par FABCORE_CONFIG : 0600, root.
+  install -d -m 0755 "$(dirname -- "$file")"
+  (umask 077; printf 'FABCORE_DATABASE_URL=postgresql://fabcore:%s@127.0.0.1:%s/fabcore\n' "$password" "$port" > "$file.tmp")
+  mv -f -- "$file.tmp" "$file"
+  FABCORE_CONFIG=$file node scripts/database.mjs check || fail "vérification de la base échouée ; configuration laissée dans $file, service inchangé."
+
+  # 4. Bascule : arrêt, sauvegarde JSON, import transactionnel, puis service sur PostgreSQL.
+  if service_running; then was_running=true; systemctl stop "$service"; fi
+  restart_json() { if "$was_running"; then systemctl start "$service"; fi; }
+  if [[ -f $data/state.json ]]; then
+    backup_step avant-postgresql || { restart_json; fail 'sauvegarde impossible : bascule annulée, service inchangé.'; }
+    FABCORE_CONFIG=$file node scripts/import-state.mjs --data "$data" --apply || { restart_json; fail 'import refusé (rapport ci-dessus) : service laissé sur state.json.'; }
+  fi
+  if own_service; then
+    dropin="/etc/systemd/system/$service.service.d/database.conf"
+    install -d -m 0755 "$(dirname -- "$dropin")"
+    printf '[Service]\nEnvironmentFile=%s\n' "$file" > "$dropin"
+    systemctl daemon-reload
+    if ! systemctl start "$service" || ! { sleep 3; systemctl is-active --quiet "$service"; }; then
+      rm -f -- "$dropin"; systemctl daemon-reload; restart_json
+      fail "FabCore ne démarre pas sur PostgreSQL (journalctl -u $service) : retour à state.json, aucune donnée perdue."
+    fi
+    echo "FabCore utilise PostgreSQL (configuration : $file, service : $dropin)."
+  else
+    echo "Base prête. Démarrer FabCore avec FABCORE_CONFIG=$file (ou ses variables dans l'environnement)."
+  fi
+)
+
+cmd_database() {
+  case ${1:-} in
+    check) exec node scripts/database.mjs check ;;
+    setup) shift; cmd_database_setup "$@" ;;
+    *) fail 'Usage : fabcore database check | setup [--yes]' ;;
+  esac
+}
+
 cmd_import() {
   [[ -n $database_url ]] || fail 'FABCORE_DATABASE_URL non configuré.'
-  FABCORE_DATABASE_URL=$database_url exec node scripts/import-state.mjs --data "$data" "$@"
+  exec node scripts/import-state.mjs --data "$data" "$@"
 }
 
 command=${1:-help}
@@ -261,6 +366,7 @@ case $command in
   backups) cmd_backups ;;
   restore) cmd_restore "$@" ;;
   import) cmd_import "$@" ;;
+  database) cmd_database "$@" ;;
   status) cmd_status ;;
   help|-h|--help) usage ;;
   *) usage >&2; exit 2 ;;

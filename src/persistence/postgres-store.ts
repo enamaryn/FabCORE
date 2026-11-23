@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type pg from 'pg';
 import type { FabCoreState, StateStore } from '../application/state-store.ts';
+import type { DatabaseConfig } from '../config/database.ts';
 import { checkServerVersion, openDatabase } from './database.ts';
 import { rowsToState, stateToRows, type StateRows } from './mapping.ts';
 import { migrate } from './migrate.ts';
@@ -17,8 +18,10 @@ function assertState(next: FabCoreState) {
   if (next?.version !== 1 || !Array.isArray(next.machines) || !Object.hasOwn(next, 'admin')) throw new Error('Format de stockage FabCore inconnu.');
 }
 
-export async function openPostgresStore({ url, directory }: { url: string; directory: string }): Promise<PostgresStore> {
-  const { db, pool } = openDatabase(url);
+export async function openPostgresStore({ config, url, directory }: { config?: DatabaseConfig; url?: string; directory: string }): Promise<PostgresStore> {
+  const source = config ?? url;
+  if (!source) throw new Error('database-config');
+  const { db, pool } = openDatabase(source);
   let lock: pg.PoolClient | null = null;
   try {
     await checkServerVersion(pool);

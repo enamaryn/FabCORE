@@ -823,13 +823,20 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const logLevel = process.env.FABCORE_LOG_LEVEL || 'debug';
   if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) throw new Error('FABCORE_LOG_LEVEL invalide (debug, info, warn, error).');
   const directory = resolve(process.env.FABCORE_DATA || '.fabcore');
-  // PostgreSQL si FABCORE_DATABASE_URL est défini (MIG-04), sinon state.json comme avant. L'URL n'est jamais journalisée.
-  let store;
-  if (process.env.FABCORE_DATABASE_URL) {
+  // PostgreSQL si FABCORE_DATABASE_URL est défini (environnement ou fichier FABCORE_CONFIG, MIG-04), sinon state.json.
+  // L'URL n'est jamais journalisée.
+  const { loadDatabaseConfig } = await import('../src/config/database.ts');
+  let store, database;
+  try { database = loadDatabaseConfig(process.env); }
+  catch (failure) {
+    console.error(`FabCore · configuration invalide (${failure.message}) : vérifier ${failure.variable ?? 'la configuration'}.`);
+    process.exit(1);
+  }
+  if (database) {
     const { openPostgresStore } = await import('../src/persistence/postgres-store.ts');
-    try { store = await openPostgresStore({ url: process.env.FABCORE_DATABASE_URL, directory }); }
+    try { store = await openPostgresStore({ config: database, directory }); }
     catch (failure) {
-      const help = { 'database-import-required': 'base vide alors que state.json existe : lancer node scripts/import-state.mjs (simulation), puis --apply.', 'database-in-use': 'une autre instance FabCore utilise déjà cette base.', 'database-version': 'PostgreSQL 16 minimum requis.' };
+      const help = { 'database-import-required': 'base vide alors que state.json existe : lancer fabcore import (simulation), puis fabcore import --apply.', 'database-in-use': 'une autre instance FabCore utilise déjà cette base.', 'database-version': 'PostgreSQL 16 minimum requis.', 'config-ca-unreadable': 'certificat FABCORE_DATABASE_CA_FILE illisible.' };
       console.error(`FabCore · stockage PostgreSQL indisponible : ${help[failure.message] ?? failure.message.split('\n')[0]}`);
       process.exit(1);
     }
