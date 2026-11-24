@@ -697,5 +697,37 @@
     "docs": [
       "docs/MIG-06-PARITY.md"
     ]
+  },
+  {
+    "id": "bambu-cloud-camera",
+    "title": "Caméra hybride Bambu : supervision Cloud et vidéo LAN RTSPS",
+    "files": [
+      "src/domain/camera.ts",
+      "poc/bambu-cloud-camera.mjs",
+      "poc/cloud-accounts.mjs",
+      "connectors/bambu/src/cloud-http.ts",
+      "web/src/components/machine/CameraPanel.tsx",
+      "web/src/components/machine/BambuCameraSettings.tsx",
+      "tools/probe-bambu-cloud-camera.mjs"
+    ],
+    "symbols": [
+      "bambuCameraInfo",
+      "bambuCameraConfig",
+      "streamCloudCamera",
+      "createCloudAccounts",
+      "createCloudHttp",
+      "CameraPanel",
+      "BambuCameraSettings"
+    ],
+    "tests": [
+      "src/domain/camera.test.ts",
+      "poc/bambu-cloud-camera.test.mjs",
+      "poc/bambu-cloud-camera-http.test.mjs",
+      "web/test/cockpit.test.mjs"
+    ],
+    "docs": [
+      "docs/protocols/BAMBU-CLOUD-CAMERA.md",
+      "docs/protocols/BAMBU-CLOUD-CAMERA-RESEARCH.md"
+    ]
   }
 ]

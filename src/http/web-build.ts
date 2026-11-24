@@ -22,7 +22,7 @@ const unwritable = (error: unknown) => ['EACCES', 'EPERM', 'EROFS'].includes((er
  * (dossier de données). Renvoie le dossier servi.
  */
 async function buildCurrent(fallback?: string): Promise<string> {
-  const source = [...await files(join(root, 'web/src')), ...await files(join(root, 'web/locales')),
+  const source = [...await files(join(root, 'web/src')), ...await files(join(root, 'web/locales')), ...await files(join(root, 'src/domain')),
     ...['web/index.html', 'web/vite.config.ts', 'web/tsconfig.json', 'package-lock.json', 'design/prototype.html'].map(path => join(root, path))];
   const hash = createHash('sha256');
   for (const path of source) { hash.update(path.slice(root.length)); hash.update(await readFile(path)); }

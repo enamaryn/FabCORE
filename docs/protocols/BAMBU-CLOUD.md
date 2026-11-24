@@ -1,5 +1,7 @@
 # Bambu Cloud · recherche et plan d’intégration
 
+**Mise à jour du 24 novembre 2026** : les sections initiales ci-dessous sont un relevé historique. Le pilote de connexion/inventaire et de télémétrie Cloud a été intégré depuis. La caméra hybride fait l’objet d’un [incrément séparé en revue et d’une sonde matérielle](BAMBU-CLOUD-CAMERA.md), sans validation de vidéo totalement distante.
+
 Relevé du **19 novembre 2026**. État : recherche documentaire, **non implémenté, non connecté, non testé avec un compte utilisateur**. Suivi [#79](https://github.com/enamaryn/FabCORE/issues/79), après l’urgence [#78](https://github.com/enamaryn/FabCORE/issues/78). Le LAN existant n’est pas migré.
 
 Audit complémentaire du code : [BAMBU-CLOUD-AUDIT.md](BAMBU-CLOUD-AUDIT.md). Ce complément corrige la conclusion initiale tirée du README de coelacant1 et intègre la position officielle du 12 novembre 2026.

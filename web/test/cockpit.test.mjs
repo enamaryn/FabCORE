@@ -52,3 +52,10 @@ test('Températures : ruptures pointillées et historique vide explicite', () =>
   assert.match(renderChart([{ at: 100000, nozzle: 23, bed: null }, { at: 150000, nozzle: 30, bed: null }]), /stroke-dasharray="3 4"/);
   assert.match(renderChart([{ at: 100000, nozzle: 23, bed: null }, { at: 150000, nozzle: 30, bed: null }]), /mesures espacées/);
 });
+
+test('Caméra hybride : transport LAN explicitement affiché sous compte Cloud, réglages réservés admin', () => {
+  const cloud = { ...machine, kind: 'bambu-cloud', capabilities: { camera: true, filaments: 'AMS' }, camera: { mode: 'auto', host: '192.168.1.20', source: 'lan', transport: 'rtsps', available: true, experimental: true, issue: null } };
+  const html = render(cloud); assert.match(html, /télémétrie Cloud \+ caméra LAN/); assert.match(html, /RTSPS/); assert.match(html, /Paramètres vidéo/);
+  assert.doesNotMatch(render(cloud, 'observer'), /Paramètres vidéo/);
+  assert.match(render({ ...cloud, capabilities: { camera: false }, camera: { ...cloud.camera, issue: 'camera-cloud-unqualified', available: false } }), /Cloud distante non qualifiée/);
+});

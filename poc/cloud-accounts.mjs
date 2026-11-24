@@ -20,6 +20,7 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
   const logDirectory = join(directory, 'cloud-logs');
   mkdirSync(logDirectory, { recursive: true, mode: 0o700 });
   const monitors = new Map();
+  const cameraCodes = new Map();
   const starts = new Map();
   let closed = false;
   const pending = new Map();
@@ -109,7 +110,7 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       throw new CloudError(code, error.status ?? 502);
     } finally { busy.delete(id); authRequests.delete(id); }
   }
-  const { bases, devices, login: cloudLogin, verify: cloudVerify, mqttUsername } = createCloudHttp({ fetcher, now, log });
+  const { bases, devices, login: cloudLogin, verify: cloudVerify, mqttUsername, cameraCodes: readCameraCodes } = createCloudHttp({ fetcher, now, log });
   async function complete(account, token, signal) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9._~-]{1,16384}$/.test(token)) fail('cloud-response');
     clearPending(account.id);
@@ -204,6 +205,30 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       log(id, 'machine-imported', { serial, machineId: machine.id });
       return { id: machine.id };
     }); },
+    async cameraConnection(machine, signal) {
+      const account = find(machine.cloudAccountId);
+      const authorized = () => {
+        const current = entries().find(item => item.id === machine.cloudAccountId), target = store.state.machines.find(item => item.id === machine.id);
+        return !closed && !['cloud-auth', 'cloud-access'].includes(monitors.get(machine.cloudAccountId)?.snapshot()?.issue) &&
+          target?.kind === 'bambu-cloud' && target.cloudAccountId === account.id && target.serial === machine.serial && JSON.stringify(target.camera) === JSON.stringify(machine.camera) &&
+          current?.status === 'connected' && current.secret === account.secret && current.region === account.region && current.devices?.some(item => item.serial === machine.serial);
+      };
+      if (machine.kind !== 'bambu-cloud' || account.provider !== 'bambu' || !account.secret || !authorized()) fail('cloud-auth', 401);
+      const key = account.id;
+      for (const [key, entry] of cameraCodes) if (entry.until <= now()) { clearTimeout(entry.timer); cameraCodes.delete(key); }
+      let cached = cameraCodes.get(key);
+      if (!cached || cached.secret !== account.secret) {
+        cached = { secret: account.secret, until: now() + 30000, task: readCameraCodes(account, decrypt(account)) };
+        cameraCodes.set(key, cached);
+        const entry = cached; entry.timer = setTimeout(() => { if (cameraCodes.get(key) === entry) cameraCodes.delete(key); }, 30000); entry.timer.unref?.();
+        // Keep failures for the same short window too: repeated preview clicks must not flood Cloud.
+        cached.task.catch(() => {});
+      }
+      const accessCode = (await cached.task).get(machine.serial);
+      if (!accessCode) fail('camera-credentials');
+      if (signal?.aborted || !authorized()) fail('cloud-auth', 401);
+      return { accessCode, authorized };
+    },
     readMachine(machine) {
       const session = monitors.get(machine.cloudAccountId)?.snapshot();
       const device = session?.devices.find(item => item.serial === machine.serial);
@@ -226,6 +251,7 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       const account = find(id); if (busy.has(id)) fail('cloud-busy', 409);
       if (remove && store.state.machines.some(machine => machine.cloudAccountId === id)) fail('cloud-in-use', 409);
       stopMonitor(id);
+      for (const key of cameraCodes.keys()) if (key === id) { clearTimeout(cameraCodes.get(key).timer); cameraCodes.delete(key); }
       clearPending(id);
       if (remove) {
         await save({ ...store.state, cloudAccounts: entries().filter(item => item.id !== id) });
@@ -240,6 +266,6 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       return ['.1', ''].map(suffix => { try { return readFileSync(logPath(id) + suffix, 'utf8'); } catch (error) { if (error.code !== 'ENOENT') throw error; return ''; } }).join('');
     },
     forgetOwner(owner) { for (const entry of authRequests.values()) if (entry.owner === owner) entry.abort.abort(); for (const [id, flow] of pending) if (flow.owner === owner) clearPending(id); },
-    close() { closed = true; for (const id of monitors.keys()) stopMonitor(id); for (const entry of authRequests.values()) entry.abort.abort(); for (const id of pending.keys()) clearPending(id); }
+    close() { closed = true; for (const entry of cameraCodes.values()) clearTimeout(entry.timer); cameraCodes.clear(); for (const id of monitors.keys()) stopMonitor(id); for (const entry of authRequests.values()) entry.abort.abort(); for (const id of pending.keys()) clearPending(id); }
   };
 }

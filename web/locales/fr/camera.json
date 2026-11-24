@@ -1,0 +1,20 @@
+{
+  "settings": "Paramètres vidéo",
+  "mode": "Source caméra",
+  "modes": {
+    "auto": "Automatique (LAN si configuré)",
+    "lan": "LAN · RTSPS",
+    "cloud": "Cloud · expérimental non qualifié",
+    "disabled": "Désactivée"
+  },
+  "host": "Adresse IPv4 locale de la machine",
+  "scope": "La supervision reste Cloud. Le code caméra est demandé côté serveur au compte Bambu ; aucune commande de fabrication ni changement de mode de la machine.",
+  "invalid": "Configuration invalide ou enregistrement refusé. Utilisez une IPv4 privée, sans URL ni port.",
+  "saving": "Enregistrement…",
+  "save": "Enregistrer",
+  "hybrid": "Expérimental · télémétrie Cloud + caméra LAN · transport RTSPS. Le serveur doit joindre le réseau local.",
+  "camera-experimental-disabled": "Caméra hybride non activée par l’administrateur de ce serveur.",
+  "camera-disabled": "Caméra désactivée. La supervision Cloud reste disponible.",
+  "camera-cloud-unqualified": "Vidéo Cloud distante non qualifiée. Aucun transport distant n’est lancé.",
+  "camera-host-required": "Adresse locale requise pour essayer la caméra LAN avec ce compte Cloud."
+}

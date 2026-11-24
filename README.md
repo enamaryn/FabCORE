@@ -19,7 +19,7 @@ Gardez un œil sur vos fabrications, ouvrez les caméras en direct et voyez quel
 ## Ce que vous pouvez faire
 
 - **Suivre vos fabrications.** Retrouvez l’état des machines, les températures et l’avancement sur une même page. Pilotez les machines selon les capacités de leur connecteur ; le pilotage P2S LAN et les commandes Pause/Stop CC2 ont été confirmés sur matériel.
-- **Voir la pièce en cours.** Ouvrez la caméra d’une Bambu Lab P2S ou d’une Elegoo Centauri Carbon compatible depuis sa fiche.
+- **Voir la pièce en cours.** Ouvrez la caméra d’une Bambu Lab P2S ou d’une Elegoo Centauri Carbon compatible depuis sa fiche. Une caméra hybride expérimentale pour une P2S enregistrée en Cloud est en revue : télémétrie Cloud et vidéo LAN RTSPS explicitement séparées ; [configuration et limites](docs/protocols/BAMBU-CLOUD-CAMERA.md).
 - **Repérer la bonne bobine.** Consultez les emplacements AMS et CANVAS, leur occupation, la matière, la couleur et l’emplacement actif selon les données fournies par l’imprimante.
 - **Gérer les accès.** Créez des comptes Observateur en lecture seule ou connectez votre fournisseur OIDC, comme [Pocket ID](poc/README.md#connexion-oidc-avec-pocket-id).
 - **Diagnostiquer une coupure.** Filtrez le journal par machine et vérifiez l’heure du dernier rapport MQTT et de la dernière image reçue.
