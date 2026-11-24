@@ -140,7 +140,7 @@ app.addEventListener('click', cloudClick);
 dialog.addEventListener('click', cloudClick);
 dialog.addEventListener('submit', async event => {
   const form = event.target;
-  if (form.id !== 'cloud-form') return;
+  if (form?.getAttribute?.('id') !== 'cloud-form') return;
   event.preventDefault();
   if (cloudUI.busy || state.role !== 'admin' || live.phase !== 'workshop') return;
   cloudUI.busy = true;
