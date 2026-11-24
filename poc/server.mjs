@@ -226,11 +226,20 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     const url = new URL(path, publicUrl);
     const keys = [...url.searchParams.keys()];
     const machineLink = /^[a-f0-9-]{36}$/.test(url.searchParams.get('machine') ?? '') &&
-      (keys.length === 1 || (keys.length === 2 && keys.includes('tab') && ['files', 'logs', 'console'].includes(url.searchParams.get('tab'))) ||
+      (keys.length === 1 || (keys.length === 2 && keys.includes('tab') && ['files', 'logs', 'console', 'settings'].includes(url.searchParams.get('tab'))) ||
         ((keys.length === 2 || (keys.length === 3 && keys.includes('follow') && url.searchParams.get('follow') === '1')) && keys.includes('view') && Boolean(productionPath(url.searchParams.get('view')) || ray5Path(url.searchParams.get('view')))));
     const deepLink = url.pathname === '/' && (machineLink || (keys.length === 1 &&
       ['cloud', 'diagnostics', 'notifications', 'observer', 'add'].includes(url.searchParams.get('screen'))));
-    const asset = path === '/?auth=oidc-failed' || deepLink ? '/' : path;
+    // One fleet/cockpit UI. Keep only unmigrated administration and console on the legacy shell.
+    let destination = path === '/' ? '/app' : path === '/?auth=oidc-failed' ? '/app#oidc-failed' : null;
+    if (deepLink && machineLink && !['console', 'settings'].includes(url.searchParams.get('tab'))) {
+      destination = '/app#machine/' + url.searchParams.get('machine');
+      if (url.searchParams.has('view')) destination += '/view/' + encodeURIComponent(url.searchParams.get('view')) + (url.searchParams.get('follow') === '1' ? '/follow' : '');
+      else if (url.searchParams.has('tab')) destination += '/' + url.searchParams.get('tab');
+    }
+    if (deepLink && !machineLink) destination = { diagnostics: '/app#diagnostics', notifications: '/app#notifications', observer: '/app#access' }[url.searchParams.get('screen')] ?? null;
+    if (destination) { res.writeHead(303, { Location: destination }); return res.end(); }
+    const asset = deepLink ? '/' : path;
     if (req.method === 'GET' && assets.has(asset)) {
       const [type, body] = assets.get(asset);
       res.writeHead(200, { 'Content-Type': type });

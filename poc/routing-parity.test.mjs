@@ -40,11 +40,11 @@ const result = response => [response.status, response.json];
 test('routage : chaînes de requête, pages statiques, HEAD et routes inconnues', async ctx => {
   const { send, admin } = await start(ctx);
   const page = await send('/');
-  assert.equal(page.status, 200);
-  assert.match(page.headers['content-type'], /^text\/html/);
+  assert.equal(page.status, 303);
+  assert.equal(page.headers.location, '/app');
   assert.equal(page.headers['x-content-type-options'], 'nosniff');
   assert.match(page.headers['content-security-policy'], /default-src 'self'/);
-  assert.equal((await send('/?auth=oidc-failed')).status, 200);
+  const oidc = await send('/?auth=oidc-failed'); assert.equal(oidc.status, 303); assert.equal(oidc.headers.location, '/app#oidc-failed');
   assert.deepEqual(result(await send('/?x=1')), [404, { error: 'missing' }]);
   assert.equal((await send('/live.js')).status, 200);
   assert.deepEqual(result(await send('/live.js?v=2')), [404, { error: 'missing' }]);

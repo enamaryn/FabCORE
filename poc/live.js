@@ -881,7 +881,10 @@ function openWorkshop(username, role) {
       state.machine = id; live.page = 'detail';
       const view = params.get('view');
       if (view) openViewer(id, view, params.get('follow') === '1' && liveFile(machine(id)) === view);
-      else renderLive();
+      else {
+        renderLive();
+        if (tab === 'settings' && state.role === 'admin') document.querySelector('[data-action="' + (machine(id).kind === 'bambu-cloud' ? 'cloud-open' : 'edit') + '"]')?.click();
+      }
     }
     else if (state.role === 'admin' && screen) {
       if (screen === 'cloud') openCloudAccounts();
@@ -890,7 +893,7 @@ function openWorkshop(username, role) {
       if (screen === 'add') openDiscovery();
       if (screen === 'observer') document.querySelector('[data-action="observer"]')?.click();
     }
-    if (id || screen) history.replaceState(null, '', '/');
+    // Keep the explicit legacy tool URL: reload must not reopen the old fleet.
   });
   startLiveUpdates();
 }
@@ -1104,17 +1107,13 @@ document.addEventListener('click', async (event) => {
     renderLive();
   }
   if (live.phase !== 'workshop') return;
+  if (action === 'nav' && ['home', 'machines', 'history'].includes(value)) { location.assign('/app#' + value); return; }
   if (action === 'nav') {
     live.page = value;
     renderLive();
     app.querySelector('h1')?.focus();
   }
-  if (action === 'machine') {
-    live.page = 'detail';
-    state.machine = value;
-    renderLive();
-    app.querySelector('h1')?.focus();
-  }
+  if (action === 'machine') { location.assign('/app#machine/' + encodeURIComponent(value)); return; }
   if (action === 'diagnostics') openDiagnostics();
   if (action === 'notifications') openNotifications();
   if (action === 'notify-test' && state.role === 'admin') {
