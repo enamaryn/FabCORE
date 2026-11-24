@@ -1,3 +1,4 @@
+import type { bambuCameraInfo } from '../../src/domain/camera.ts';
 import type { Static } from 'typebox';
 import type { FleetMachine, FleetCapabilities } from '../../src/http/routes/fleet.js';
 
@@ -23,6 +24,7 @@ export interface ManualSpool {
 export type MachineCapabilities = Static<typeof FleetCapabilities>;
 /** Stable API contract plus optional, reported presentation telemetry. */
 export type MachineData = Static<typeof FleetMachine> & {
+  camera?: ReturnType<typeof bambuCameraInfo>;
   model?: string | null;
   serial?: string | null;
   origin?: string;

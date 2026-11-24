@@ -507,10 +507,10 @@ function liveDetail() {
   const m = machine(state.machine);
   if (!m) return liveFleet();
   const tab = machineTab();
-  const camera = machineConnectors[m.kind]?.camera
+  const camera = (m.kind === 'bambu-cloud' ? m.capabilities?.camera : machineConnectors[m.kind]?.camera)
     ? `<section class="panel stack machine-camera" data-camera-panel>
       <style>[data-camera-panel] [hidden]{display:none!important}</style>
-      <div class="row between wrap"><h2>${t('Caméra','Camera')}</h2>${m.kind === 'xtool-m2' ? `<label>${t('Vue', 'View')}<select data-camera-view aria-label="${t('Vue caméra','Camera view')}">
+      <div class="row between wrap"><h2>${t('Caméra','Camera')}</h2>${m.kind === 'bambu-cloud' ? `<small>${t('Télémétrie Cloud · caméra LAN RTSPS · expérimental','Cloud telemetry · LAN RTSPS camera · experimental')}</small>` : ''}${m.kind === 'xtool-m2' ? `<label>${t('Vue', 'View')}<select data-camera-view aria-label="${t('Vue caméra','Camera view')}">
         <option value="side">${t('Angle', 'Corner')}</option><option value="far">${t('Centrale', 'Central')}</option><option value="near">${t('Outil', 'Tool')}</option>
       </select></label>` : `<small>${t('Aperçu à l’ouverture','Preview on opening')}</small>`}</div>
       <div class="camera-stage"><div data-live-camera></div><div class="machine-camera-idle" data-camera-placeholder>${icon('camera')}<p>${t('Aperçu indisponible','Preview unavailable')}</p></div></div>

@@ -94,3 +94,14 @@ test('#121 : canaux enregistrés séparément, ntfy incomplet sans effet sur SMT
   assert.throws(() => ntfySettings({ mode: 'external', url: 'http://ntfy.example.test', topic: 'a', auth: 'none' }, undefined), (error: unknown) => error instanceof NotificationInputError && error.field === 'ntfy.url');
   await assert.rejects(service.save({}), code(400, 'notifications-invalid'));
 });
+
+test('métadonnées caméra : mode indépendant du Cloud, persistance attendue et aucun secret accepté', async () => {
+  const { store, persist, fail } = memory({ machines: [{ id: 'cloud', name: 'P2S', kind: 'bambu-cloud', origin: 'mqtts://cloud' }, { id: 'lan', name: 'LAN', kind: 'bambu', origin: 'mqtts://192.168.1.3' }] });
+  const service = createMachineMetadata({ store, persist });
+  await assert.rejects(service.setCameraConfig('missing', {}), code(404, 'missing'));
+  await assert.rejects(service.setCameraConfig('lan', { mode: 'lan', host: '192.168.1.20' }), code(400, 'camera-unsupported'));
+  await assert.rejects(service.setCameraConfig('cloud', { mode: 'lan', host: '127.0.0.1' }), code(400, 'camera-invalid'));
+  fail(true); await assert.rejects(service.setCameraConfig('cloud', { mode: 'auto', host: '192.168.1.20' }), code(503, 'storage-unavailable')); assert.equal(store.state.machines[0]?.camera, undefined);
+  fail(false); await service.setCameraConfig('cloud', { mode: 'auto', host: '192.168.1.20', accessCode: 'discard' });
+  assert.deepEqual(store.state.machines[0]?.camera, { mode: 'auto', host: '192.168.1.20' }); assert.equal(store.state.machines[0]?.kind, 'bambu-cloud'); assert.doesNotMatch(JSON.stringify(store.state), /discard/);
+});

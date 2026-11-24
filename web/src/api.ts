@@ -1,3 +1,4 @@
+import { bambuCameraConfig } from '../../src/domain/camera.ts';
 import type { SessionState } from '../../src/http/routes/session.ts';
 import type { ControlState } from '../../src/domain/control.ts';
 import { safeFilePath } from './files.ts';
@@ -110,6 +111,12 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
       return value as { status: string };
     },
     spool(id: string, spool: Record<string, unknown> | null, signal?: AbortSignal) { return request('machines/' + encodeURIComponent(id) + '/spool', { spool }, signal); },
+    async cameraSettings(id: string, config: { mode: string; host: string }, signal?: AbortSignal) {
+      const value = await request('machines/' + encodeURIComponent(id) + '/camera-settings', config, signal);
+      const camera = value && typeof value === 'object' && 'camera' in value ? bambuCameraConfig(value.camera) : null;
+      if (!camera || camera.mode !== config.mode || camera.host !== config.host.trim()) throw new ApiError('camera-unconfirmed', 502);
+      return { camera };
+    },
     async preview(id: string, view: string, signal?: AbortSignal): Promise<Blob> {
       const response = await fetcher('/api/machines/' + encodeURIComponent(id) + '/camera/preview' + (view ? '/' + view : ''), {
         credentials: 'same-origin', redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20000)]) : AbortSignal.timeout(20000),

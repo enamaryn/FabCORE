@@ -68,7 +68,11 @@ const definitions = {
     return monitor;
   }, { live: true, verify: true, temperatures: false, controls: true, commands: true, commandActions: ['pause','resume','stop'], files: true, fileFamily: 'laser' }),
   'bambu-cloud': { model: 'Bambu Lab · Cloud', form: 'cloud', filaments: 'AMS', configure() { return null; },
-    async load({ cloud }) { return { read: machine => cloud.readMachine(machine) }; } },
+    async load({ cloud, diagnostics, experimentalCloudCamera, cloudCameraStream }) { return { read: machine => cloud.readMachine(machine),
+      async camera(machine, output, signal, frame) {
+        const { streamCloudCamera } = await import('./bambu-cloud-camera.mjs');
+        return streamCloudCamera(machine, output, signal, frame, { cloud, diagnostics, enabled: experimentalCloudCamera, stream: cloudCameraStream });
+      } }; }, camera: true },
   klipper: httpConnector('Klipper · Moonraker', 7125, false, async ({ readPrinter, sendCommand, sendGcode, fetchFiles }) => {
     const mod = await import('./moonraker.mjs');
     const read = readPrinter ?? mod.readMoonraker;

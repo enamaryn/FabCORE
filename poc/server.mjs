@@ -1,3 +1,4 @@
+import { bambuCameraInfo } from '../src/domain/camera.ts';
 import { manualSpool, supportsManualSpool } from './manual-spool.mjs';
 import { createServer } from 'node:http';
 import { createHttpApp } from '../src/http/app.ts';
@@ -115,7 +116,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, store: storage = openStore(directory), origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification, logLevel = 'debug', eventHeartbeatMs = 15_000, versionFetch } = {}) {
+export function createFabCore({ directory, store: storage = openStore(directory), origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification, logLevel = 'debug', eventHeartbeatMs = 15_000, versionFetch, cloudCameraStream, experimentalCloudCamera = process.env.FABCORE_EXPERIMENTAL_BAMBU_CAMERA === '1' } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -138,7 +139,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
   const machineLogs = createMachineLogs({ directory, machines: () => store.state.machines, context: currentRequestId, minLevel: logLevel });
   const diagnostics = createDiagnostics({ journal: machineLogs, context: currentRequestId });
   diagnostics.record('server', 'started');
-  const connectors = createConnectorRegistry({ isCurrent: machine => store.state.machines.includes(machine), directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, diagnostics, openCamera, cloud });
+  const connectors = createConnectorRegistry({ isCurrent: machine => store.state.machines.includes(machine), directory: resolve(directory ?? '.fabcore'), readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, diagnostics, openCamera, cloud, experimentalCloudCamera, cloudCameraStream });
   const snapshot = monitor(async (machine) => {
     const { serial, fingerprint, ...telemetry } = await connectors.read(machine.kind ?? 'klipper', machine);
     return telemetry;
@@ -306,6 +307,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     const machine = store.state.machines.find(({ id }) => id === camera[1]);
     const definition = connectorDefinition(machine?.kind);
     if (!definition?.camera) return error(res, 404, 'camera-unsupported');
+    if (machine.kind === 'bambu-cloud') { const info = bambuCameraInfo(machine.camera, experimentalCloudCamera); if (!info.available) return error(res, 503, info.issue); }
     if (camera[2] && machine.kind !== 'xtool-m2') return error(res, 404, 'camera-unsupported');
     const cameraView = machine.kind === 'xtool-m2' ? camera[2] ?? 'side' : undefined;
     const streamKey = cameraView ? machine.id + '/' + cameraView : machine.id;
@@ -837,7 +839,8 @@ export function createFabCore({ directory, store: storage = openStore(directory)
         model: machine.kind === 'bambu-cloud' ? machine.model : definition?.model ?? connectorCatalog.klipper.model,
         cameraOpen: [...cameraStreams.values()].some(stream => stream.machineId === machine.id && [...stream.viewers.values()].some(({ owner }) => owner === activeSession)),
         ...telemetry,
-        capabilities: machine.kind === 'longer-ray5' && machine.transport === 'esp3d'
+        ...(machine.kind === 'bambu-cloud' ? { camera: bambuCameraInfo(machine.camera, experimentalCloudCamera) } : {}),
+        capabilities: machine.kind === 'bambu-cloud' ? { ...connectorCatalog['bambu-cloud'], camera: bambuCameraInfo(machine.camera, experimentalCloudCamera).available } : machine.kind === 'longer-ray5' && machine.transport === 'esp3d'
           ? { ...connectorCatalog[machine.kind], controls: false, commands: false, commandActions: [] }
           : connectorCatalog[machine.kind ?? 'klipper'],
         ...(machine.transport ? { transport: machine.transport } : {}),
@@ -860,6 +863,12 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     machines: {
       write: (action, data, { viewer, signal, stillSignedIn }) => machineAdmin.write(action, data, { viewer: sessions.get(viewer.session), signal, stillSignedIn }),
       spool: (id, data) => metadata.setManualSpool(id, data),
+      camera: async (id, data) => {
+        const result = await metadata.setCameraConfig(id, data);
+        for (const stream of cameraStreams.values()) if (stream.machineId === id) stream.controller.abort();
+        diagnostics.trace(id, 'camera-configured', { mode: result.camera.mode, host: result.camera.host, transport: 'rtsps' });
+        return result;
+      },
       networks: () => machineAdmin.networks(),
       discover: (data, signal) => machineAdmin.discover(data, signal)
     },

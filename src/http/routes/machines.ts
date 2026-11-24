@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import Type from 'typebox';
 import { JsonBody, type RouteModule, type Viewer } from '../app.ts';
+import { HttpError } from '../errors.ts';
 import { errorResponses } from '../errors.ts';
 
 type Body = Record<string, unknown>;
@@ -18,6 +19,7 @@ export interface WriteContext {
 export interface MachineDependencies {
   /** `null` : requête annulée par le client, aucune réponse n'est due. */
   write(action: MachineAction, data: Body, context: WriteContext): Promise<{ status: number; body: Record<string, unknown> } | null>;
+  camera?(id: string, data: Body): Promise<{ camera: { mode: string; host: string } }>;
   spool(id: string, data: Body): SpoolResult | Promise<SpoolResult>;
   networks(): { networks: string[] };
   discover(data: Body, signal: AbortSignal): Promise<{ devices: Record<string, unknown>[] } | null>;
@@ -74,6 +76,14 @@ export const machineRoutes = (dependencies: MachineDependencies): RouteModule =>
     schema: { summary: 'Renseigner ou effacer la bobine manuelle', tags: ['parc'], security: [{ session: [] }], body: JsonBody,
       params: Type.Object({ id: Type.String() }), response: { 200: Spool, ...errorResponses(400, 401, 403, 404, 415, 421) } },
   }, async request => dependencies.spool(request.params.id, request.body));
+  app.post<{ Body: Body; Params: { id: string } }>('/api/machines/:id([a-f0-9-]{36})/camera-settings', {
+    ...rightsFirst,
+    schema: { summary: 'Configurer la caméra hybride Bambu Cloud (expérimentale), sans commande de fabrication', tags: ['caméras'], security: [{ session: [] }], body: JsonBody,
+      response: { 200: Type.Object({ camera: Type.Object({ mode: Type.String(), host: Type.String() }) }), ...errorResponses(400, 401, 403, 404, 415, 421, 503) } },
+  }, async request => {
+    if (!dependencies.camera) throw new HttpError(404, 'camera-unsupported');
+    return dependencies.camera(request.params.id, request.body);
+  });
   app.get('/api/discovery', {
     schema: { summary: 'Réseaux locaux proposés à la découverte', tags: ['parc'], security: [{ session: [] }],
       response: { 200: Networks, ...errorResponses(401, 403, 421) } },

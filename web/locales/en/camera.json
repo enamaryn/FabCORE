@@ -1,0 +1,20 @@
+{
+  "settings": "Video settings",
+  "mode": "Camera source",
+  "modes": {
+    "auto": "Automatic (LAN when configured)",
+    "lan": "LAN · RTSPS",
+    "cloud": "Cloud · experimental, not qualified",
+    "disabled": "Disabled"
+  },
+  "host": "Printer local IPv4 address",
+  "scope": "Monitoring stays Cloud. The server requests the camera code from the Bambu account; no production command or printer mode change.",
+  "invalid": "Invalid configuration or save rejected. Use a private IPv4 without URL or port.",
+  "saving": "Saving…",
+  "save": "Save",
+  "hybrid": "Experimental · Cloud telemetry + LAN camera · RTSPS transport. The server needs a route to the local network.",
+  "camera-experimental-disabled": "Hybrid camera has not been enabled by the server administrator.",
+  "camera-disabled": "Camera disabled. Cloud monitoring remains available.",
+  "camera-cloud-unqualified": "Remote Cloud video is not qualified. No remote transport is started.",
+  "camera-host-required": "A local address is required to try LAN video with this Cloud account."
+}

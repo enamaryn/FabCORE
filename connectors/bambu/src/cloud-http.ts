@@ -2,7 +2,7 @@
 export interface CloudAccount { id: string; provider: string; region: string; email?: string }
 interface CloudResponse {
   code?: unknown; loginType?: unknown; accessToken?: unknown; tfaKey?: unknown; uid?: unknown;
-  devices?: { dev_id?: unknown; name?: unknown; dev_product_name?: unknown; dev_model_name?: unknown; online?: unknown; print_status?: unknown }[];
+  devices?: { dev_access_code?: unknown; dev_id?: unknown; name?: unknown; dev_product_name?: unknown; dev_model_name?: unknown; online?: unknown; print_status?: unknown }[];
 }
 interface RequestOptions {
   method?: string; body?: Record<string, unknown>; token?: string; headers?: Record<string, string>;
@@ -116,6 +116,15 @@ export function createCloudHttp({ fetcher = fetch, now = Date.now, log }: CloudH
   return {
     bases,
     devices,
+    async cameraCodes(account: CloudAccount, token: string, signal?: AbortSignal): Promise<Map<string, string>> {
+      const { data } = await request(account, bases(account).api, '/v1/iot-service/api/user/bind', { token, signal });
+      if (!Array.isArray(data.devices)) fail('camera-credentials');
+      const codes = new Map<string, string>();
+      for (const device of data.devices.slice(0, 200)) {
+        if (typeof device.dev_id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(device.dev_id) && typeof device.dev_access_code === 'string' && /^[A-Za-z0-9]{8}$/.test(device.dev_access_code)) codes.set(device.dev_id, device.dev_access_code);
+      }
+      return codes;
+    },
     async login(account: CloudAccount, password: string, signal?: AbortSignal) {
       const { data } = await request(account, bases(account).api, '/v1/user-service/user/login', {
         method: 'POST', body: { account: account.email, password, apiError: '' }, signal });

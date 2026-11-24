@@ -1,10 +1,20 @@
 // Métadonnées du parc gérées par FabCore (MIG-04) : aucune commande machine.
 import { manualSpool, supportsManualSpool, type ManualSpool } from '../domain/index.ts';
+import { bambuCameraConfig } from '../domain/camera.ts';
 import { ServiceError } from './errors.ts';
 import type { FabCoreState, StateStore } from './state-store.ts';
 
 export function createMachineMetadata({ store, persist }: { store: StateStore; persist: (next: FabCoreState) => Promise<void> }) {
   return {
+    async setCameraConfig(id: string, data: Record<string, unknown>) {
+      const machine = store.state.machines.find(item => item.id === id);
+      if (!machine) throw new ServiceError(404, 'missing');
+      if (machine.kind !== 'bambu-cloud') throw new ServiceError(400, 'camera-unsupported');
+      const camera = bambuCameraConfig(data);
+      if (!camera) throw new ServiceError(400, 'camera-invalid');
+      await persist({ ...store.state, machines: store.state.machines.map(item => item === machine ? { ...item, camera } : item) });
+      return { camera };
+    },
     /** Renseigne ou retire (`spool: null`) la bobine manuelle ; modifiable hors ligne. */
     async setManualSpool(id: string, data: Record<string, unknown>): Promise<{ manualSpool: ManualSpool | null }> {
       const machine = store.state.machines.find(item => item.id === id);

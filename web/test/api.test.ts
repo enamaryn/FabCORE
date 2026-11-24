@@ -42,3 +42,10 @@ test('Cockpit API : aperçu JPEG même origine, expiration de session signalée'
   const expired = createApi(async () => new Response('', { status: 401 }), () => revoked++);
   await assert.rejects(expired.preview('test', '')); assert.equal(revoked, 1);
 });
+
+test('Caméra : configuration confirmée par le serveur, réponse ambiguë refusée sans rejeu', async () => {
+  let calls = 0;
+  const api = createApi(async (url, options) => { calls++; assert.equal(url, '/api/machines/test/camera-settings'); assert.equal(options?.method, 'POST'); return Response.json({ camera: { mode: 'auto', host: '192.168.1.20' } }); });
+  assert.deepEqual(await api.cameraSettings('test', { mode: 'auto', host: '192.168.1.20' }), { camera: { mode: 'auto', host: '192.168.1.20' } }); assert.equal(calls, 1);
+  await assert.rejects(createApi(async () => Response.json({})).cameraSettings('test', { mode: 'auto', host: '192.168.1.20' }), error => error instanceof ApiError && error.code === 'camera-unconfirmed');
+});
