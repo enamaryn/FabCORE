@@ -137,8 +137,9 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   const session = (response) => response.headers.get('set-cookie').split(';')[0];
 
   const page = await call('/');
-  assert.equal(page.status, 200);
-  assert.match(await page.text(), /data-live/);
+  assert.equal(page.status, 303);
+  assert.equal(page.headers.get('location'), '/app');
+  assert.equal(await page.text(), '');
   assert.equal((await call('/shared.js')).status, 200);
   assert.equal((await call('/live.js')).status, 200);
   assert.equal((await call('/api/session', { host: 'unexpected.test' })).status, 421);

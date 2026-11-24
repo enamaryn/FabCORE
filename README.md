@@ -97,3 +97,5 @@ La [carte du code](docs/ai/CODEMAP.md) relie 11 sujets aux sources, symboles, te
 Cinq [profils spécialisés](.codex/agents/) sont disponibles pour les clients Codex locaux compatibles : navigation, connecteurs, backend, frontend et revue qualité. Leur chargement dans un autre client doit être vérifié. Un seul agent pour une tâche simple ; délégation ciblée pour les tâches indépendantes, avec retour court. [Méthode et relais](docs/ai/WORKFLOW.md).
 
 **Serena reste facultatif et désactivé par défaut.** L’installation et le handshake MCP ont été testés, mais le serveur de langage TypeScript n’a pas pu s’initialiser dans l’environnement d’essai. La carte et la recherche locale fonctionnent sans lui. [Résultat du pilote](docs/ai/SERENA.md) · [Vérifications et mesures](docs/ai/EVALUATION.md).
+
+L’adresse racine `/` rejoint automatiquement `/app` : le parc et les fiches machine utilisent la même interface. Les outils encore en migration restent accessibles par leurs liens spécifiques.
