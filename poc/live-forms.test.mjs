@@ -27,3 +27,16 @@ test('prototype partagé : aucune déclaration globale ne masque window.history'
   assert.doesNotMatch(script, /^\s*(?:function|let|const|var|class)\s+history\b/m);
   assert.doesNotMatch(script, /[,{]\s*history\s*:\s*history\b/);
 });
+
+test('Détecter à nouveau : scan du réseau qui contient l’adresse actuelle, sinon le premier', () => {
+  const start = live.indexOf('const ipv4Number ='), end = live.indexOf('function machineHost(');
+  const sandbox = {};
+  runInNewContext(live.slice(start, end) + '\nthis.networkFor = networkFor;', sandbox);
+  const networks = ['10.0.0.0/24', '192.168.1.0/24', '172.16.0.0/16'];
+  assert.equal(sandbox.networkFor('192.168.1.192', networks), '192.168.1.0/24');
+  assert.equal(sandbox.networkFor('172.16.40.2', networks), '172.16.0.0/16');
+  assert.equal(sandbox.networkFor('192.168.2.5', networks), '10.0.0.0/24');
+  assert.equal(sandbox.networkFor('ray5.local', networks), '10.0.0.0/24');
+  assert.equal(sandbox.networkFor('192.168.1.5', []), undefined);
+  assert.match(live, /data-action="rediscover"|btn\('rediscover'/);
+});

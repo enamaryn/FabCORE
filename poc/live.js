@@ -928,6 +928,7 @@ function openMachineForm(kind = 'klipper', name = '', existing = null, detected 
   dialog.innerHTML = `<form id="add-machine" class="stack" autocomplete="off">
     <h2>${existing ? t('Modifier une machine','Edit a machine') : t('Ajouter une machine','Add a machine')}</h2>
     ${existing ? `<input type="hidden" name="id" value="${esc(existing.id)}"><input type="hidden" name="kind" value="${kind}">` : ''}
+    ${existing && state.role === 'admin' ? `<div class="stack" data-rediscover><div class="row wrap">${btn('rediscover', t('Détecter à nouveau', 'Detect again'))}<small>${t('Retrouve cette machine sur le réseau si son adresse a changé.', 'Finds this machine on the network if its address changed.')}</small></div><p role="status" data-rediscover-status></p><div class="stack" data-rediscover-results></div></div>` : ''}
     ${existing ? '' : btn('discover',t('Détecter sur le réseau','Discover on network'))}
     <div class="fields">
       ${existing ? '' : `<label>${t('Type de machine','Machine type')}<select name="kind">${Object.entries(machineConnectors).filter(([, entry]) => entry.form !== 'cloud').map(([id, entry]) =>
@@ -1008,6 +1009,74 @@ async function scanFromForm(form) {
   } finally {
     submit.disabled = form.elements.network.disabled = false;
   }
+}
+
+// « Détecter à nouveau » (modification d'une machine) : scanne le réseau de la machine, propose les appareils du même
+// type non rattachés à une autre machine ; l'adresse choisie remplit le formulaire, enregistrée seulement sur « Enregistrer ».
+let rediscovered = [];
+const ipv4Number = address => address.split('.').reduce((total, part) => total * 256 + Number(part), 0);
+function networkFor(host, networks) {
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(host ?? '')) return networks[0];
+  return networks.find(cidr => {
+    const [base, bits] = cidr.split('/');
+    const size = 2 ** (32 - Number(bits));
+    return Math.floor(ipv4Number(host) / size) === Math.floor(ipv4Number(base) / size);
+  }) ?? networks[0];
+}
+function machineHost(current) {
+  try { return new URL(current.origin).hostname; } catch { return ''; }
+}
+async function rediscoverMachine(form) {
+  const current = machine(form.elements.id?.value);
+  const status = form.querySelector('[data-rediscover-status]');
+  const results = form.querySelector('[data-rediscover-results]');
+  const button = form.querySelector('[data-action="rediscover"]');
+  if (!current || !status || button.disabled) return;
+  discoveryCancel?.abort();
+  discoveryCancel = new AbortController();
+  const { signal } = discoveryCancel;
+  button.disabled = true; rediscovered = []; results.replaceChildren();
+  status.textContent = t('Recherche en cours… (jusqu’à une minute)', 'Scanning… (up to a minute)');
+  try {
+    const { networks } = await api('discovery', undefined, signal);
+    const network = networkFor(machineHost(current), networks);
+    if (!network) { status.textContent = t('Aucun réseau local disponible.', 'No local network available.'); return; }
+    const { devices } = await api('discovery', { network }, signal);
+    if (signal.aborted) return;
+    const kind = current.kind ?? 'klipper', host = machineHost(current);
+    const sameKind = devices.filter(device => device.kind === kind && device.detected !== false &&
+      (!device.serial || !current.serial || device.serial.toUpperCase() === current.serial.toUpperCase()));
+    // Toujours à la même adresse : rien à changer.
+    if (sameKind.some(device => device.registered && device.name === current.name && device.host === host)) {
+      status.textContent = t(`La machine répond toujours à ${host}. Aucun changement d’adresse nécessaire.`, `The machine still answers at ${host}. No address change needed.`);
+      return;
+    }
+    rediscovered = sameKind.filter(device => !device.registered);
+    status.textContent = rediscovered.length
+      ? t('Choisissez la nouvelle adresse, puis cliquez sur Enregistrer.', 'Choose the new address, then click Save.')
+      : t(`Aucune autre machine de ce type trouvée sur ${network}. Vérifiez qu’elle est allumée et connectée au Wi-Fi.`, `No other machine of this type found on ${network}. Check that it is on and connected to Wi-Fi.`);
+    results.innerHTML = rediscovered.map((device, index) => `<div class="row between wrap"><span>${esc(device.host)}${device.transport ? ' · ' + (device.transport === 'tcp' ? 'GRBL TCP' : 'ESP3D') : ''}${device.serial ? ' · ' + esc(device.serial) : ''}</span>${btn('use-rediscovered:' + index, t('Utiliser cette adresse', 'Use this address'), '', 'primary')}</div>`).join('');
+  } catch (error) {
+    if (!signal.aborted) status.textContent = problem(error.code);
+  } finally {
+    button.disabled = false;
+  }
+}
+function useRediscovered(form, device) {
+  const elements = form.elements;
+  if (elements.host) elements.host.value = device.host;
+  if (elements.origin) elements.origin.value = device.origin ?? `http://${device.host}`;
+  if (elements.transport && device.transport) {
+    elements.transport.value = device.transport;
+    elements.transport.dispatchEvent(new Event('change', { bubbles: true }));
+    const origin = URL.parse(device.origin ?? '');
+    if (origin?.port) elements.port.value = origin.port;
+    if (device.httpPort) elements.httpPort.value = device.httpPort;
+    if (device.wsPort && elements.wsPort) elements.wsPort.value = device.wsPort;
+  }
+  form.querySelector('[data-rediscover-results]').replaceChildren();
+  form.querySelector('[data-rediscover-status]').textContent = t(`Adresse ${device.host} reprise dans le formulaire. Cliquez sur Enregistrer pour la valider.`, `Address ${device.host} filled in. Click Save to confirm it.`);
+  form.querySelector('button[value="save"]')?.focus();
 }
 
 document.addEventListener('click', async (event) => {
@@ -1107,6 +1176,8 @@ document.addEventListener('click', async (event) => {
     const detected = discoveredDevices[Number(value)];
     if (detected && !detected.registered) openMachineForm(detected.kind, '', null, detected);
   }
+  if (action === 'rediscover' && state.role === 'admin') { const form = target.closest('form'); if (form) await rediscoverMachine(form); }
+  if (action === 'use-rediscovered') { const device = rediscovered[Number(value)], form = target.closest('form'); if (device && form) useRediscovered(form, device); }
   if (action === 'edit') {
     const current = machine(state.machine);
     if (current) openMachineForm(current.kind, current.name, current);
