@@ -664,6 +664,8 @@ async function openNotifications() {
   if (live.page === 'notifications') renderLive();
 }
 
+// Identifiant réel du formulaire : un champ nommé « id » (machine modifiée) masquerait la propriété id du formulaire.
+const formId = form => form?.getAttribute?.('id') ?? '';
 function renderLive() {
   // Page de connexion unique : l'interface React (/app) gère connexion, installation et retour Pocket ID.
   if (live.phase === 'login' || live.phase === 'setup') {
@@ -1162,14 +1164,14 @@ app.addEventListener('change', event => {
 });
 
 dialog.addEventListener('change', (event) => {
-  if (event.target.form?.id === 'manual-spool' && event.target.name === 'color') event.target.form.elements.knownColor.checked = true;
+  if (formId(event.target.form) === 'manual-spool' && event.target.name === 'color') event.target.form.elements.knownColor.checked = true;
   if (!event.target.matches('#add-machine select[name="kind"]')) return;
   openMachineForm(event.target.value, event.target.form.elements.name.value);
   dialog.querySelector('select[name="kind"]').focus();
 });
 
 dialog.addEventListener('change', (event) => {
-  if (event.target.form?.id === 'add-machine' && event.target.name === 'transport') {
+  if (formId(event.target.form) === 'add-machine' && event.target.name === 'transport') {
     const form = event.target.form;
     form.elements.port.value = event.target.value === 'tcp' ? '8080' : '8848';
     form.elements.httpPort.value = event.target.value === 'tcp' ? '80' : '8848';
@@ -1180,11 +1182,11 @@ dialog.addEventListener('change', (event) => {
 
 document.addEventListener('input', (event) => {
   const form = event.target.form;
-  if (form?.id === 'add-machine' && ['host', 'origin'].includes(event.target.name)) {
+  if (formId(form) === 'add-machine' && ['host', 'origin'].includes(event.target.name)) {
     const serialField = form.querySelector('[data-machine-serial]:not([name])');
     if (serialField) serialField.value = '';
   }
-  if (form?.id !== 'notifications-settings') return;
+  if (formId(form) !== 'notifications-settings') return;
   const { ntfyMode, smtpEnabled } = form.elements;
   form.querySelector('[data-ntfy-internal]').hidden = ntfyMode.value !== 'internal';
   form.querySelector('[data-ntfy-external]').hidden = ntfyMode.value !== 'external';
@@ -1194,7 +1196,7 @@ document.addEventListener('input', (event) => {
 
 document.addEventListener('submit', async (event) => {
   const form = event.target;
-  if (form.id === 'manual-spool') {
+  if (formId(form) === 'manual-spool') {
     event.preventDefault();
     const submit = event.submitter;
     if (state.role !== 'admin' || submit?.disabled) return;
@@ -1211,7 +1213,7 @@ document.addEventListener('submit', async (event) => {
     finally { controls.forEach(button => { button.disabled = false; }); }
     return;
   }
-  if (form.id === 'notifications-settings') {
+  if (formId(form) === 'notifications-settings') {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
     const submit = form.querySelector('button[type="submit"]');
@@ -1230,12 +1232,12 @@ document.addEventListener('submit', async (event) => {
     finally { submit.disabled = false; }
     return;
   }
-  if (form.id === 'discover-machines') {
+  if (formId(form) === 'discover-machines') {
     event.preventDefault();
     if (!form.querySelector('button[type="submit"]').disabled) await scanFromForm(form);
     return;
   }
-  if (!['credentials','add-machine','add-observer'].includes(form.id)) return;
+  if (!['credentials','add-machine','add-observer'].includes(formId(form))) return;
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form));
   const errorText = form.querySelector('.error');
@@ -1244,7 +1246,7 @@ document.addEventListener('submit', async (event) => {
     return;
   }
   delete data.confirm;
-  const pairing = form.id === 'add-machine' && event.submitter?.value === 'pair';
+  const pairing = formId(form) === 'add-machine' && event.submitter?.value === 'pair';
   const pairingAbort = pairing ? new AbortController() : null;
   const cancelPairing = () => pairingAbort.abort();
   if (pairing) dialog.addEventListener('close', cancelPairing, { once: true });
@@ -1252,11 +1254,11 @@ document.addEventListener('submit', async (event) => {
   controls.forEach((element) => { element.disabled = true; });
   errorText.textContent = '';
   try {
-    if (form.id === 'add-observer') {
+    if (formId(form) === 'add-observer') {
       await api('observers', data);
       dialog.close();
       toast(t('Compte observateur créé.','Observer account created.'));
-    } else if (form.id === 'add-machine') {
+    } else if (formId(form) === 'add-machine') {
       if (event.submitter?.value === 'test') {
         const status = form.querySelector('[role="status"]');
         status.hidden = false;
@@ -2241,7 +2243,7 @@ function renderTerminal(m) {
 }
 
 app.addEventListener('input', (event) => {
-  if (event.target.form?.id === 'gcode-terminal' && state.machine) terminalDrafts.set(state.machine, event.target.value);
+  if (formId(event.target.form) === 'gcode-terminal' && state.machine) terminalDrafts.set(state.machine, event.target.value);
 });
 
 app.addEventListener('submit', async (event) => {
