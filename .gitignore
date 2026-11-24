@@ -9,3 +9,6 @@
 /.gitnexus/
 
 /web/dist/
+
+# Identités de laboratoire locales : jamais de clés dans Git.
+/.fabcore-crypto-lab/

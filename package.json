@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node poc/server.mjs",
     "dev": "node --watch poc/server.mjs",
-    "test": "node --test",
+    "test": "node --import ./scripts/test-network-isolation.mjs --test",
     "typecheck": "tsc -p . && tsc -p web",
     "lint": "eslint",
     "check:licenses": "node scripts/check-licenses.mjs",

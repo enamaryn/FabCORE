@@ -1,0 +1,147 @@
+{
+  "lab": "BBL-CRYPTO-01",
+  "runtime": "v24.22.3",
+  "protocol": "MQTT 3.1.1 loopback",
+  "elapsedMs": 881,
+  "checks": [
+    "unapproved-rejected",
+    "approved-accepted",
+    "replay-rejected",
+    "revoked-rejected",
+    "rotated-approved-accepted",
+    "encrypted-key-deleted"
+  ],
+  "physicalCommands": 0,
+  "printerAuthorization": "unqualified",
+  "diagnostic": {
+    "schema": "fabcore-lab-diagnostic/1",
+    "scope": "synthetic-only",
+    "printerAuthorization": "unqualified",
+    "events": [
+      {
+        "at": "2026-11-24T15:58:17.603Z",
+        "event": "identity-created",
+        "ok": true,
+        "identity": "951b5ea3b1bb3263"
+      },
+      {
+        "at": "2026-11-24T15:58:17.697Z",
+        "event": "certificate-check",
+        "ok": true,
+        "elapsedMs": 10,
+        "identity": "951b5ea3b1bb3263"
+      },
+      {
+        "at": "2026-11-24T15:58:17.697Z",
+        "event": "authorization",
+        "ok": false,
+        "reason": "not-approved",
+        "elapsedMs": 11
+      },
+      {
+        "at": "2026-11-24T15:58:17.710Z",
+        "event": "certificate-check",
+        "ok": true,
+        "elapsedMs": 12,
+        "identity": "951b5ea3b1bb3263"
+      },
+      {
+        "at": "2026-11-24T15:58:17.720Z",
+        "event": "certificate-check",
+        "ok": true,
+        "elapsedMs": 9,
+        "identity": "951b5ea3b1bb3263"
+      },
+      {
+        "at": "2026-11-24T15:58:17.721Z",
+        "event": "authorization",
+        "ok": true,
+        "elapsedMs": 10,
+        "identity": "951b5ea3b1bb3263"
+      },
+      {
+        "at": "2026-11-24T15:58:17.729Z",
+        "event": "certificate-check",
+        "ok": true,
+        "elapsedMs": 8,
+        "identity": "951b5ea3b1bb3263"
+      },
+      {
+        "at": "2026-11-24T15:58:17.730Z",
+        "event": "authorization",
+        "ok": false,
+        "reason": "replay",
+        "elapsedMs": 9
+      },
+      {
+        "at": "2026-11-24T15:58:17.944Z",
+        "event": "identity-created",
+        "ok": true,
+        "identity": "f697b8a931e1fe5f"
+      },
+      {
+        "at": "2026-11-24T15:58:17.945Z",
+        "event": "identity-revoked",
+        "ok": true,
+        "identity": "951b5ea3b1bb3263"
+      },
+      {
+        "at": "2026-11-24T15:58:17.945Z",
+        "event": "certificate-check",
+        "ok": false,
+        "reason": "revoked",
+        "elapsedMs": 0
+      },
+      {
+        "at": "2026-11-24T15:58:17.945Z",
+        "event": "authorization",
+        "ok": false,
+        "reason": "revoked",
+        "elapsedMs": 0
+      },
+      {
+        "at": "2026-11-24T15:58:17.956Z",
+        "event": "certificate-check",
+        "ok": true,
+        "elapsedMs": 10,
+        "identity": "f697b8a931e1fe5f"
+      },
+      {
+        "at": "2026-11-24T15:58:17.974Z",
+        "event": "certificate-check",
+        "ok": true,
+        "elapsedMs": 12,
+        "identity": "f697b8a931e1fe5f"
+      },
+      {
+        "at": "2026-11-24T15:58:17.974Z",
+        "event": "authorization",
+        "ok": true,
+        "elapsedMs": 12,
+        "identity": "f697b8a931e1fe5f"
+      },
+      {
+        "at": "2026-11-24T15:58:17.976Z",
+        "event": "identity-revoked",
+        "ok": true,
+        "identity": "f697b8a931e1fe5f"
+      },
+      {
+        "at": "2026-11-24T15:58:17.976Z",
+        "event": "identity-deleted",
+        "ok": true,
+        "identity": "f697b8a931e1fe5f"
+      }
+    ]
+  },
+  "checkedAt": "2026-11-24T15:58:49.964974+00:00",
+  "baseRevision": "148b69ceff78f6a0392c808f93821f9f2d14d688",
+  "localTests": {
+    "command": "npm run check",
+    "tests": 342,
+    "passed": 337,
+    "failed": 0,
+    "skippedPostgres": 5
+  },
+  "openssl": "3.5.7"
+}

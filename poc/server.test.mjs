@@ -93,6 +93,12 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
     readPrusa: async () => ({ status: 'printing', issue: null, nozzle: 210, bed: 60, progress: 37, file: 'support.bgcode' }),
     readOcto: async () => ({ status: 'ready', issue: null, nozzle: 30, bed: 20, progress: 0, file: '' }),
     identifyCC2: async (machine) => ({ serial: machine.serial }),
+    // Webcam discovery is a separate port from readPrinter: never query the fixture LAN address.
+    fetchFiles: async url => {
+      assert.equal(new URL(url).hostname, '192.168.1.41');
+      assert.equal(new URL(url).pathname, '/server/webcams/list');
+      return Response.json({ result: { webcams: [] } });
+    },
     openCamera: async (url) => {
       assert.equal(url.port, '8080');
       assert.equal(url.pathname, '/video');

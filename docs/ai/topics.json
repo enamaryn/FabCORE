@@ -729,5 +729,28 @@
       "docs/protocols/BAMBU-CLOUD-CAMERA.md",
       "docs/protocols/BAMBU-CLOUD-CAMERA-RESEARCH.md"
     ]
+  },
+  {
+    "id": "bambu-authorization-lab",
+    "title": "BBL-CRYPTO-01 : identités et autorisation synthétique",
+    "files": [
+      "connectors/bambu/src/lab/crypto.ts",
+      "connectors/bambu/src/lab/certificates.ts",
+      "connectors/bambu/src/lab/authorization.ts",
+      "connectors/bambu/src/lab/diagnostics.ts",
+      "connectors/bambu/src/lab/simulator.ts",
+      "tools/bambu-crypto-lab.mjs"
+    ],
+    "symbols": [
+      "syntheticMessage",
+      "signSynthetic",
+      "startBambuSimulator"
+    ],
+    "tests": [
+      "connectors/bambu/test/lab/crypto.test.ts"
+    ],
+    "docs": [
+      "docs/research/bambu-authorization.md"
+    ]
   }
 ]

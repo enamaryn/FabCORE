@@ -99,3 +99,5 @@ Cinq [profils spécialisés](.codex/agents/) sont disponibles pour les clients C
 **Serena reste facultatif et désactivé par défaut.** L’installation et le handshake MCP ont été testés, mais le serveur de langage TypeScript n’a pas pu s’initialiser dans l’environnement d’essai. La carte et la recherche locale fonctionnent sans lui. [Résultat du pilote](docs/ai/SERENA.md) · [Vérifications et mesures](docs/ai/EVALUATION.md).
 
 L’adresse racine `/` rejoint automatiquement `/app` : le parc et les fiches machine utilisent la même interface. Les outils encore en migration restent accessibles par leurs liens spécifiques.
+
+R&D isolée : [BBL-CRYPTO-01 — identités cryptographiques et simulateur MQTT](docs/research/bambu-authorization.md). Les signatures sont testées localement ; aucune autorisation de pilotage P2S en mode Cloud n’est acquise par ce laboratoire.
