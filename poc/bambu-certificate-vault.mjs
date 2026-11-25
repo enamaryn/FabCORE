@@ -1,10 +1,9 @@
-import { createCipheriv, createDecipheriv, createPrivateKey, createPublicKey, randomBytes, timingSafeEqual, X509Certificate } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes, X509Certificate } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fetchFreshCredentials } from './bambu-credential-refresh.mjs';
 
 const limit = 48 * 1024;
-const compare = (a,b) => a.length === b.length && timingSafeEqual(a,b);
 const validPem = (text, kind) => typeof text === 'string' && text.length < limit && text.includes('-----BEGIN ' + kind + '-----') && text.includes('-----END ' + kind + '-----');
 const reject = (reason = 'invalid') => { const error = new Error('bambu-cert-' + reason); error.status = 400; throw error; };
 // 4e champ optionnel : l'URL de requête cert (trigger-url), réutilisable pour rafraîchir la CRL.
@@ -34,7 +33,7 @@ export function createBambuCertificateVault(directory) {
   const status=()=>{
     if(!existsSync(dataPath)) return {configured:false};
     const data=decrypt();
-    return {configured:true, fingerprint:data.fingerprint, updatedAt:data.updatedAt, certificateCount:data.certificateCount, refreshConfigured:Boolean(data.refreshUrl), crlExpiresAt:data.crlExpiresAt ?? null, validation:'local-only'};
+    return {configured:true, fingerprint:data.fingerprint, updatedAt:data.updatedAt, certificateCount:data.certificateCount, refreshConfigured:Boolean(data.refreshUrl), crlExpiresAt:data.crlExpiresAt ?? null, validation:'pem-only'};
   };
   // Lecture interne des secrets déchiffrés (clé/chaîne/CRL + URL). JAMAIS exposée via HTTP.
   const load=()=>{ if(!existsSync(dataPath)) return null; const d=decrypt(); return {key:d.key, chain:d.chain, crl:d.crl, refreshUrl:d.refreshUrl ?? null, certId:d.certId ?? null}; };
@@ -47,22 +46,15 @@ export function createBambuCertificateVault(directory) {
     if(!validRefreshUrl(refreshUrl)) reject('refresh-url');
     try {
       const blocks=chain.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g)??[];
-      if(blocks.length !== 3) reject('chain-count');
-      let certificates;
-      try { certificates=blocks.map(block=>new X509Certificate(block)); } catch { reject('chain-format'); }
-      let privateKey;
-      try { privateKey=createPrivateKey(privatePem); } catch { reject('key-format'); }
-      if(privateKey.asymmetricKeyType !== 'rsa' || (privateKey.asymmetricKeyDetails?.modulusLength??0)<2048) reject('key-type');
-      const derived=createPublicKey(privateKey).export({type:'spki',format:'der'});
-      const leaf=certificates[0].publicKey.export({type:'spki',format:'der'});
-      if(!compare(derived,leaf)) reject('key-mismatch');
-      if(!certificates[0].checkIssued(certificates[1]) || !certificates[0].verify(certificates[1].publicKey)) reject('chain-signature');
-      if(!certificates[1].checkIssued(certificates[2]) || !certificates[1].verify(certificates[2].publicKey)) reject('chain-signature');
-      if(!certificates[2].verify(certificates[2].publicKey)) reject('chain-signature');
-      if(certificates.some(cert=>Date.parse(cert.validFrom)>Date.now() || Date.parse(cert.validTo)<Date.now())) reject('certificate-dates');
-      const fingerprint=certificates[0].fingerprint256;
+      // Import only: the printer decides whether these credentials are accepted.
+      // Parse the first certificate solely for optional display metadata.
+      let fingerprint=null, certId=null;
+      try {
+        const leaf=new X509Certificate(blocks[0]);
+        fingerprint=leaf.fingerprint256;
+        certId=leaf.serialNumber.toLowerCase()+leaf.issuer.split('\n').map(l=>l.trim()).filter(Boolean).reverse().join(',');
+      } catch { /* PEM storage does not depend on local X509 parsing. */ }
       const updatedAt=new Date().toISOString();
-      const certId=certificates[0].serialNumber.toLowerCase()+certificates[0].issuer.split('\n').map(l=>l.trim()).filter(Boolean).reverse().join(',');
       const crlExpiresAt=null; // nextUpdate de la CRL non parsé ici (Node sans lib CRL) ; renouvellement piloté par le job.
       const record={key:privatePem,chain,crl,fingerprint,updatedAt,certificateCount:blocks.length,certId};
       if(refreshUrl) record.refreshUrl=refreshUrl;
@@ -75,7 +67,7 @@ export function createBambuCertificateVault(directory) {
       try { writeFileSync(temp,bytes,{flag:'wx',mode:0o600});renameSync(temp,dataPath); }
       catch (err) { try { unlinkSync(temp); } catch {} throw err; }
       chmodSync(dataPath,0o600);
-      return {configured:true,fingerprint,updatedAt,certificateCount:blocks.length,refreshConfigured:Boolean(refreshUrl),crlExpiresAt,validation:'local-only'};
+      return {configured:true,fingerprint,updatedAt,certificateCount:blocks.length,refreshConfigured:Boolean(refreshUrl),crlExpiresAt,validation:'pem-only'};
     } catch(error) { if(error.status===400 && error.message.startsWith('bambu-cert-')) throw error; throw new Error('bambu-cert-storage'); }
   };
   return {
