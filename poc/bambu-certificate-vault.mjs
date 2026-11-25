@@ -39,6 +39,9 @@ export function createBambuCertificateVault(directory) {
         const derived=createPublicKey(privateKey).export({type:'spki',format:'der'});
         const leaf=certificates[0].publicKey.export({type:'spki',format:'der'});
         if(!compare(derived,leaf)) reject();
+        if(!certificates[0].checkIssued(certificates[1]) || !certificates[0].verify(certificates[1].publicKey)) reject();
+        if(!certificates[1].checkIssued(certificates[2]) || !certificates[1].verify(certificates[2].publicKey)) reject();
+        if(!certificates[2].verify(certificates[2].publicKey)) reject();
         if(certificates.some(cert=>Date.parse(cert.validFrom)>Date.now() || Date.parse(cert.validTo)<Date.now())) reject();
         const fingerprint=certificates[0].fingerprint256;
         const updatedAt=new Date().toISOString();
