@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bambuCameraConfig, bambuCameraInfo, privateCameraHost } from './camera.ts';
-test('Caméra : source séparée de la connexion, défaut désactivé, cloud jamais annoncé fonctionnel', () => {
-  assert.equal(bambuCameraInfo(undefined, true).available, false);
+test('Caméra : source séparée de la connexion, automatique par défaut, anciens choix normalisés sans vidéo distante inventée', () => {
+  assert.equal(bambuCameraInfo(undefined, true).available, true);
   assert.equal(bambuCameraInfo({ mode: 'auto', host: '192.168.1.20' }, false).available, false);
   assert.deepEqual(bambuCameraInfo({ mode: 'auto', host: '192.168.1.20' }, true), { mode: 'auto', host: '192.168.1.20', experimental: true, available: true, source: 'lan', transport: 'rtsps', issue: null });
-  assert.equal(bambuCameraInfo({ mode: 'cloud', host: '192.168.1.20' }, true).issue, 'camera-cloud-unqualified');
-  assert.equal(bambuCameraInfo({ mode: 'auto' }, true).issue, 'camera-host-required');
+  assert.equal(bambuCameraInfo({ mode: 'cloud', host: '192.168.1.20' }, true).mode, 'auto');
+  assert.equal(bambuCameraInfo({ mode: 'auto' }, true).issue, null);
   assert.deepEqual(bambuCameraConfig({ mode: 'disabled', password: 'discard' }), { mode: 'disabled', host: '' });
 });
 test('Caméra : IPv4 RFC1918 explicite, jamais hostname, URL, port, lien local ou notation ambiguë', () => {

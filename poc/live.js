@@ -492,7 +492,7 @@ function consoleUnavailable(kind) {
     elegoo: t('La Centauri Carbon 2 n’accepte pas de G-code dans son API LAN d’origine (aucune méthode prévue par le SDK Elegoo).', 'The Centauri Carbon 2 accepts no G-code through its stock LAN API (no method in the Elegoo SDK).'),
     'elegoo-cc1': t('La Centauri Carbon n’accepte pas de G-code par son protocole LAN SDCP.', 'The Centauri Carbon accepts no G-code through its SDCP LAN protocol.'),
     prusalink: t('L’API PrusaLink ne propose pas d’envoi de G-code.', 'The PrusaLink API offers no G-code command.'),
-    'bambu-cloud': t('Commandes cloud signées ; fichiers via FTPS à l’adresse locale renseignée dans les réglages caméra.', 'Signed cloud commands; files use FTPS at the local address in camera settings.')
+    'bambu-cloud': t('Commandes cloud signées ; caméra et fichiers détectés automatiquement sur le réseau local.', 'Signed cloud commands; camera and files automatically discovered on the local network.')
   })[kind] || t('Terminal G-code non pris en charge par cette connexion.', 'G-code terminal not supported by this connection.');
 }
 function selectMachineTab(tab) {

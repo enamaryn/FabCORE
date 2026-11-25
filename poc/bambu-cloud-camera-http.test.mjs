@@ -9,9 +9,10 @@ import { createFabCore } from './server.mjs';
 
 test('HTTP caméra Cloud : configuration admin, source réelle, aperçu observateur et secrets inaccessibles', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'fabcore-cloud-camera-http-')); t.after(() => rm(directory, { recursive: true, force: true }));
-  let opens = 0, binds = 0;
+  let opens = 0, binds = 0, resolved = 0;
   const origin = 'http://fabcore.test';
   const { server, token } = createFabCore({ directory, origin, experimentalCloudCamera: true,
+    resolveBambuHost: async serial => { assert.equal(serial, 'P2STEST123'); resolved++; return '192.168.1.20'; },
     cloudFetch: async url => {
       if (url.endsWith('/login')) return Response.json({ accessToken: 'TEST.private.token' });
       if (url.endsWith('/preference')) return Response.json({ uid: 123 });
@@ -40,12 +41,15 @@ test('HTTP caméra Cloud : configuration admin, source réelle, aperçu observat
   const config = '/api/machines/' + id + '/camera-settings', camera = '/api/machines/' + id + '/camera/preview', body = { mode: 'auto', host: '192.168.1.20' };
   assert.equal((await call(config, body)).status, 401); assert.equal((await call(config, body, observer)).status, 403); assert.equal((await call(config, body, admin, 'http://evil.test')).status, 403);
   assert.equal((await call(config, { mode: 'lan', host: '169.254.169.254' }, admin)).status, 400);
+  assert.equal((await call(config, { mode: 'disabled', host: '' }, admin)).status, 200);
   assert.equal((await call(camera, undefined, admin)).data.error, 'camera-disabled');
   assert.equal((await call(config, { ...body, accessCode: 'IGNORE' }, admin)).status, 200);
   const fleet = (await call('/api/machines', undefined, observer)).data.machines[0]; assert.equal(fleet.kind, 'bambu-cloud'); assert.equal(fleet.camera.source, 'lan'); assert.equal(fleet.camera.transport, 'rtsps'); assert.equal(fleet.capabilities.commands, true); assert.doesNotMatch(JSON.stringify(fleet), /ABCD1234|IGNORE|TEST.private/);
   assert.equal((await call(camera)).status, 401); assert.equal(opens, 0);
   const preview = await call(camera, undefined, observer); assert.equal(preview.status, 200); assert.equal(preview.headers['content-type'], 'image/jpeg'); assert.deepEqual([...preview.bytes], [255, 216, 255, 217]);
   const again = await call(camera, undefined, admin); assert.equal(again.status, 200); assert.equal(binds, 2, 'credential inventory shared for preview/reopen');
-  await call(config, { mode: 'cloud', host: '' }, admin); assert.equal((await call(camera, undefined, admin)).data.error, 'camera-cloud-unqualified');
+  await call(config, { mode: 'cloud', host: '' }, admin);
+  assert.equal((await call(camera, undefined, admin)).status, 200, 'ancien choix Cloud récupéré automatiquement');
+  assert.equal(resolved, 1);
   const logs = await call('/api/machines/' + id + '/logs', undefined, admin); assert.doesNotMatch(logs.bytes.toString(), /ABCD1234|TEST.private/);
 });

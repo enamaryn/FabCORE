@@ -17,7 +17,7 @@ const fail = (code, status) => { throw new CloudError(code, status); };
 const text = (value, max) => typeof value === 'string' && value.length <= max ? value.trim() : '';
 
 // Log sanitized protocol bodies and selected HTTP metadata, never raw credentials or exceptions.
-export function createCloudAccounts({ store, directory, fetcher = fetch, now = Date.now, connectMqtt, createSigner, context = () => undefined }) {
+export function createCloudAccounts({ store, directory, fetcher = fetch, now = Date.now, connectMqtt, createSigner, locateBambuHost, context = () => undefined }) {
   const logDirectory = join(directory, 'cloud-logs');
   mkdirSync(logDirectory, { recursive: true, mode: 0o700 });
   const monitors = new Map();
@@ -217,16 +217,27 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       // Recheck after the asynchronous identity request, across all accounts and LAN.
       if (store.state.machines.some(item => ['bambu', 'bambu-cloud'].includes(item.kind) && item.serial === serial)) fail('cloud-machine-exists', 409);
       const machine = { id: randomUUID(), kind: 'bambu-cloud', name: device.name, model: 'Bambu Lab · ' + device.model,
-        serial, cloudAccountId: id, mode: 'cloud', origin: 'mqtts://' + (account.region === 'china' ? 'cn' : 'us') + '.mqtt.bambulab.com:8883' };
+        serial, cloudAccountId: id, mode: 'cloud', camera: { mode: 'auto', host: '' }, origin: 'mqtts://' + (account.region === 'china' ? 'cn' : 'us') + '.mqtt.bambulab.com:8883' };
       await save({ ...store.state, machines: [...store.state.machines, machine] });
       log(id, 'machine-imported', { serial, machineId: machine.id });
       return { id: machine.id };
     }); },
+    async cameraHost(machine, signal) {
+      const target = store.state.machines.find(item => item.id === machine.id);
+      const account = entries().find(item => item.id === machine.cloudAccountId);
+      const allowed = () => !closed && target?.kind === 'bambu-cloud' && target.serial === machine.serial && target.cloudAccountId === machine.cloudAccountId &&
+        store.state.machines.some(item => item.id === target.id && item.serial === target.serial && item.cloudAccountId === target.cloudAccountId && JSON.stringify(item.camera) === JSON.stringify(target.camera)) &&
+        account?.provider === 'bambu' && account.secret && entries().some(item => item.id === account.id && item.secret === account.secret && item.status === 'connected' && item.devices?.some(device => device.serial === machine.serial));
+      if (!allowed()) fail('cloud-auth', 401);
+      const host = privateIPv4(target.camera?.host) ? target.camera.host : await locateBambuHost?.(machine.serial, signal);
+      if (signal?.aborted || !allowed()) fail('cloud-auth', 401);
+      if (!privateIPv4(host)) fail('camera-host-required', 503);
+      return host;
+    },
     async fileConnection(machine, signal) {
       commandMonitor(machine);
       const target = store.state.machines.find(item => item.id === machine.id);
-      const host = target?.camera?.host;
-      if (!privateIPv4(host)) fail('files-host-required', 400);
+      const host = await this.cameraHost(target, signal);
       const { accessCode, authorized } = await this.cameraConnection(target, signal);
       if (!authorized()) fail('cloud-auth', 401);
       return { ...target, origin: 'mqtts://' + host + ':8883', accessCode, authorized };

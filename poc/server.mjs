@@ -29,6 +29,7 @@ import { createVersionService } from '../src/application/version.ts';
 import { createFleetWatcher, observeFleet } from '../src/application/fleet-events.ts';
 import { openStore } from './store.mjs';
 import { createCloudAccounts, CloudError } from './cloud-accounts.mjs';
+import { createBambuLanResolver } from './bambu-lan-resolver.mjs';
 import { createBambuCredentialRenewal } from './bambu-credential-renewal.mjs';
 import { createBambuSigner } from './bambu-signing.mjs';
 import { createBambuCertificateVault } from './bambu-certificate-vault.mjs';
@@ -119,7 +120,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, store: storage = openStore(directory), origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, certificateFetch, notify = sendNotification, logLevel = 'debug', eventHeartbeatMs = 15_000, versionFetch, cloudCameraStream, experimentalCloudCamera = process.env.FABCORE_EXPERIMENTAL_BAMBU_CAMERA === '1' } = {}) {
+export function createFabCore({ directory, store: storage = openStore(directory), origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, certificateFetch, resolveBambuHost, notify = sendNotification, logLevel = 'debug', eventHeartbeatMs = 15_000, versionFetch, cloudCameraStream, experimentalCloudCamera = process.env.FABCORE_EXPERIMENTAL_BAMBU_CAMERA !== '0' } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -138,7 +139,8 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       const results = await Promise.allSettled(['ntfy', 'smtp'].map(channel => notify(channel, store.state.notifications ?? {}, internalNtfy(directory), options)));
       return results.some(result => result.status === 'fulfilled' && result.value === true);
     } });
-  const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt, context: currentRequestId,
+  const bambuLan = createBambuLanResolver({ networks });
+  const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt, context: currentRequestId, locateBambuHost: resolveBambuHost ?? ((serial, signal) => bambuLan.resolve(serial, signal)),
     createSigner: () => { const material = bambuCertificates.load(); return material ? createBambuSigner(material) : null; } });
   const token = store.state.admin ? null : (activationToken ?? randomBytes(24).toString('base64url'));
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
@@ -929,7 +931,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
   }));
   const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => http.dispatch(req, res));
   server.once('listening', () => credentialRenewal.start());
-  server.on('close', () => { credentialRenewal.close(); fleetWatcher.stop(); events.close(() => true); connectors.close(); cloud.close(); void http.close(); });
+  server.on('close', () => { credentialRenewal.close(); bambuLan.close(); fleetWatcher.stop(); events.close(() => true); connectors.close(); cloud.close(); void http.close(); });
   return { server, token };
 }
 

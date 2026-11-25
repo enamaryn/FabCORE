@@ -16,7 +16,7 @@ test('Caméra hybride : compte Cloud, transport LAN et secret uniquement côté 
   assert.equal(await streamCloudCamera(machine, {}, new AbortController().signal, () => {}, options), undefined); assert.equal(calls, 1);
   assert.doesNotMatch(JSON.stringify(traces), /ABCD1234|token|password/);
   assert.equal(await streamCloudCamera(machine, {}, new AbortController().signal, () => {}, { ...options, enabled: false }), 'camera-experimental-disabled');
-  assert.equal(await streamCloudCamera({ ...machine, camera: { mode: 'cloud' } }, {}, new AbortController().signal, () => {}, options), 'camera-cloud-unqualified'); assert.equal(calls, 1);
+  assert.equal(await streamCloudCamera({ ...machine, camera: { mode: 'disabled' } }, {}, new AbortController().signal, () => {}, options), 'camera-disabled'); assert.equal(calls, 1);
 });
 test('Caméra hybride : révocation du compte arrête le flux actif, aucune reconnexion automatique', async () => {
   let authorized = true, calls = 0;
@@ -54,4 +54,39 @@ test('Compte : refus Cloud temporisé aussi, sans rafale de nouvelles requêtes 
   const target = { ...machine, cloudAccountId: account.id }; await store.save({ ...store.state, machines: [target] });
   await assert.rejects(manager.cameraConnection(target), /cloud-rate/); await assert.rejects(manager.cameraConnection(target), /cloud-rate/); assert.equal(binds, 2);
   now += 31000; await assert.rejects(manager.cameraConnection(target), /cloud-rate/); assert.equal(binds, 3);
+});
+
+
+test('Caméra automatique : adresse résolue par série, aucun choix de protocole ni secret navigateur', async () => {
+  const target = { ...machine, camera: { mode: 'auto', host: '' } };
+  let located = 0;
+  const result = await streamCloudCamera(target, {}, new AbortController().signal, () => {}, { enabled: true,
+    cloud: { async cameraHost(value) { assert.equal(value.serial, target.serial); located++; return '192.168.1.22'; },
+      async cameraConnection() { return { accessCode: 'ABCD1234', authorized: () => true }; } },
+    stream: async value => { assert.equal(value.origin, 'mqtts://192.168.1.22:8883'); return true; } });
+  assert.equal(result, undefined); assert.equal(located, 1);
+});
+
+test('Compte cloud : machine importée sans IP, caméra et FTPS résolus sans secret conservé', async t => {
+  const { EventEmitter } = await import('node:events');
+  const directory = await mkdtemp(join(tmpdir(), 'fabcore-camera-auto-account-')); t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = openStore(directory); let located = 0;
+  const manager = createCloudAccounts({ directory, store,
+    locateBambuHost: async value => { assert.equal(value, machine.serial); located++; return '192.168.1.23'; },
+    connectMqtt: () => Object.assign(new EventEmitter(), { options: {}, end() {} }),
+    fetcher: async url => Response.json(url.endsWith('/login') ? { accessToken: 'AUTO.private.token' } : url.endsWith('/preference') ? { uid: 123 } :
+      { devices: [{ dev_id: machine.serial, name: 'P2S', dev_product_name: 'P2S', dev_access_code: 'ABCD1234' }] }) });
+  t.after(() => manager.close());
+  const account = await manager.add({ provider: 'bambu', name: 'Test', email: 'test@example.com', region: 'global' });
+  await manager.login(account.id, { password: 'test-password' }, 'owner');
+  await manager.importDevice(account.id, machine.serial);
+  const target = store.state.machines[0]; assert.deepEqual(target.camera, { mode: 'auto', host: '' });
+  assert.equal(await manager.cameraHost(target), '192.168.1.23');
+  const connection = await manager.fileConnection(target);
+  assert.equal(connection.origin, 'mqtts://192.168.1.23:8883'); assert.equal(connection.accessCode, 'ABCD1234');
+  assert.doesNotMatch(JSON.stringify(store.state), /ABCD1234|AUTO.private.token/);
+  const before = located;
+  await assert.rejects(manager.cameraHost({ ...target, serial: 'FOREIGN123' }), /cloud-auth/); assert.equal(located, before);
+  await manager.disconnect(account.id);
+  await assert.rejects(manager.cameraHost(target), /cloud-auth/); assert.equal(located, before);
 });
