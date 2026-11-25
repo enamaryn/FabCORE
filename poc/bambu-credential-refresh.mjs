@@ -156,10 +156,16 @@ export function parseCertResponse(doc) {
 }
 
 /** GET l'URL de rafraîchissement (trigger-url) et renvoie {key, chain, crl} frais. */
-export async function fetchFreshCredentials(refreshUrl, fetchImpl = fetch) {
-  const response = await fetchImpl(refreshUrl, { headers: { 'User-Agent': 'bambu_network_agent' } });
-  if (!response.ok) throw new Error('bambu-cert-fetch');
-  const doc = await response.json();
-  const { key, chain, crl } = parseCertResponse(doc);
-  return { key, chain, crl };
+export async function fetchFreshCredentials(refreshUrl, fetchImpl = fetch, signal) {
+  const response = await fetchImpl(refreshUrl, { headers: { 'User-Agent': 'bambu_network_agent' }, redirect: 'error',
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) });
+  if (!response.ok) { await response.body?.cancel(); throw new Error('bambu-cert-fetch'); }
+  if (!response.body) throw new Error('bambu-cert-response');
+  const reader = response.body.getReader(); const chunks = []; let size = 0;
+  try {
+    for (;;) { const part = await reader.read(); if (part.done) break; size += part.value.length;
+      if (size > 256 * 1024) throw new Error('bambu-cert-response'); chunks.push(part.value); }
+  } finally { await reader.cancel().catch(() => {}); }
+  const doc = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  return parseCertResponse(doc);
 }

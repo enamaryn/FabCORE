@@ -29,6 +29,7 @@ import { createVersionService } from '../src/application/version.ts';
 import { createFleetWatcher, observeFleet } from '../src/application/fleet-events.ts';
 import { openStore } from './store.mjs';
 import { createCloudAccounts, CloudError } from './cloud-accounts.mjs';
+import { createBambuCredentialRenewal } from './bambu-credential-renewal.mjs';
 import { createBambuSigner } from './bambu-signing.mjs';
 import { createBambuCertificateVault } from './bambu-certificate-vault.mjs';
 import { validateControl } from './manual-controls.mjs';
@@ -118,7 +119,7 @@ function monitor(readPrinter) {
   return snapshot;
 }
 
-export function createFabCore({ directory, store: storage = openStore(directory), origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, notify = sendNotification, logLevel = 'debug', eventHeartbeatMs = 15_000, versionFetch, cloudCameraStream, experimentalCloudCamera = process.env.FABCORE_EXPERIMENTAL_BAMBU_CAMERA === '1' } = {}) {
+export function createFabCore({ directory, store: storage = openStore(directory), origin, readPrinter, readOcto, readPrusa, sendCommand, sendGcode, fetchFiles, readCC2, identifyCC2, readCC1, bambu, ray5, activationToken, networks = discoveryNetworks, scan = scanNetwork, openCamera, oidc, cloudFetch, cloudMqtt, certificateFetch, notify = sendNotification, logLevel = 'debug', eventHeartbeatMs = 15_000, versionFetch, cloudCameraStream, experimentalCloudCamera = process.env.FABCORE_EXPERIMENTAL_BAMBU_CAMERA === '1' } = {}) {
   const publicUrl = new URL(origin);
   if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.href !== publicUrl.origin + '/') {
     throw new Error('FABCORE_ORIGIN doit contenir une origine HTTP ou HTTPS.');
@@ -131,6 +132,12 @@ export function createFabCore({ directory, store: storage = openStore(directory)
   // Écriture attendue avant toute réponse ; base indisponible : 503, état précédent conservé (PostgreSQL, MIG-04).
   const persist = createPersist(store);
   const bambuCertificates = createBambuCertificateVault(directory);
+  const credentialRenewal = createBambuCredentialRenewal({ vault: bambuCertificates, directory, fetcher: certificateFetch,
+    notify: async kind => {
+      const options = { title: 'FabCore - Bambu', message: kind === 'expiry' ? 'Les certificats Bambu approchent de leur échéance. Renseignez une URL de renouvellement ou réimportez les fichiers PEM dans FabCore.' : 'Le renouvellement des certificats Bambu a échoué. Les fichiers précédents sont conservés. Consultez Comptes cloud dans FabCore.' };
+      const results = await Promise.allSettled(['ntfy', 'smtp'].map(channel => notify(channel, store.state.notifications ?? {}, internalNtfy(directory), options)));
+      return results.some(result => result.status === 'fulfilled' && result.value === true);
+    } });
   const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt, context: currentRequestId,
     createSigner: () => { const material = bambuCertificates.load(); return material ? createBambuSigner(material) : null; } });
   const token = store.state.admin ? null : (activationToken ?? randomBytes(24).toString('base64url'));
@@ -283,7 +290,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
 
   async function handleBambuCertificates(req, res) {
     if (req.method === 'GET') {
-      try { return answer(res, 200, bambuCertificates.status()); }
+      try { return answer(res, 200, { ...bambuCertificates.status(), renewal: credentialRenewal.status() }); }
       catch { return error(res, 503, 'bambu-cert-storage'); }
     }
     if (req.method !== 'POST') return error(res, 405, 'missing');
@@ -292,7 +299,14 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     let data;
     try { data = await readJson(req, 160 * 1024); }
     catch { return error(res, 400, 'bambu-cert-invalid'); }
-    try { return answer(res, 200, bambuCertificates.install(data)); }
+    try {
+      if (data?.action === 'refresh') {
+        const renewal = await credentialRenewal.run({ force: true });
+        return renewal.state === 'failed' ? error(res, 502, 'bambu-cert-refresh-failed') : answer(res, 200, { ...bambuCertificates.status(), renewal });
+      }
+      if (data?.action === 'configure') return answer(res, 200, bambuCertificates.setRefreshUrl(data.refreshUrl));
+      return answer(res, 200, bambuCertificates.install(data));
+    }
     catch (failure) { return error(res, failure.status ?? 503, failure.status === 400 && /^bambu-cert-[a-z-]+$/.test(failure.message) ? failure.message : 'bambu-cert-storage'); }
   }
 
@@ -914,7 +928,8 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     pages: { asset: handleAsset, oidc: handleOidc }
   }));
   const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => http.dispatch(req, res));
-  server.on('close', () => { fleetWatcher.stop(); events.close(() => true); connectors.close(); cloud.close(); void http.close(); });
+  server.once('listening', () => credentialRenewal.start());
+  server.on('close', () => { credentialRenewal.close(); fleetWatcher.stop(); events.close(() => true); connectors.close(); cloud.close(); void http.close(); });
   return { server, token };
 }
 

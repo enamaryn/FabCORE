@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, X509Certificate } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { credentialDates } from './bambu-credential-dates.mjs';
 import { fetchFreshCredentials } from './bambu-credential-refresh.mjs';
 
 const limit = 48 * 1024;
@@ -10,7 +11,7 @@ const reject = (reason = 'invalid') => { const error = new Error('bambu-cert-' +
 const validRefreshUrl = (value) => {
   if (value === undefined || value === null || value === '') return true;
   if (typeof value !== 'string' || value.length > 4096) return false;
-  try { const u = new URL(value); return u.protocol === 'https:' && u.hostname.endsWith('.bambulab.com') && u.pathname.includes('/applications/'); }
+  try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password && (!u.port || u.port === '443') && u.hostname.endsWith('.bambulab.com') && u.pathname.includes('/applications/'); }
   catch { return false; }
 };
 export function createBambuCertificateVault(directory) {
@@ -33,7 +34,7 @@ export function createBambuCertificateVault(directory) {
   const status=()=>{
     if(!existsSync(dataPath)) return {configured:false};
     const data=decrypt();
-    return {configured:true, fingerprint:data.fingerprint, updatedAt:data.updatedAt, certificateCount:data.certificateCount, refreshConfigured:Boolean(data.refreshUrl), crlExpiresAt:data.crlExpiresAt ?? null, validation:'pem-only'};
+    return {configured:true, fingerprint:data.fingerprint, updatedAt:data.updatedAt, certificateCount:data.certificateCount, refreshConfigured:Boolean(data.refreshUrl), ...credentialDates(data.chain, data.crl), validation:'pem-only'};
   };
   // Lecture interne des secrets déchiffrés (clé/chaîne/CRL + URL). JAMAIS exposée via HTTP.
   const load=()=>{ if(!existsSync(dataPath)) return null; const d=decrypt(); return {key:d.key, chain:d.chain, crl:d.crl, refreshUrl:d.refreshUrl ?? null, certId:d.certId ?? null}; };
@@ -55,7 +56,7 @@ export function createBambuCertificateVault(directory) {
         certId=leaf.serialNumber.toLowerCase()+leaf.issuer.split('\n').map(l=>l.trim()).filter(Boolean).reverse().join(',');
       } catch { /* PEM storage does not depend on local X509 parsing. */ }
       const updatedAt=new Date().toISOString();
-      const crlExpiresAt=null; // nextUpdate de la CRL non parsé ici (Node sans lib CRL) ; renouvellement piloté par le job.
+      const dates=credentialDates(chain, crl);
       const record={key:privatePem,chain,crl,fingerprint,updatedAt,certificateCount:blocks.length,certId};
       if(refreshUrl) record.refreshUrl=refreshUrl;
       const plain=Buffer.from(JSON.stringify(record));
@@ -67,19 +68,22 @@ export function createBambuCertificateVault(directory) {
       try { writeFileSync(temp,bytes,{flag:'wx',mode:0o600});renameSync(temp,dataPath); }
       catch (err) { try { unlinkSync(temp); } catch {} throw err; }
       chmodSync(dataPath,0o600);
-      return {configured:true,fingerprint,updatedAt,certificateCount:blocks.length,refreshConfigured:Boolean(refreshUrl),crlExpiresAt,validation:'pem-only'};
+      return {configured:true,fingerprint,updatedAt,certificateCount:blocks.length,refreshConfigured:Boolean(refreshUrl),...dates,validation:'pem-only'};
     } catch(error) { if(error.status===400 && error.message.startsWith('bambu-cert-')) throw error; throw new Error('bambu-cert-storage'); }
   };
   return {
     status,
     load,
     install(data) { return persist(data); },
+    setRefreshUrl(refreshUrl) { if (typeof refreshUrl !== 'string') reject('refresh-url'); if(!existsSync(dataPath)) reject(); return persist({ ...decrypt(), refreshUrl }); },
     // Rejoue l'URL de rafraîchissement (trigger-url) pour obtenir cert+clé+CRL frais.
-    async refresh(fetchImpl) {
+    async refresh(fetchImpl, signal) {
       if(!existsSync(dataPath)) { const e=new Error('bambu-cert-invalid'); e.status=400; throw e; }
+      const original=readFileSync(dataPath);
       const current=decrypt();
       if(!current.refreshUrl) { const e=new Error('bambu-cert-no-refresh-url'); e.status=400; throw e; }
-      const fresh=await fetchFreshCredentials(current.refreshUrl, fetchImpl);
+      const fresh=await fetchFreshCredentials(current.refreshUrl, fetchImpl, signal);
+      if (signal?.aborted || !readFileSync(dataPath).equals(original)) throw new Error('bambu-cert-refresh-stale');
       return persist({ ...fresh, refreshUrl:current.refreshUrl });
     }
   };

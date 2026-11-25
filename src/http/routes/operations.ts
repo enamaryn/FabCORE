@@ -34,8 +34,8 @@ export const operationRoutes = (handlers: OperationHandlers): RouteModule => (ap
   }, none);
   app.post('/api/cloud-certificates', {
     onRequest: guards.raw(handlers.cloudCertificates, admin),
-    schema: { summary: 'Importer trois fichiers PEM Bambu (chiffrés au repos, aucune commande machine)', tags: ['cloud'], security: session,
-      response: { 200: json('Métadonnées uniquement'), ...errorResponses(400, 401, 403, 415, 421, 429, 503) } },
+    schema: { summary: 'Importer les PEM Bambu ou configurer/déclencher leur renouvellement, sans commande machine', tags: ['cloud'], security: session,
+      response: { 200: json('Métadonnées uniquement'), ...errorResponses(400, 401, 403, 415, 421, 429, 502, 503) } },
   }, none);
 
   // Comptes cloud : administrateur, puis origine, type de contenu, limite par compte et corps (gestionnaire).

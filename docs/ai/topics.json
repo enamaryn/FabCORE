@@ -40,7 +40,10 @@
       "connectors/bambu/src/cloud-monitor.ts",
       "poc/cloud-accounts.mjs",
       "poc/bambu-cloud-files.mjs",
-      "poc/bambu-signing.mjs"
+      "poc/bambu-signing.mjs",
+      "poc/bambu-credential-dates.mjs",
+      "poc/bambu-credential-renewal.mjs",
+      "poc/bambu-certificate-vault.mjs"
     ],
     "symbols": [
       "createP2SMonitor",
@@ -50,7 +53,10 @@
       "createCloudCommands",
       "createCloudMonitor",
       "createBambuCloudFiles",
-      "createBambuSigner"
+      "createBambuSigner",
+      "credentialDates",
+      "createBambuCredentialRenewal",
+      "createBambuCertificateVault"
     ],
     "tests": [
       "connectors/bambu/test/monitor.test.ts",
@@ -58,11 +64,13 @@
       "poc/bambu-auth-http.test.mjs",
       "connectors/bambu/test/lifecycle.test.ts",
       "poc/bambu-signed-cloud.test.mjs",
-      "connectors/bambu/test/cloud-monitor.test.ts"
+      "connectors/bambu/test/cloud-monitor.test.ts",
+      "poc/bambu-credential-renewal.test.mjs"
     ],
     "docs": [
       "docs/protocols/BAMBU-LAN.md",
-      "docs/protocols/BAMBU-CLOUD-CONTROLS.md"
+      "docs/protocols/BAMBU-CLOUD-CONTROLS.md",
+      "docs/protocols/BAMBU-CREDENTIAL-RENEWAL.md"
     ]
   },
   {
