@@ -54,7 +54,7 @@ function cloudPage() {
       <div class="row between wrap"><div class="stack"><h2>${t('Certificats applicatifs Bambu', 'Bambu application certificates')}</h2><small>${t('Ensemble global pour ce serveur, indépendant des comptes Cloud.', 'One server-wide set, independent of Cloud accounts.')}</small></div>${btn('cloud-certs-upload',t('Importer 3 fichiers PEM','Import 3 PEM files'),'plus')}</div>
       <strong>${cloudUI.certificates?.configured ? t('Fichiers importés', 'Files imported') : t('Aucun certificat importé', 'No certificate imported')}</strong>
       ${cloudUI.certificates?.fingerprint ? '<small>'+esc(cloudUI.certificates.fingerprint)+'</small>' : ''}
-      ${cloudUI.certificates?.refreshConfigured ? '<small>'+t('Renouvellement auto de la CRL configuré','Automatic CRL renewal configured')+'</small>' : ''}
+      ${cloudUI.certificates?.refreshConfigured ? '<small>'+t('URL de renouvellement de la CRL enregistrée','CRL renewal URL saved')+'</small>' : ''}
       <small>${t('Stockage chiffré local. Cet import ne déclenche aucune commande sur la machine.', 'Encrypted local storage. Import does not trigger printer commands.')}</small>
     </section>
     <p class="notice">${t('Pilote Bambu Lab : authentification, inventaire et suivi des températures/AMS en lecture seule. Aucun lancement, chauffe ou mouvement. Ajoutez chaque machine au parc avec Ajout automatique.', 'Bambu Lab pilot: sign-in, inventory and read-only temperature/AMS monitoring. No printing, heating or motion. Use Add automatically to add a device to the fleet.')}</p>
@@ -93,7 +93,7 @@ function cloudCertificateForm() {
     <label>chain.pem — ${t('Chaîne de trois certificats','Three-certificate chain')}<input name="chain" type="file" accept=".pem,text/plain" required></label>
     <label>crl.pem — ${t('Liste de révocation','Certificate revocation list')}<input name="crl" type="file" accept=".pem,text/plain" required></label>
     <label>${t('URL de rafraîchissement (optionnel)','Refresh URL (optional)')} — trigger-url<input name="refreshUrl" type="url" inputmode="url" placeholder="https://…/applications/…/cert?aes256=…"></label>
-    <p class="notice">${t('Permet au serveur de renouveler automatiquement la CRL (valable ~1 mois) sans réimport. À traiter comme un secret.', 'Lets the server auto-renew the CRL (~1 month) without re-import. Treat it as a secret.')}</p>
+    <p class="notice">${t('URL conservée pour un futur renouvellement de la CRL. Le renouvellement automatique n’est pas encore activé. À traiter comme un secret.', 'URL saved for future CRL renewal. Automatic renewal is not enabled yet. Treat it as a secret.')}</p>
     <p class="error" role="alert"></p><p role="status" hidden>${t('Vérification et stockage…','Validating and storing…')}</p>
     <div class="row wrap">${btn('close',t('Annuler','Cancel'))}<button class="primary" type="submit">${t('Importer','Import')}</button></div></form>`;
   if (!dialog.open) dialog.showModal();
@@ -166,7 +166,7 @@ dialog.addEventListener('click', cloudClick);
 
 dialog.addEventListener('submit', async event => {
   const form=event.target;
-  if (form?.id!=='cloud-certs-form') return;
+  if (form?.getAttribute?.('id')!=='cloud-certs-form') return;
   event.preventDefault();
   if (cloudUI.busy || state.role!=='admin') return;
   cloudUI.busy=true;
