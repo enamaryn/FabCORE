@@ -15,6 +15,31 @@ Cette interface d'administration ajoute trois fichiers PEM **globaux à cette in
 - L'import est un stockage administratif : aucun enregistrement de certificat sur l'imprimante, aucune commande signée, aucun pilotage activé.
 - Le stockage global n'est pas encore compatible avec un déploiement multi-instance sur hôtes distincts.
 
+## Cœur de pilotage signé (ajouté — non branché sur le `send` machine)
+
+Pour préparer le pilotage en **mode cloud sans Mode Développeur** (le firmware sécurisé
+rejette les commandes `print.*` non signées), cette PR ajoute le **cœur crypto** réutilisable,
+testé en isolation, mais **ne modifie pas encore** le chemin de commande du connecteur :
+
+- **4ᵉ champ optionnel `refreshUrl`** (le « trigger-url » `…/applications/<leaf-CN>/cert?aes256=…`,
+  réutilisable) : stocké chiffré avec les 3 PEM. La CRL n'est valable qu'~1 mois ; un job serveur
+  pourra rejouer cette URL pour renouveler cert+clé+CRL sans réimport.
+- `poc/bambu-signing.mjs` : enveloppe signée vérifiée sur matériel — header **en premier**,
+  octets signés `{"print":<section>}` en JSON compact **clés triées**, `cert_id` = serial(hex)+issuer,
+  `sequence_id` **chaîne** et croissant, `param`/`url` chiffrés en `param_enc`/`url_enc` vers le
+  certificat de l'imprimante ; plus l'enveloppe `security.app_cert_install`.
+- `poc/bambu-credential-refresh.mjs` : GET du `refreshUrl` → déchiffrement du blob `key`
+  (AES-256-CTR à S-box, portage **AGPL-3.0** de danielwoz/BambuSlicerKeySaver et
+  Bambuzled/BambuKeySaver) → reconstruction RSA → `{key, chain, crl}` frais.
+- Coffre : `load()` (lecture interne des secrets, jamais exposée via HTTP) et `refresh()`.
+- Tests : `poc/bambu-signing.test.mjs` (signature vérifiée contre la clé du leaf, `param_enc`
+  déchiffrable, round-trip du blob clé). `npm run check` complet à exécuter en CI (Node ≥ 24).
+
+**Reste à faire (incrément suivant, changement de comportement machine à part)** : brancher
+`createBambuSigner` dans `createP2SMonitor` — installer le cert à la connexion, capturer
+`printer_cert` depuis la réponse, signer les `print.*` dans `send()` — gardé pour ne rien changer
+quand aucun certificat n'est configuré ; puis recette matérielle.
+
 ## Sources et limites
 
 - [Bamboo Sense (fork de recherche)](https://github.com/enamaryn/bamboo-sense)
