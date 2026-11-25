@@ -16,7 +16,7 @@ Le mode de l'imprimante n'est jamais modifié par FabCore. Ajouter une identité
 1. Importer `key.pem`, `chain.pem`, `crl.pem` dans « Comptes cloud ». Leur stockage ne prouve pas leur acceptation par l'imprimante.
 2. Connecter le compte Bambu et utiliser « Ajout automatique » pour importer sa machine. Le suivi MQTT doit rester actif et un rapport de moins de 60 secondes doit être disponible.
 3. Les panneaux existants exposent origine/déplacements, éclairage, chauffe, ventilateurs, pause/reprise/stop, terminal et lancement de fichier. Les droits admin, confirmations, garde d'état et verrous HTTP restent appliqués.
-4. Pour lister, lire/visualiser, uploader, télécharger ou transférer les fichiers : renseigner l'IPv4 locale dans « Paramètres vidéo et fichiers ». Cette adresse sert au FTPS même avec caméra désactivée. Le serveur doit joindre le LAN de l'imprimante ; le broker cloud n'est pas un serveur FTP.
+4. Pour lister, lire/visualiser, uploader, télécharger ou transférer les fichiers : la machine est retrouvée automatiquement sur le LAN par son numéro de série ; une IPv4 facultative dans « Paramètres vidéo et fichiers » remplace la découverte. Celle-ci fonctionne pour le FTPS même avec caméra désactivée. Le serveur doit joindre le LAN de l'imprimante ; le broker cloud n'est pas un serveur FTP.
 
 ## Protocole et résultats
 

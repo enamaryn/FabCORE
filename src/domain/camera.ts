@@ -13,7 +13,9 @@ export function bambuCameraConfig(value: unknown): BambuCameraConfig | null {
   return { mode: value.mode as BambuCameraMode, host };
 }
 export function bambuCameraInfo(value: unknown, experimental: boolean) {
-  const config = bambuCameraConfig(value) ?? { mode: 'disabled' as const, host: '' };
-  const issue = !experimental ? 'camera-experimental-disabled' : config.mode === 'disabled' ? 'camera-disabled' : config.mode === 'cloud' ? 'camera-cloud-unqualified' : !config.host ? 'camera-host-required' : null;
+  const saved = bambuCameraConfig(value) ?? { mode: 'auto' as const, host: '' };
+  // Legacy protocol choices converge on automatic LAN video; never advertise remote cloud video.
+  const config = { mode: saved.mode === 'disabled' ? 'disabled' as const : 'auto' as const, host: saved.host };
+  const issue = !experimental ? 'camera-experimental-disabled' : config.mode === 'disabled' ? 'camera-disabled' : null;
   return { ...config, experimental, available: issue === null, source: issue === null ? 'lan' as const : null, transport: issue === null ? 'rtsps' as const : 'unknown' as const, issue };
 }

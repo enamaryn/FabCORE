@@ -1,20 +1,20 @@
 {
   "settings": "Paramètres vidéo et fichiers",
-  "mode": "Source caméra",
+  "mode": "Caméra",
   "modes": {
-    "auto": "Automatique (LAN si configuré)",
+    "auto": "Automatique",
     "lan": "LAN · RTSPS",
     "cloud": "Cloud · expérimental non qualifié",
     "disabled": "Désactivée"
   },
-  "host": "Adresse IPv4 locale de la machine",
-  "scope": "L’adresse locale sert à la caméra et aux fichiers FTPS, même si la caméra est désactivée. Les commandes restent sur le compte cloud ; aucun changement de mode sur l’imprimante.",
+  "host": "Adresse locale (facultative, détection automatique si vide)",
+  "scope": "La machine est retrouvée sur le LAN par son numéro de série. L’adresse facultative remplace cette détection pour la vidéo et les fichiers. Le compte cloud reste actif.",
   "invalid": "Configuration invalide ou enregistrement refusé. Utilisez une IPv4 privée, sans URL ni port.",
   "saving": "Enregistrement…",
   "save": "Enregistrer",
-  "hybrid": "Expérimental · télémétrie Cloud + caméra LAN · transport RTSPS. Le serveur doit joindre le réseau local.",
+  "hybrid": "Caméra automatique sur le réseau local · compte cloud actif.",
   "camera-experimental-disabled": "Caméra hybride non activée par l’administrateur de ce serveur.",
   "camera-disabled": "Caméra désactivée. La supervision Cloud reste disponible.",
   "camera-cloud-unqualified": "Vidéo Cloud distante non qualifiée. Aucun transport distant n’est lancé.",
-  "camera-host-required": "Adresse locale requise pour essayer la caméra LAN avec ce compte Cloud."
+  "camera-host-required": "Machine introuvable sur le réseau local. Vérifiez la connexion du serveur ou renseignez son adresse dans les paramètres."
 }

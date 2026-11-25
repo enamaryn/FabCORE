@@ -44,7 +44,7 @@ async function httpJSON(url, signal, inspect = () => null, fetcher = fetch) {
   return null;
 }
 
-function detectBambu(host, signal) {
+export function detectBambu(host, signal) {
   return new Promise((resolve) => {
     const socket = connect({
       host, port: 8883, ca, rejectUnauthorized: true, maxVersion: 'TLSv1.2',

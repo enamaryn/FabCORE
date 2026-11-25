@@ -52,7 +52,7 @@
   "noFile": "Aucun fichier en cours",
   "progressUnknown": "Avancement non communiqué",
   "progress": "Avancement de la fabrication",
-  "cloudReadOnly": "Commandes cloud signées avec les PEM importés. Fichiers via FTPS local : renseignez l’adresse de la machine dans Paramètres vidéo et fichiers.",
+  "cloudReadOnly": "Commandes cloud signées avec les PEM importés. Caméra et fichiers : détection automatique sur le réseau local.",
   "preparedProject": "Le lancement utilise le projet préparé sur la machine.",
   "machineIssue": "Signalement machine :",
   "checkedAt": "Dernière vérification",

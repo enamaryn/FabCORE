@@ -52,7 +52,7 @@
   "noFile": "No active file",
   "progressUnknown": "Progress not reported",
   "progress": "Production progress",
-  "cloudReadOnly": "Cloud commands signed with imported PEMs. Files use local FTPS: set the printer address in Video and files settings.",
+  "cloudReadOnly": "Cloud commands signed with imported PEMs. Camera and files: automatic discovery on the local network.",
   "preparedProject": "Start uses the project prepared on the machine.",
   "machineIssue": "Machine report:",
   "checkedAt": "Last checked",

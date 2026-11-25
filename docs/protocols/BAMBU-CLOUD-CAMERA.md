@@ -1,19 +1,21 @@
 # BBL-RD-CAMERA-01 · Bambu Cloud et vidéo hybride
 
-État au **24 novembre 2026** : premier incrément en revue sur `feature/bambu-cloud-camera`, base `5fc6322` (#138). **Non déployé dans le service FabCore.** Sonde matérielle indépendante réussie depuis le LXC 119 ; recette de l’interface après fusion encore à faire. Sources et licences : [recherche figée](BAMBU-CLOUD-CAMERA-RESEARCH.md).
+Évolution du **25 novembre 2026** : découverte automatique du LAN pour les machines ajoutées depuis Comptes cloud, sans sélection de protocole. Le transport vidéo LAN déjà présent est réutilisé ; la vidéo distante purement cloud/P2P reste un chantier distinct. Sources et licences historiques : [recherche figée](BAMBU-CLOUD-CAMERA-RESEARCH.md).
 
-## Fonctionnement livré
+## Fonctionnement
 
-La machine reste `bambu-cloud` : son inventaire, ses températures, son avancement et son AMS continuent d’utiliser le compte Cloud et MQTT Cloud. La source caméra est une configuration distincte :
+La machine reste `bambu-cloud` : inventaire, températures, avancement, AMS et commandes signées utilisent le compte cloud. La vidéo et le stockage FTPS utilisent le LAN, même quand le cloud reste actif.
 
-| Mode demandé | Comportement du premier incrément |
+| Réglage | Comportement |
 | --- | --- |
-| Désactivée (défaut) | Aucun accès caméra ni requête de credentials |
-| Automatique | LAN RTSPS si une IPv4 privée explicite est configurée ; sinon diagnostic, aucun autre transport essayé |
-| LAN | IPv4 RFC1918 explicite requise ; RTSPS sur 322, CA et numéro de série vérifiés |
-| Cloud | Diagnostic « vidéo distante non qualifiée » ; aucun SDK ni transport P2P/relay démarré |
+| Automatique (défaut) | Adresse locale retrouvée par la série du certificat TLS fabricant ; aperçu puis direct par le transport LAN existant |
+| Adresse facultative | Remplace la découverte pour la vidéo et les fichiers ; IPv4 privée uniquement |
+| Désactivée | Aucun accès vidéo ; les fichiers peuvent toujours utiliser la découverte LAN |
+| Ancien choix LAN ou Cloud | Repris en Automatique, avec conservation de l’adresse si renseignée ; aucun faux transport distant annoncé |
 
-La fonctionnalité nécessite **`FABCORE_EXPERIMENTAL_BAMBU_CAMERA=1`** côté serveur, puis une configuration explicite par l’administrateur. `auto` ne découvre pas l’adresse et n’essaie pas successivement différents transports. Aucun changement LAN-only/Developer Mode/firmware/liveview n’est envoyé à l’imprimante.
+La découverte utilise uniquement les réseaux privés du serveur (quatre réseaux au plus, chacun limité à un /24, 1 024 adresses maximum, 32 sondes TLS simultanées, budget de douze secondes). Elle vérifie le certificat fabricant et associe la série exacte ; une série ambiguë ou un hôte incohérent est refusé. Aucun login MQTT ni ordre de fabrication n’est envoyé. Les ouvertures simultanées partagent la découverte ; résultats positifs en cache cinq minutes, recherches négatives temporisées une minute. Une adresse modifiée par DHCP est retrouvée après expiration du cache. Aucune résolution DNS ni sonde publique.
+
+La vidéo est activée par défaut pour une machine cloud ajoutée ; un choix explicite Désactivée reste respecté. L’administrateur peut toujours couper globalement la vidéo avec `FABCORE_EXPERIMENTAL_BAMBU_CAMERA=0`. Les anciens réglages à `1` restent compatibles. Le descripteur public indique la disponibilité du chemin automatique, pas la présence effective d’images : l’ouverture et le premier JPEG confirment celle-ci.
 
 Le code LAN vidéo est obtenu par la requête HTTPS d’inventaire déjà utilisée, pour le compte et la série réellement associés à la machine. Il n’est pas récupéré dans Bambu Studio. La réponse publique et l’état persistant ne contiennent jamais le code. Le cache privé d’inventaire vidéo est borné à 30 secondes par compte, partagé entre aperçu et spectateurs ; les échecs sont temporisés aussi. Aucun renouvellement de login, email, code MFA ou rejeu automatique n’est déclenché. Déconnexion/fermeture libère ce cache. Une réponse inconnue ou un code absent refuse la caméra.
 
@@ -23,13 +25,14 @@ Le flux est partagé entre spectateurs selon les limites existantes (8 sources/3
 
 ## Points d’entrée
 
+- `poc/bambu-lan-resolver.mjs` : découverte/caches par série ; sonde TLS `detectBambu` dans `poc/discovery.mjs`.
 - `src/domain/camera.ts` : politique des modes et validation d’adresse, sans I/O.
 - `src/application/machines.ts` → `setCameraConfig`, route `POST /api/machines/:id/camera-settings` : administrateur, origine et JSON obligatoires, persistance attendue. Les clés non prévues ne sont pas conservées.
 - `connectors/bambu/src/cloud-http.ts` → `cameraCodes` : inventaire régional HTTPS, refus/timeout/réponse bornée et expurgation existants conservés.
-- `poc/cloud-accounts.mjs` → `cameraConnection` : appartenance compte/série, chiffrement existant, cache privé et contrôle de révocation.
+- `poc/cloud-accounts.mjs` → `cameraHost`, `fileConnection`, `cameraConnection` : appartenance compte/série, chiffrement existant, cache privé et contrôle de révocation.
 - `poc/bambu-cloud-camera.mjs` : composition du transport, garde d’autorisation et traces expurgées ; délégation à `streamBambuCamera`.
 - `GET /api/machines` : descripteur public `camera` (mode, IPv4 configurée, source/transport sélectionnés, disponibilité/diagnostic et expérimental). Ce descripteur n’affirme pas qu’un flux est connecté ; le premier JPEG et les événements des logs le confirment.
-- `CameraPanel.tsx` et `BambuCameraSettings.tsx` : sélection et explication FR/EN, aperçu/direct, agrandissement et pleine page existants. Réglages administrateur uniquement ; lecture vidéo autorisée à l’observateur. Une modification remonte une nouvelle instance du panneau et libère l’ancien flux.
+- `CameraPanel.tsx` et `BambuCameraSettings.tsx` : réglage Automatique/Désactivée et adresse facultative FR/EN, aperçu/direct, agrandissement et pleine page existants. Réglages administrateur uniquement ; lecture vidéo autorisée à l’observateur. Une modification remonte une nouvelle instance du panneau et libère l’ancien flux.
 - Logs machine : `cloud-camera-open`, `cloud-camera-result`, `cloud-camera-failed`, transport/host/mode et raison bornée ; aucune exception brute, URL signée ou credential.
 
 Cette livraison n’intègre pas de bibliothèque tierce ni de binaire propriétaire. Elle ne met pas en œuvre les interfaces C++ du plugin officiel. Les sources montrent qu’une suite native/P2P est techniquement possible ; elle nécessite une qualification distincte des API permises, de la licence et du fonctionnement hors LAN.
@@ -63,16 +66,9 @@ Le protocole fourni impose d’attendre la fusion. **Ne pas installer la branche
 1. Relever `git -C /opt/fabcore rev-parse HEAD`, l’état local et `systemctl is-active fabcore.service`. Préserver les paramètres existants.
 2. Dans `/opt/fabcore`, lancer `fabcore backup --label avant-camera`. Noter et vérifier l’archive (elle contient données sensibles, à conserver hors GitHub). `fabcore restore <archive> --check` valide une restauration sans l’appliquer.
 3. Déployer la version fusionnée avec `fabcore-update` ou `fabcore update` suivant le lanceur installé. Vérifier SHA, service, accès HTTP et journaux de démarrage expurgés.
-4. Ajouter un **drop-in dédié**, après lecture et sauvegarde s’il existe, `/etc/systemd/system/fabcore.service.d/cloud-camera.conf` :
-
-```ini
-[Service]
-Environment=FABCORE_EXPERIMENTAL_BAMBU_CAMERA=1
-```
-
-5. `systemctl daemon-reload` puis `systemctl restart fabcore.service`. Vérifier à nouveau le service et la connexion du compte Cloud. Ne pas remplacer les réglages OIDC ou ntfy.
-6. Dans `/app`, ouvrir la P2S Cloud → Paramètres vidéo, choisir Automatique/LAN et l’IPv4 de la P2S. Enregistrer ; vérifier que la source affichée est bien **LAN RTSPS**, avec télémétrie Cloud. Aucun code à saisir dans le navigateur.
-7. Réaliser immédiatement la recette ci-dessous. Toute correction de code passe par une nouvelle PR. L’usage du compte Cloud ne constitue pas un accès distant à son IPv4 privée.
+4. Aucun drop-in n’est nécessaire pour activer la vidéo par défaut. Préserver les paramètres existants ; un flag explicite à `0` continue de la désactiver.
+5. Ouvrir la P2S importée du cloud : l’aperçu doit s’ouvrir automatiquement. « Paramètres vidéo et fichiers » propose une adresse facultative si le serveur ne peut pas découvrir le réseau. Aucun protocole ni code à saisir.
+6. Réaliser la recette ci-dessous. Un serveur VPS doit avoir une route vers le LAN de la P2S ; le compte cloud ne fournit pas un accès réseau distant à son IPv4 privée.
 
 ## Retour arrière
 
@@ -80,7 +76,7 @@ Environment=FABCORE_EXPERIMENTAL_BAMBU_CAMERA=1
 - Si un retour de code est requis, préparer une PR de revert de cet incrément et déployer sa fusion par la procédure habituelle. Aucune migration de schéma n’est ajoutée : le champ caméra est une métadonnée existante du magasin.
 - Restaurer des données uniquement si nécessaire, depuis l’archive vérifiée et avec la procédure `fabcore restore`. Ne pas restaurer automatiquement une sauvegarde plus ancienne au détriment des machines/comptes ajoutés depuis. Ne pas réinitialiser la base.
 
-## Matrice de recette après fusion (non encore réalisée)
+## Matrice de recette de cette évolution après fusion
 
 | Domaine | Recette restante | Preuve attendue |
 | --- | --- | --- |
@@ -95,6 +91,8 @@ Environment=FABCORE_EXPERIMENTAL_BAMBU_CAMERA=1
 
 Les tests automatisés couvrent modes/adresses, droits et origine HTTP, secrets absents des données/logs, cache et temporisation des échecs, révocation et aperçu, ainsi que les contrôles existants de relais. Ils ne remplacent pas cette matrice.
 
-## Next steps (English)
+## Reprise
 
-This increment keeps Cloud inventory/MQTT monitoring and adds an explicitly labeled **experimental LAN RTSPS camera**. It does not implement remote Cloud/P2P/relay video. The standalone LXC 119 probe received frames with verified TLS; browser/service validation requires maintainer merge, official deployment, and the tests above. No printer mode or production command was changed. Native worker work must use verified interfaces and permitted credentials, with bounded resources and no unauthorized proprietary redistribution. Validate off-LAN video separately before claiming remote compatibility.
+Branche : `feature/bambu-automatic-camera`, fondée sur le renouvellement des identités. Tests ajoutés : série exacte, scan partagé, caches, adresses ambiguës/publiques, annulation/fermeture, import sans IP, credentials FTPS privés, aperçu HTTP avec ancien réglage Cloud repris automatiquement. Découverte automatique encore à confirmer sur le réseau réel après fusion ; aucun scan du réseau réel ni ordre matériel n’est déclenché pendant ce développement.
+
+Next steps: keep Cloud monitoring/commands and automatic LAN video/files separate from future remote Cloud/P2P video. The server must be able to reach the printer network.
