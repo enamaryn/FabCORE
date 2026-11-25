@@ -2,6 +2,15 @@
 const cloudUI = { data: null, certificates: null, loading: false, error: '', busy: false };
 function cloudProblem(code) {
   const labels = {
+    "bambu-cert-refresh-url": ["URL de rafraîchissement invalide : utilisez l’URL HTTPS complète Bambu contenant /applications/, ou laissez vide.", "Invalid refresh URL: use the complete Bambu HTTPS URL containing /applications/, or leave blank."],
+    "bambu-cert-certificate-dates": ["Un certificat est expiré ou pas encore valide. Vérifiez aussi la date du serveur.", "A certificate has expired or is not valid yet. Also check the server clock."],
+    "bambu-cert-chain-signature": ["Chaîne incohérente : vérifiez les signatures et l’ordre application, intermédiaire, racine.", "Invalid chain: check signatures and application, intermediate, root order."],
+    "bambu-cert-key-mismatch": ["La clé privée ne correspond pas au premier certificat de chain.pem. Vérifiez aussi leur ordre.", "Private key does not match the first chain.pem certificate. Check certificate order."],
+    "bambu-cert-chain-count": ["chain.pem : exactement trois certificats sont attendus (application, intermédiaire, racine).", "chain.pem: exactly three certificates required (application, intermediate, root)."],
+    "bambu-cert-crl-format": ["crl.pem : bloc PEM X509 CRL requis.", "crl.pem: X509 CRL PEM block required."],
+    "bambu-cert-chain-format": ["chain.pem : certificat PEM illisible.", "chain.pem: unreadable PEM certificate."],
+    "bambu-cert-key-type": ["key.pem : une clé RSA de 2048 bits minimum est requise.", "key.pem: RSA key of at least 2048 bits required."],
+    "bambu-cert-key-format": ["key.pem : clé privée PEM illisible ou chiffrée.", "key.pem: unreadable or encrypted PEM private key."],
     'bambu-cert-invalid': ['Fichiers PEM invalides : vérifiez la clé et les certificats.', 'Invalid PEM files: check the key and certificates.'],
     'bambu-cert-storage': ['Stockage chiffré indisponible.', 'Encrypted storage unavailable.'],
     'cloud-machine-exists': ['Cette machine est déjà dans FabCore, en LAN ou en cloud.', 'This device is already in FabCore, via LAN or cloud.'],
