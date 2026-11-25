@@ -68,11 +68,21 @@ const definitions = {
     return monitor;
   }, { live: true, verify: true, temperatures: false, controls: true, commands: true, commandActions: ['pause','resume','stop'], files: true, fileFamily: 'laser' }),
   'bambu-cloud': { model: 'Bambu Lab · Cloud', form: 'cloud', filaments: 'AMS', configure() { return null; },
-    async load({ cloud, diagnostics, experimentalCloudCamera, cloudCameraStream }) { return { read: machine => cloud.readMachine(machine),
+    async load({ cloud, diagnostics, directory, experimentalCloudCamera, cloudCameraStream }) {
+      const { createBambuCloudFiles } = await import('./bambu-cloud-files.mjs');
+      const connector = { read: machine => cloud.readMachine(machine),
+        send: (...args) => cloud.send(...args), controlState: machine => cloud.controlState(machine),
+        command: (machine, action) => ['pause', 'resume', 'stop'].includes(action) ? cloud.send(machine, action, { param: '' }) : false,
+        files: retainedFiles(join(directory, 'files'), createBambuCloudFiles(cloud), { projects: true }),
+        async gcode(machine, script) {
+          connector.control?.forgetHoming?.(machine.id);
+          try { return await cloud.send(machine, 'gcode_line', { param: script + '\n' }) ? { outcome: 'accepted', responses: null } : { outcome: 'rejected', message: '' }; }
+          catch (failure) { if (['bambu-authorization', 'bambu-connection', 'cloud-auth'].includes(failure.message)) return { outcome: 'rejected', message: failure.message }; throw failure; }
+        },
       async camera(machine, output, signal, frame) {
         const { streamCloudCamera } = await import('./bambu-cloud-camera.mjs');
         return streamCloudCamera(machine, output, signal, frame, { cloud, diagnostics, enabled: experimentalCloudCamera, stream: cloudCameraStream });
-      } }; }, camera: true },
+      } }; return connector; }, camera: true, filaments: 'AMS', commands: true, commandActions: ['pause', 'resume', 'stop'], controls: true, terminal: true, files: true, projects: true, externalFilament: true },
   klipper: httpConnector('Klipper · Moonraker', 7125, false, async ({ readPrinter, sendCommand, sendGcode, fetchFiles }) => {
     const mod = await import('./moonraker.mjs');
     const read = readPrinter ?? mod.readMoonraker;
@@ -199,7 +209,7 @@ export function createConnectorRegistry(options, definition = connectorDefinitio
         pending.set(kind, Promise.resolve().then(() => entry.load(options)).then(async connector => {
           if (entry.controls && !connector.control) {
             const { createManualControls } = await import('./manual-controls.mjs');
-            connector.control = createManualControls(kind, { fetcher: options.fetchFiles, send: (...args) => connector.send(...args), request: (...args) => connector.request(...args), read: connector.controlState, trace: (...args) => options.diagnostics?.trace?.(...args) });
+            connector.control = createManualControls(kind === 'bambu-cloud' ? 'bambu' : kind, { fetcher: options.fetchFiles, send: (...args) => connector.send(...args), request: (...args) => connector.request(...args), read: connector.controlState, trace: (...args) => options.diagnostics?.trace?.(...args) });
           }
           if (closed) { connector.close?.(); return null; }
           instrumentConnector(connector, options.diagnostics);

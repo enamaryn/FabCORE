@@ -23,7 +23,7 @@ const safeCode = (value: unknown) => typeof value === 'number' && Number.isFinit
 // Retain unknown protocol fields for debugging, but never authentication secrets.
 export function safeCloudPayload(value: unknown, secrets: unknown[] = [], depth = 0, key = ''): unknown {
   if (depth > 10) return '[depth limit]';
-  if (/password|passwd|token|secret|cookie|ttcode|authorization|access.?code|api.?key|tfa.?key|csrf|auth.?key|credential|signature/i.test(key) ||
+  if (/password|passwd|token|secret|cookie|ttcode|authorization|access.?code|api.?key|tfa.?key|csrf|auth.?key|credential|signature|private.?key|app_cert|printer_cert|dev_cert|sign_string|param_enc|url_enc|refreshUrl|^crl$|^cert$|^key$/i.test(key) ||
       /^(code|tfaCode|verificationCode)$/i.test(key) && typeof value !== 'number') return '[redacted]';
   if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
   if (typeof value === 'string') {

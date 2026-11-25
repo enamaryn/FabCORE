@@ -15,11 +15,11 @@ Cette interface d'administration ajoute trois fichiers PEM **globaux à cette in
 - L'import est un stockage administratif : aucun enregistrement de certificat sur l'imprimante, aucune commande signée, aucun pilotage activé.
 - Le stockage global n'est pas encore compatible avec un déploiement multi-instance sur hôtes distincts.
 
-## Cœur de pilotage signé (ajouté — non branché sur le `send` machine)
+## Cœur de pilotage signé
 
 Pour préparer le pilotage en **mode cloud sans Mode Développeur** (le firmware sécurisé
 rejette les commandes `print.*` non signées), cette PR ajoute le **cœur crypto** réutilisable,
-testé en isolation, mais **ne modifie pas encore** le chemin de commande du connecteur :
+testé en isolation, désormais raccordé au chemin de commande cloud (voir le protocole ci-dessous) :
 
 - **4ᵉ champ optionnel `refreshUrl`** (le « trigger-url » `…/applications/<leaf-CN>/cert?aes256=…`,
   réutilisable) : stocké chiffré avec les 3 PEM. La CRL n'est valable qu'~1 mois ; un job serveur
@@ -35,10 +35,7 @@ testé en isolation, mais **ne modifie pas encore** le chemin de commande du con
 - Tests : `poc/bambu-signing.test.mjs` (signature vérifiée contre la clé du leaf, `param_enc`
   déchiffrable, round-trip du blob clé). `npm run check` complet à exécuter en CI (Node ≥ 24).
 
-**Reste à faire (incrément suivant, changement de comportement machine à part)** : brancher
-`createBambuSigner` dans `createP2SMonitor` — installer le cert à la connexion, capturer
-`printer_cert` depuis la réponse, signer les `print.*` dans `send()` — gardé pour ne rien changer
-quand aucun certificat n'est configuré ; puis recette matérielle.
+Le raccordement des machines **importées du compte cloud** est décrit dans [Commandes cloud et LAN](../protocols/BAMBU-CLOUD-CONTROLS.md). Les machines ajoutées en LAN gardent le chemin non signé existant. Installation et commandes ne partent que sur action explicite, jamais sur simple consultation. Le raccordement au broker cloud reste à qualifier sur matériel.
 
 ## Sources et limites
 

@@ -10,7 +10,7 @@
 //   - gcode_line/project_file : champ sensible chiffré (`param_enc`/`url_enc`)
 //     vers la clé publique du certificat de l'imprimante (RSA PKCS#1 v1.5).
 // Aucune dépendance réseau : pur crypto, testable isolément.
-import { X509Certificate, constants, createSign, publicEncrypt } from 'node:crypto';
+import { X509Certificate, constants, createHash, createSign, publicEncrypt } from 'node:crypto';
 
 const PKCS1 = constants.RSA_PKCS1_PADDING;
 
@@ -69,7 +69,7 @@ export function signPrint(printObj, certId, keyPem) {
  */
 export function preparePrint(params, command, sequenceId, printerCertPem) {
   const printObj = { ...params, command, sequence_id: String(sequenceId) };
-  if (printerCertPem) {
+  if (printerCertPem && ['gcode_line', 'gcode_file', 'project_file'].includes(command)) {
     for (const field of ['param', 'url']) {
       if (typeof printObj[field] === 'string') {
         printObj[field + '_enc'] = encryptToPrinter(printerCertPem, printObj[field]);
@@ -98,6 +98,7 @@ export function buildCertInstall(chainPem, crlPem, sequenceId, timestampMs = Dat
 export function createBambuSigner({ key, chain, crl }) {
   const certId = certIdFromChain(chain);
   return {
+    revision: createHash('sha256').update(key).update(chain).update(crl).digest('hex'),
     certId,
     chain,
     crl,

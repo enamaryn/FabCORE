@@ -6,6 +6,7 @@ export interface P2SConnection {
   origin: string;
   serial: string;
   accessCode: string;
+  authorized?: () => boolean;
 }
 export type P2SStatus = 'connecting' | 'ready' | 'printing' | 'paused' | 'done' | 'error' | 'offline';
 export interface P2SSnapshot {
@@ -18,7 +19,7 @@ export interface P2SSnapshot {
   filaments?: unknown;
 }
 export type P2SReport = Record<string, unknown>;
-export interface P2SHeater { id: string; current?: unknown }
+export interface P2SHeater { id: string; current?: unknown; target?: unknown }
 export interface P2SControls { heaters: P2SHeater[]; [key: string]: unknown }
 export type P2SChannel = 'print' | 'system' | 'info';
 export type P2SConnect = (origin: string, options: IClientOptions) => MqttClient;

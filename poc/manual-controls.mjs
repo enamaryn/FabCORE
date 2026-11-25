@@ -105,10 +105,13 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
   // P2S : aucune position ni origine dans le rapport ; l'origine faite par FabCore pendant la session débloque les
   // déplacements, et s'oublie à la perte du rapport ou à tout envoi depuis le terminal (M84 peut libérer les moteurs).
   const homedByFabCore = new Set();
+  const homingSessions = new Map();
   async function snapshot(machine) {
     if (kind === 'bambu') {
       const controls = await read?.(machine);
-      if (!controls) { homedByFabCore.delete(machine.id); return emptyControls(); }
+      if (!controls) { homedByFabCore.delete(machine.id); homingSessions.delete(machine.id); return emptyControls(); }
+      if (controls.sessionRevision !== homingSessions.get(machine.id)) homedByFabCore.delete(machine.id);
+      homingSessions.set(machine.id, controls.sessionRevision);
       return { ...controls, motion: { homed: null, axes: homedByFabCore.has(machine.id) ? ['X', 'Y', 'Z'] : [], fabcoreHoming: true } };
     }
     if (kind.startsWith('elegoo')) return await read?.(machine) ?? emptyControls();
@@ -141,7 +144,7 @@ export function createManualControls(kind, { fetcher = fetch, send, request, rea
   return { read: snapshot, forgetHoming: id => homedByFabCore.delete(id), async execute(machine, command, controls) {
     const { action, id, value } = command;
     if (kind === 'bambu' && ['home', 'move'].includes(action)) {
-      // Mode développeur : G-code par `gcode_line`. Aucun retour de position : issue « acceptée », jamais confirmée.
+      // G-code par `gcode_line` (signé par le transport cloud, brut en LAN). Aucun retour de position : issue « acceptée », jamais confirmée.
       if (!validateControl({ ...command, confirm: true }, controls)) return { outcome: 'rejected' };
       const feed = command.axis === 'Z' ? 600 : 3000;
       const ok = await send(machine, 'gcode_line', { param: action === 'home' ? 'G28\n' : `G91\nG1 ${command.axis}${command.distance} F${feed}\nG90\n` });

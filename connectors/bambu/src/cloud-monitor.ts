@@ -1,3 +1,5 @@
+import { createCloudCommands, type BambuCommandSigner } from './commands.ts';
+import type { P2SChannel, P2SControls } from './types.ts';
 import { connect, type IClientOptions, type MqttClient } from 'mqtt';
 import { randomUUID } from 'node:crypto';
 
@@ -15,25 +17,28 @@ export interface CloudMonitorOptions {
   log(event: string, data: Record<string, unknown>): void;
   connectMqtt?: (url: string, options: IClientOptions) => MqttClient;
   now?: () => number;
-  reportedControls(kind: 'bambu', report: Record<string, unknown>): {
-    heaters: { id: string; current?: unknown; target?: unknown }[];
-  };
+  authorized?: ((serial: string) => boolean) | undefined;
+  createSigner?: (() => BambuCommandSigner | null) | undefined;
+  reportedControls(kind: 'bambu', report: Record<string, unknown>): P2SControls;
   bambuFilaments(ams: Record<string, unknown> | undefined): { id: number; [key: string]: unknown }[] | null;
 }
 
 
-// Cloud supervision only. The only published messages are these two read requests.
-export function createCloudMonitor({ account, token, username, log, connectMqtt = connect, now = Date.now, reportedControls, bambuFilaments }: CloudMonitorOptions) {
+// Reads remain independent of credentials; explicit writes use the signed command session.
+export function createCloudMonitor({ account, token, username, log, connectMqtt = connect, now = Date.now, reportedControls, bambuFilaments, createSigner, authorized = () => true }: CloudMonitorOptions) {
   const host = account.region === 'china' ? 'cn.mqtt.bambulab.com' : 'us.mqtt.bambulab.com';
   const allowed = new Set(account.devices.map(device => device.serial));
   const reports = new Map<string, CloudReport>(); const versions = new Map<string, CloudModule[]>(); const timestamps = new Map<string, number>();
-  let status = 'connecting'; let issue: string | null = null; let closed = false; let lastRequest = -Infinity;
+  let status = 'connecting'; let issue: string | null = null; let closed = false; let lastRequest = -Infinity; let sessionRevision = 0;
   const trace = (event: string, data: Record<string, unknown> = {}) => { if (closed) return; try { log(event, data); } catch { /* Storage cannot disrupt MQTT. */ } };
   const client = connectMqtt('mqtts://' + host + ':8883', { username, password: token,
     clientId: 'fabcore_' + randomUUID().replaceAll('-', '').slice(0, 24), rejectUnauthorized: true,
-    reconnectPeriod: 10000, connectTimeout: 10000, clean: true });
+    reconnectPeriod: 10000, connectTimeout: 10000, clean: true, queueQoSZero: false, resubscribe: false });
+  const fresh = (serial: string) => !closed && status === 'connected' && allowed.has(serial) && authorized(serial) && timestamps.has(serial) && now() - timestamps.get(serial)! <= 60000;
+  const commands = createCloudCommands({ createSigner, fresh, log: trace,
+    publish: (serial, wire, done) => client.publish('device/' + serial + '/request', wire, { qos: 0, retain: false }, done) });
   trace('mqtt-connect-start', { host, port: 8883 });
-  function clear() { reports.clear(); versions.clear(); timestamps.clear(); }
+  function clear() { sessionRevision++; commands.reset(); reports.clear(); versions.clear(); timestamps.clear(); }
   client.on('connect', () => {
     if (closed) return;
     status = 'connected'; issue = null; clear();
@@ -63,15 +68,17 @@ export function createCloudMonitor({ account, token, username, log, connectMqtt 
     if (closed || status !== 'connected' || bytes.length > 524288) return;
     const match = /^device\/([A-Za-z0-9_-]{1,64})\/report$/.exec(topic);
     if (!match || !allowed.has(match[1]!)) return;
-    const serial = match[1]!; let data: { info?: { command?: unknown; module?: { name?: unknown; product_name?: unknown; sn?: unknown; sw_ver?: unknown }[] }; print?: CloudReport };
+    const serial = match[1]!; let data: { [key: string]: unknown; info?: { command?: unknown; module?: { name?: unknown; product_name?: unknown; sn?: unknown; sw_ver?: unknown }[] }; print?: CloudReport };
     try { data = JSON.parse(bytes.toString()); } catch { trace('mqtt-invalid-json', { serial, bytes: bytes.length }); return; }
     if (data.info?.command === 'get_version' && Array.isArray(data.info.module)) {
       const modules = data.info.module.slice(0, 40).filter(item => item && typeof item === 'object').map(item => ({ name: String(item.name ?? '').slice(0, 80),
         model: String(item.product_name ?? '').slice(0, 100), serial: String(item.sn ?? '').slice(0, 80), firmware: String(item.sw_ver ?? '').slice(0, 80) }));
       versions.set(serial, modules); trace('mqtt-modules', { serial, modules });
     }
+    if (commands.receive(serial, data)) return;
     const delta = data.print;
     if (!delta || typeof delta !== 'object' || Array.isArray(delta)) return;
+    if (delta.command && delta.command !== 'push_status') return;
     const previous = reports.get(serial) ?? {};
     const next = { ...previous, ...delta };
     if (delta.device) next.device = { ...previous.device, ...delta.device };
@@ -100,6 +107,8 @@ export function createCloudMonitor({ account, token, username, log, connectMqtt 
   });
   client.on('close', () => { clear(); if (!closed && status !== 'error') status = 'connecting'; trace('mqtt-closed'); });
   return {
+    send: (serial: string, command: string, params: Record<string, unknown> = {}, channel: P2SChannel = 'print') => commands.send(serial, command, params, channel),
+    controlState(serial: string) { return fresh(serial) ? { ...reportedControls('bambu', reports.get(serial)!), sessionRevision } : undefined; },
     snapshot() {
       return { status, issue, devices: account.devices.map(device => {
         const report = reports.get(device.serial)!; const at = timestamps.get(device.serial);

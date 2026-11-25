@@ -1,4 +1,4 @@
-// Composition POC : la session cloud en lecture seule est canonique dans le connecteur TypeScript.
+// Composition POC : la session cloud et ses commandes signées est canonique dans le connecteur TypeScript.
 import { createCloudMonitor as createMonitor } from '../connectors/bambu/src/cloud-monitor.ts';
 import { reportedControls } from './manual-controls.mjs';
 import { bambuFilaments } from './filaments.mjs';

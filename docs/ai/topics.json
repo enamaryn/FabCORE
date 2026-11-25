@@ -29,28 +29,40 @@
   },
   {
     "id": "bambu",
-    "title": "P2S LAN et autorisations",
+    "title": "P2S LAN et commandes cloud signées",
     "files": [
       "connectors/bambu/src/monitor.ts",
       "connectors/bambu/src/files.ts",
       "poc/bambu.mjs",
       "poc/bambu-files.mjs",
-      "poc/manual-controls.mjs"
+      "poc/manual-controls.mjs",
+      "connectors/bambu/src/commands.ts",
+      "connectors/bambu/src/cloud-monitor.ts",
+      "poc/cloud-accounts.mjs",
+      "poc/bambu-cloud-files.mjs",
+      "poc/bambu-signing.mjs"
     ],
     "symbols": [
       "createP2SMonitor",
       "createP2SFiles",
       "createBambuMonitor",
-      "createManualControls"
+      "createManualControls",
+      "createCloudCommands",
+      "createCloudMonitor",
+      "createBambuCloudFiles",
+      "createBambuSigner"
     ],
     "tests": [
       "connectors/bambu/test/monitor.test.ts",
       "poc/bambu.test.mjs",
       "poc/bambu-auth-http.test.mjs",
-      "connectors/bambu/test/lifecycle.test.ts"
+      "connectors/bambu/test/lifecycle.test.ts",
+      "poc/bambu-signed-cloud.test.mjs",
+      "connectors/bambu/test/cloud-monitor.test.ts"
     ],
     "docs": [
-      "docs/protocols/BAMBU-LAN.md"
+      "docs/protocols/BAMBU-LAN.md",
+      "docs/protocols/BAMBU-CLOUD-CONTROLS.md"
     ]
   },
   {

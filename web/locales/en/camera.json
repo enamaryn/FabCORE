@@ -1,5 +1,5 @@
 {
-  "settings": "Video settings",
+  "settings": "Video and files settings",
   "mode": "Camera source",
   "modes": {
     "auto": "Automatic (LAN when configured)",
@@ -8,7 +8,7 @@
     "disabled": "Disabled"
   },
   "host": "Printer local IPv4 address",
-  "scope": "Monitoring stays Cloud. The server requests the camera code from the Bambu account; no production command or printer mode change.",
+  "scope": "The local address is used for camera and FTPS files, even when the camera is disabled. Commands stay on the cloud account; the printer mode is unchanged.",
   "invalid": "Invalid configuration or save rejected. Use a private IPv4 without URL or port.",
   "saving": "Saving…",
   "save": "Save",

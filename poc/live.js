@@ -5,7 +5,7 @@ state.events = [];
 state.users = [];
 
 const problem = (code) => ({
-  'bambu-authorization': t('Bambu refuse la vérification de la commande. Sur la P2S : Paramètres → LAN uniquement → Mode développeur. Le LAN seul ne suffit pas au contrôle tiers. Aucun nouvel envoi automatique.', 'Bambu rejected command verification. On P2S: Settings → LAN Only → Developer Mode. LAN alone does not authorize third-party control. No automatic retry.'),
+  'bambu-authorization': t('Bambu refuse l’autorisation : en cloud, vérifiez les PEM importés et l’acceptation par l’imprimante ; en LAN, vérifiez le mode développeur. Aucun nouvel envoi automatique.', 'Bambu denied authorization: in cloud mode check imported PEMs and printer acceptance; in LAN mode check Developer Mode. No automatic retry.'),
   'laser-confirm': t('Confirmez votre présence et la préparation de la zone laser.', 'Confirm operator presence and laser work area readiness.'),
   'oidc-failed': t('Connexion Pocket ID indisponible ou accès refusé. Vous pouvez utiliser un compte local.',
     'Pocket ID sign-in is unavailable or access was denied. You can use a local account.'),
@@ -492,7 +492,7 @@ function consoleUnavailable(kind) {
     elegoo: t('La Centauri Carbon 2 n’accepte pas de G-code dans son API LAN d’origine (aucune méthode prévue par le SDK Elegoo).', 'The Centauri Carbon 2 accepts no G-code through its stock LAN API (no method in the Elegoo SDK).'),
     'elegoo-cc1': t('La Centauri Carbon n’accepte pas de G-code par son protocole LAN SDCP.', 'The Centauri Carbon accepts no G-code through its SDCP LAN protocol.'),
     prusalink: t('L’API PrusaLink ne propose pas d’envoi de G-code.', 'The PrusaLink API offers no G-code command.'),
-    'bambu-cloud': t('Connexion cloud en lecture seule : aucune commande envoyée.', 'Read-only cloud connection: no command is sent.')
+    'bambu-cloud': t('Commandes cloud signées ; fichiers via FTPS à l’adresse locale renseignée dans les réglages caméra.', 'Signed cloud commands; files use FTPS at the local address in camera settings.')
   })[kind] || t('Terminal G-code non pris en charge par cette connexion.', 'G-code terminal not supported by this connection.');
 }
 function selectMachineTab(tab) {
@@ -1434,7 +1434,7 @@ function manualControlsPanel(m, part = 'all') {
   const canMove = data?.motion && online && ['ready', 'done'].includes(data.status) && ['ready', 'done'].includes(m.status) && !entry.busy;
   const canJog = canMove && (data.motion.homed === null ? (!data.motion.axes || data.motion.axes.length > 0) : ['x','y','z'].every(a => data.motion.homed.includes(a)));
   const jog = (axis, sign, text, grid) => data?.motion ? btn('manual-jog:' + axis + ':' + sign, text, '', '', `${canJog ? '' : 'disabled'} aria-label="${axis} ${sign > 0 ? '+' : '−'}" ${grid ? `style="grid-area:${grid}"` : ''}`) : `<button type="button" disabled aria-label="${axis} ${sign > 0 ? '+' : '−'}" ${grid ? `style="grid-area:${grid}"` : ''}>${text}</button>`;
-  const motion = admin ? `<div class="stack"><div class="jog-layout"><div class="jog-pad">${jog('Y', 1, '↑', '1/2')}${jog('X', -1, '←', '2/1')}<span style="grid-area:2/2">XY</span>${jog('X', 1, '→', '2/3')}${jog('Y', -1, '↓', '3/2')}</div><div class="jog-z"><small>${m.kind === 'bambu' ? t('Plateau (Z)','Bed (Z)') : t('Axe Z','Z axis')}</small>${jog('Z', 1, 'Z +')}${jog('Z', -1, 'Z −')}</div></div>
+  const motion = admin ? `<div class="stack"><div class="jog-layout"><div class="jog-pad">${jog('Y', 1, '↑', '1/2')}${jog('X', -1, '←', '2/1')}<span style="grid-area:2/2">XY</span>${jog('X', 1, '→', '2/3')}${jog('Y', -1, '↓', '3/2')}</div><div class="jog-z"><small>${['bambu', 'bambu-cloud'].includes(m.kind) ? t('Plateau (Z)','Bed (Z)') : t('Axe Z','Z axis')}</small>${jog('Z', 1, 'Z +')}${jog('Z', -1, 'Z −')}</div></div>
     <div class="jog-options"><label>${t('Pas','Step')} <select data-jog-step ${canMove ? '' : 'disabled'}><option value="0.1">0,1 mm</option><option value="1" selected>1 mm</option><option value="10">10 mm</option></select></label>${data?.motion ? btn('manual-home', t('Origine XYZ','Home XYZ'), '', '', canMove ? '' : 'disabled') : `<button type="button" disabled>${t('Origine XYZ','Home XYZ')}</button>`}</div>
     <p class="jog-note">${!data?.motion ? t('Déplacements non disponibles sur ce connecteur.','Movement unavailable on this connector.') : data.motion.fabcoreHoming ? (data.motion.axes.length ? t('Origine faite depuis FabCore ; limites vérifiées par le firmware.','Homed from FabCore; limits checked by firmware.') : t('Mettre à l’origine depuis FabCore avant tout déplacement.','Home from FabCore before any movement.')) : data.motion.homed === null ? t('Origine et limites vérifiées par le firmware.','Homing and limits checked by firmware.') : t('Axes référencés','Homed axes') + ' : ' + (esc(data.motion.homed) || '—')}${data?.motion ? ' · ' + t('Bloqué pendant impression/pause.','Blocked during printing/pause.') : ''}</p></div>` : unavailableContent(t('Lecture seule : commandes réservées à un administrateur.', 'Read only: controls are restricted to an administrator.'));
 
