@@ -1,7 +1,9 @@
 // Cloud-account metadata only: credentials are read from the form once, never retained in UI state.
-const cloudUI = { data: null, loading: false, error: '', busy: false };
+const cloudUI = { data: null, certificates: null, loading: false, error: '', busy: false };
 function cloudProblem(code) {
   const labels = {
+    'bambu-cert-invalid': ['Fichiers PEM invalides : vérifiez la clé et les certificats.', 'Invalid PEM files: check the key and certificates.'],
+    'bambu-cert-storage': ['Stockage chiffré indisponible.', 'Encrypted storage unavailable.'],
     'cloud-machine-exists': ['Cette machine est déjà dans FabCore, en LAN ou en cloud.', 'This device is already in FabCore, via LAN or cloud.'],
     'cloud-in-use': ['Supprimez d’abord du parc les machines liées à ce compte.', 'Remove linked fleet devices before deleting this account.'],
     'cloud-auth': ['Connexion refusée ou expirée. Reconnectez ce compte.', 'Sign-in denied or expired. Reconnect this account.'],
@@ -47,6 +49,13 @@ function cloudPage() {
   if (!cloudUI.data) return header + `<p role="status">${cloudUI.error ? esc(cloudProblem(cloudUI.error)) : t('Chargement…', 'Loading…')}</p>` + btn('cloud-open', t('Actualiser', 'Refresh'));
   const providers = new Map(cloudUI.data.providers.map(item => [item.id, item]));
   return header + `<style>.cloud-account{min-width:0}.cloud-account table{width:100%}.cloud-account td{overflow-wrap:anywhere}.cloud-log{white-space:pre-wrap;overflow-wrap:anywhere;max-height:55vh;overflow:auto;font-size:12px}.cloud-scroll{overflow:auto}.cloud-account h2{overflow-wrap:anywhere}</style>
+
+    <section class="panel stack cloud-account" style="margin-bottom:14px">
+      <div class="row between wrap"><div class="stack"><h2>${t('Certificats applicatifs Bambu', 'Bambu application certificates')}</h2><small>${t('Ensemble global pour ce serveur, indépendant des comptes Cloud.', 'One server-wide set, independent of Cloud accounts.')}</small></div>${btn('cloud-certs-upload',t('Importer 3 fichiers PEM','Import 3 PEM files'),'plus')}</div>
+      <strong>${cloudUI.certificates?.configured ? t('Fichiers importés', 'Files imported') : t('Aucun certificat importé', 'No certificate imported')}</strong>
+      ${cloudUI.certificates?.fingerprint ? '<small>'+esc(cloudUI.certificates.fingerprint)+'</small>' : ''}
+      <small>${t('Stockage chiffré local. Cet import ne déclenche aucune commande sur la machine.', 'Encrypted local storage. Import does not trigger printer commands.')}</small>
+    </section>
     <p class="notice">${t('Pilote Bambu Lab : authentification, inventaire et suivi des températures/AMS en lecture seule. Aucun lancement, chauffe ou mouvement. Ajoutez chaque machine au parc avec Ajout automatique.', 'Bambu Lab pilot: sign-in, inventory and read-only temperature/AMS monitoring. No printing, heating or motion. Use Add automatically to add a device to the fleet.')}</p>
     ${cloudUI.error ? `<p class="error" role="alert">${esc(cloudProblem(cloudUI.error))}</p>` : ''}
     <div class="stack">${cloudUI.data.accounts.map(account => {
@@ -70,9 +79,21 @@ function cloudPage() {
 async function openCloudAccounts() {
   if (state.role !== 'admin') return;
   live.page = 'cloud'; cloudUI.loading = true; cloudUI.error = ''; renderLive();
-  try { cloudUI.data = await api('cloud-accounts'); } catch (error) { cloudUI.error = error.code; }
+  try { [cloudUI.data, cloudUI.certificates] = await Promise.all([api('cloud-accounts'), api('cloud-certificates')]); } catch (error) { cloudUI.error = error.code; }
   cloudUI.loading = false;
   if (live.phase === 'workshop' && live.page === 'cloud') renderLive();
+}
+
+function cloudCertificateForm() {
+  dialog.innerHTML = `<form id="cloud-certs-form" class="stack" autocomplete="off">
+    <h2>${t('Importer les certificats Bambu','Import Bambu certificates')}</h2>
+    <p class="notice">${t('Trois fichiers PEM requis. La clé privée est conservée chiffrée, jamais affichée ni renvoyée par le serveur. Aucun pilotage activé.', 'Three PEM files required. Private key encrypted, never displayed or returned. No controls enabled.')}</p>
+    <label>key.pem — ${t('Clé privée RSA','RSA private key')}<input name="key" type="file" accept=".pem,.key,text/plain" required></label>
+    <label>chain.pem — ${t('Chaîne de trois certificats','Three-certificate chain')}<input name="chain" type="file" accept=".pem,text/plain" required></label>
+    <label>crl.pem — ${t('Liste de révocation','Certificate revocation list')}<input name="crl" type="file" accept=".pem,text/plain" required></label>
+    <p class="error" role="alert"></p><p role="status" hidden>${t('Vérification et stockage…','Validating and storing…')}</p>
+    <div class="row wrap">${btn('close',t('Annuler','Cancel'))}<button class="primary" type="submit">${t('Importer','Import')}</button></div></form>`;
+  if (!dialog.open) dialog.showModal();
 }
 function cloudAccountForm(account) {
   const verify = Boolean(account?.challenge);
@@ -107,6 +128,7 @@ async function cloudClick(event) {
   if (!action?.startsWith('cloud-') || live.phase !== 'workshop' || state.role !== 'admin') return;
   const [kind, id, serial] = action.split(':');
   if (kind === 'cloud-open') return openCloudAccounts();
+  if (kind === 'cloud-certs-upload') return cloudCertificateForm();
   if (kind === 'cloud-add') { if (cloudUI.data) cloudAccountForm(); return; }
   const account = cloudUI.data?.accounts.find(item => item.id === id);
   if (!account || cloudUI.busy) return;
@@ -138,6 +160,32 @@ async function cloudClick(event) {
 }
 app.addEventListener('click', cloudClick);
 dialog.addEventListener('click', cloudClick);
+
+dialog.addEventListener('submit', async event => {
+  const form=event.target;
+  if (form?.id!=='cloud-certs-form') return;
+  event.preventDefault();
+  if (cloudUI.busy || state.role!=='admin') return;
+  cloudUI.busy=true;
+  form.querySelector('[role=status]').hidden=false;
+  form.querySelector('[role=alert]').textContent='';
+  try {
+    const payload={};
+    for (const field of ['key','chain','crl']) {
+      const file=form.elements.namedItem(field)?.files?.[0];
+      if (!file || file.size>48*1024 || file.size===0) throw {code:'bambu-cert-invalid'};
+      payload[field]=await file.text();
+    }
+    await api('cloud-certificates',payload);
+    if (form.isConnected) { form.reset(); dialog.close(); }
+    await openCloudAccounts();
+  } catch(error) {
+    if (form.isConnected) form.querySelector('[role=alert]').textContent=cloudProblem(error.code);
+  } finally {
+    cloudUI.busy=false;
+    if(form.isConnected) form.querySelector('[role=status]').hidden=true;
+  }
+});
 dialog.addEventListener('submit', async event => {
   const form = event.target;
   if (form?.getAttribute?.('id') !== 'cloud-form') return;
