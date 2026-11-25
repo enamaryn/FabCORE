@@ -113,6 +113,8 @@ export function createCloudMonitor({ account, token, username, log, connectMqtt 
       return { status, issue, devices: account.devices.map(device => {
         const report = reports.get(device.serial)!; const at = timestamps.get(device.serial);
         const stale = at === undefined || now() - at > 60000 || status !== 'connected';
+        // Like LAN: FAILED can describe the previous job after its error was cleared.
+        const clearedFailure = !stale && report.gcode_state === 'FAILED' && report.print_error === 0;
         const heaters = stale ? [] : reportedControls('bambu', report).heaters;
         const filaments = stale ? [] : bambuFilaments(report.ams) ?? [];
         return { serial: device.serial, checkedAt: at === undefined ? null : new Date(at).toISOString(), stale,
@@ -122,9 +124,9 @@ export function createCloudMonitor({ account, token, username, log, connectMqtt 
             const temperature = (typeof value === 'number' || typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value)) ? Number(value) : null;
             return { ...unit, temperature: temperature !== null && Number.isFinite(temperature) && temperature >= -20 && temperature <= 150 ? temperature : null };
           }),
-          progress: stale || typeof report.mc_percent !== 'number' || !Number.isFinite(report.mc_percent) ? 0 : Math.max(0, Math.min(100, report.mc_percent)),
-          file: stale ? '' : String(report.subtask_name ?? '').slice(0, 200),
-          modules: versions.get(device.serial) ?? [], state: stale ? null : String(report.gcode_state ?? '').slice(0, 40) };
+          progress: stale || clearedFailure || typeof report.mc_percent !== 'number' || !Number.isFinite(report.mc_percent) ? 0 : Math.max(0, Math.min(100, report.mc_percent)),
+          file: stale || clearedFailure ? '' : String(report.subtask_name ?? '').slice(0, 200),
+          modules: versions.get(device.serial) ?? [], state: stale ? null : clearedFailure ? 'IDLE' : String(report.gcode_state ?? '').slice(0, 40) };
       }) };
     },
     close() { closed = true; clear(); status = 'disconnected'; client.options.reconnectPeriod = 0; client.end(true); }

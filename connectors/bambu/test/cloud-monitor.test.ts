@@ -58,3 +58,27 @@ test('Cloud MQTT autonome : refus abonnement et authentification ne publient pas
     assert.equal(client.ends, 1); assert.equal(sent.length, 0); monitor.close();
   }
 });
+
+
+test('Cloud P2S : ancien FAILED sans erreur active devient IDLE, sans effacer les erreurs réelles', () => {
+  const { client, monitor, report, advance } = setup();
+  try {
+    client.emit('connect');
+    report({ print: { command: 'push_status', gcode_state: 'FAILED', mc_percent: 37, subtask_name: 'old-job' } });
+    assert.equal(monitor.snapshot().devices[0]!.state, 'FAILED', 'absence de code ≠ erreur effacée');
+    report({ print: { print_error: 1234 } });
+    assert.equal(monitor.snapshot().devices[0]!.state, 'FAILED', 'erreur active conservée');
+    report({ print: { print_error: 0 } });
+    const cleared = monitor.snapshot().devices[0]!;
+    assert.equal(cleared.state, 'IDLE');
+    assert.equal(cleared.progress, 0);
+    assert.equal(cleared.file, '');
+    report({ print: { gcode_state: 'RUNNING', print_error: 0, mc_percent: 12, subtask_name: 'current-job' } });
+    assert.equal(monitor.snapshot().devices[0]!.state, 'RUNNING');
+    assert.equal(monitor.snapshot().devices[0]!.file, 'current-job');
+    report({ print: { gcode_state: 'FAILED', print_error: 99 } });
+    assert.equal(monitor.snapshot().devices[0]!.state, 'FAILED');
+    advance(60001);
+    assert.equal(monitor.snapshot().devices[0]!.state, null, 'aucun état prêt depuis un rapport périmé');
+  } finally { monitor.close(); }
+});
