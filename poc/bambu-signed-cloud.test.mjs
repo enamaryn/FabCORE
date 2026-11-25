@@ -177,10 +177,11 @@ test('HTTP : machine importée du compte cloud, droits admin, origine et homing 
   await call(`/api/cloud-accounts/${account.id}/login`, { password: 'password' }, admin);
   const id = (await call(`/api/cloud-accounts/${account.id}/import`, { serial: 'P2STEST123' }, admin)).body.id;
   assert.match(id, /^[a-f0-9-]{36}$/);
-  mqtt.emit('connect'); report({ print: { command: 'push_status', gcode_state: 'IDLE', nozzle_temper: 23, bed_temper: 21 } });
+  mqtt.emit('connect'); report({ print: { command: 'push_status', gcode_state: 'FAILED', print_error: 0, subtask_name: 'old-failed-job', nozzle_temper: 23, bed_temper: 21 } });
   const fleet = (await call('/api/machines', undefined, admin)).body.machines[0];
   assert.equal(fleet.kind, 'bambu-cloud'); assert.equal(fleet.capabilities.controls, true); assert.equal(fleet.capabilities.files, true);
   const url = '/api/machines/' + id + '/controls', home = { action: 'home', confirm: true };
+  assert.equal((await call(url, undefined, admin)).body.status, 'ready', 'les contrôles traitent FAILED + print_error=0 comme au repos');
   assert.equal((await call(url, home)).status, 401);
   assert.equal((await call(url, home, admin, 'http://foreign.test')).status, 403);
   await call('/api/observers', { username: 'viewer', password: 'observer-control-password' }, admin);

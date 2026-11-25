@@ -31,7 +31,7 @@ Le mode de l'imprimante n'est jamais modifié par FabCore. Ajouter une identité
 
 ## Limites et recette matérielle
 
-Le cœur cryptographique était déjà présent ; ce jalon vérifie son raccordement par des tests simulés, dont un parcours HTTP complet compte → import machine → coffre → homing chiffré/signé, et des transferts FTPS simulés. **Ce raccordement au broker cloud n'a pas encore été validé sur la P2S réelle.** Ne pas présenter un test de signature locale comme une preuve d'acceptation du firmware ou du broker.
+Le cœur cryptographique était déjà présent ; ce jalon vérifie son raccordement par des tests simulés, dont un parcours HTTP complet compte → import machine → coffre → homing chiffré/signé, et des transferts FTPS simulés. **Recette partielle sur la P2S réelle le 25 novembre 2026, 14 h 07 (Paris)** : les journaux du LXC 119 confirment `app_cert_install → SUCCESS`, puis le `gcode_line` envoyé par Valentin depuis le terminal → `SUCCESS`, `err_code=0` ; Valentin confirme le mouvement G28. La lecture des journaux n’a envoyé aucune commande. Les autres contrôles et transferts restent à recetter physiquement.
 
 La compatibilité est à qualifier sur la P2S de référence ; pas de promesse pour les autres modèles importés. Le certificat/CRL fourni doit être accepté par le firmware. Le renouvellement du coffre reste disponible en interne ; aucun renouvellement automatique ni nouvelle tentative de commande après renouvellement n'est ajouté ici. Les champs RSA sont bornés par la taille du certificat imprimante ; un G-code/chemin trop long est refusé sans envoi en clair.
 
@@ -42,4 +42,5 @@ Après fusion et mise à jour : conserver le cloud actif et Bambu Handy ; import
 - Branche : `feature/bambu-signed-controls`.
 - Entrées : `connectors/bambu/src/commands.ts`, `cloud-monitor.ts`, composition `poc/cloud-accounts.mjs`, registre `poc/connectors.mjs`, transferts `poc/bambu-cloud-files.mjs`.
 - Tests : `poc/bambu-signed-cloud.test.mjs`, `connectors/bambu/test/cloud-monitor.test.ts`, tests LAN existants.
-- Première action après revue : recette supervisée de l'ACK `app_cert_install` sur le broker cloud. Une absence d'ACK ne déclenche aucun mouvement ni renvoi.
+- État cloud corrigé : `FAILED` avec `print_error=0` est l’ancien travail échoué, pas une erreur active ; l’état public devient Prête et l’ancien nom/progrès est effacé, comme en LAN. Sans code ou avec un code non nul, FAILED reste Erreur.
+- Première action après revue : vérifier le déblocage des boutons sur la P2S au repos, puis les autres contrôles supervisés. Une absence d’ACK ne déclenche aucun mouvement ni renvoi.
