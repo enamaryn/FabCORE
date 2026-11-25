@@ -9,6 +9,7 @@ import { errorResponses } from '../errors.ts';
  */
 export interface OperationHandlers {
   cloudAction: RawHandler;
+  cloudCertificates: RawHandler;
   camera: RawHandler;
   command: RawHandler;
   controls: RawHandler;
@@ -25,6 +26,17 @@ export const operationRoutes = (handlers: OperationHandlers): RouteModule => (ap
   const admin = (request: Parameters<typeof guards.admin>[0]) => guards.admin(request);
   const signedIn = (request: Parameters<typeof guards.signedIn>[0]) => guards.signedIn(request);
   const none = async () => undefined;
+
+  app.get('/api/cloud-certificates', {
+    onRequest: guards.raw(handlers.cloudCertificates, admin),
+    schema: { summary: 'État des certificats applicatifs Bambu importés (sans secret)', tags: ['cloud'], security: session,
+      response: { 200: json('Métadonnées uniquement'), ...errorResponses(401, 403, 421, 503) } },
+  }, none);
+  app.post('/api/cloud-certificates', {
+    onRequest: guards.raw(handlers.cloudCertificates, admin),
+    schema: { summary: 'Importer trois fichiers PEM Bambu (chiffrés au repos, aucune commande machine)', tags: ['cloud'], security: session,
+      response: { 200: json('Métadonnées uniquement'), ...errorResponses(400, 401, 403, 415, 421, 429, 503) } },
+  }, none);
 
   // Comptes cloud : administrateur, puis origine, type de contenu, limite par compte et corps (gestionnaire).
   const cloudActions = 'login|verify|devices|disconnect|delete|logs|logs-download|telemetry-start|telemetry-stop|import';

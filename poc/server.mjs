@@ -29,6 +29,7 @@ import { createVersionService } from '../src/application/version.ts';
 import { createFleetWatcher, observeFleet } from '../src/application/fleet-events.ts';
 import { openStore } from './store.mjs';
 import { createCloudAccounts, CloudError } from './cloud-accounts.mjs';
+import { createBambuCertificateVault } from './bambu-certificate-vault.mjs';
 import { validateControl } from './manual-controls.mjs';
 import { ray5Path } from './longer-ray5-files.mjs';
 import { filePath } from './connector-http.mjs';
@@ -69,12 +70,12 @@ function error(res, status, code) {
   answer(res, status, { error: code });
 }
 
-async function readJson(req) {
+async function readJson(req, maxBytes = 4096) {
   let size = 0;
   const parts = [];
   for await (const chunk of req.iterator({ destroyOnReturn: false })) {
     size += chunk.length;
-    if (size > 4096) {
+    if (size > maxBytes) {
       req.resume();
       throw new Error('body');
     }
@@ -129,6 +130,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
   // Écriture attendue avant toute réponse ; base indisponible : 503, état précédent conservé (PostgreSQL, MIG-04).
   const persist = createPersist(store);
   const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt, context: currentRequestId });
+  const bambuCertificates = createBambuCertificateVault(directory);
   const token = store.state.admin ? null : (activationToken ?? randomBytes(24).toString('base64url'));
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
   // Cas d'usage migrés en TypeScript (MIG-04) : comptes, notifications, bobine manuelle.
@@ -275,6 +277,21 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       }
     } catch { /* The local login page remains available when OIDC fails. */ }
     return redirect('/app#oidc-failed', oidc.clearCookie);
+  }
+
+  async function handleBambuCertificates(req, res) {
+    if (req.method === 'GET') {
+      try { return answer(res, 200, bambuCertificates.status()); }
+      catch { return error(res, 503, 'bambu-cert-storage'); }
+    }
+    if (req.method !== 'POST') return error(res, 405, 'missing');
+    if (!requireJson(req, res)) return;
+    if (!withinLimit('/bambu-certificates')) return error(res, 429, 'rate');
+    let data;
+    try { data = await readJson(req, 160 * 1024); }
+    catch { return error(res, 400, 'bambu-cert-invalid'); }
+    try { return answer(res, 200, bambuCertificates.install(data)); }
+    catch (failure) { return error(res, failure.status ?? 503, failure.message === 'bambu-cert-invalid' ? failure.message : 'bambu-cert-storage'); }
   }
 
   async function handleCloudAction(req, res) {
@@ -671,7 +688,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     const activeSession = session(req);
     const viewer = sessions.get(activeSession);
     const cloudRoute = /^\/api\/cloud-accounts(?:\/([a-f0-9-]{36})\/(login|verify|devices|disconnect|delete|logs|logs-download|telemetry-start|telemetry-stop|import))?$/.test(path);
-    if (cloudRoute || ['/api/notifications', '/api/notifications/test', '/api/discovery'].includes(path)) {
+    if (cloudRoute || path === '/api/cloud-certificates' || ['/api/notifications', '/api/notifications/test', '/api/discovery'].includes(path)) {
       if (!viewer) return error(res, 401, 'sign-in');
       if (viewer.role !== 'admin') return error(res, 403, 'forbidden');
       return error(res, 405, 'missing');
@@ -891,7 +908,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     },
     events: { stream: handleEvents },
     version: { status: () => versionService.status() },
-    operations: { cloudAction: handleCloudAction, camera: handleCamera, command: handleCommand, controls: handleControls, terminal: handleTerminal, files: handleFiles },
+    operations: { cloudAction: handleCloudAction, cloudCertificates: handleBambuCertificates, camera: handleCamera, command: handleCommand, controls: handleControls, terminal: handleTerminal, files: handleFiles },
     pages: { asset: handleAsset, oidc: handleOidc }
   }));
   const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => http.dispatch(req, res));
