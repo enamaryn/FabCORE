@@ -110,7 +110,7 @@ function liveIssue(issue) {
 }
 
 async function api(path, data, cancel) {
-  const timeout = AbortSignal.timeout(path.startsWith('cloud-accounts') ? 45000 : path.endsWith('/controls') ? 30000 : path.endsWith('/transfer') ? 900_000 : path.endsWith('/gcode') ? 65_000 : path === 'machines/pair' ? 50_000
+  const timeout = AbortSignal.timeout(path.startsWith('cloud-accounts') || path === 'cloud-certificates' ? 45000 : path.endsWith('/controls') ? 30000 : path.endsWith('/transfer') ? 900_000 : path.endsWith('/gcode') ? 65_000 : path === 'machines/pair' ? 50_000
     : path === 'discovery' || path.startsWith('machines') || path.startsWith('notifications') ? 18000 : 5000);
   const signal = cancel ? AbortSignal.any([timeout, cancel]) : timeout;
   const response = await fetch('/api/' + path, data === undefined ? { signal } : {

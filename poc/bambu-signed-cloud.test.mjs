@@ -152,7 +152,7 @@ test('HTTP : machine importée du compte cloud, droits admin, origine et homing 
   const published = []; let mqtt;
   const report = body => mqtt.emit('message', 'device/P2STEST123/report', Buffer.from(JSON.stringify(body)));
   const origin = 'http://fabcore.test';
-  const { server, token } = createFabCore({ directory, origin,
+  const { server, token } = createFabCore({ directory, origin, certificateFetch: async () => new Response(null, { status: 503 }),
     cloudFetch: async url => Response.json(url.endsWith('/login') ? { accessToken: 'FAKE-CLOUD-TOKEN' } : url.endsWith('/preference') ? { uid: 123 } : { devices: [{ dev_id: 'P2STEST123', name: 'P2S', dev_product_name: 'P2S', dev_access_code: 'ABCD1234' }] }),
     cloudMqtt: () => {
       mqtt = Object.assign(new EventEmitter(), { options: {}, end() {},
@@ -190,6 +190,15 @@ test('HTTP : machine importée du compte cloud, droits admin, origine et homing 
   assert.equal(published.filter(item => item.security || item.print).length, 0);
   const imported = await call('/api/cloud-certificates', { key: app.key, chain: app.cert, crl: '-----BEGIN X509 CRL-----\nYQ==\n-----END X509 CRL-----\n' }, admin);
   assert.equal(imported.status, 200);
+  assert.equal((await call('/api/cloud-certificates', { action: 'configure', refreshUrl: 'https://api.bambulab.com' }, admin)).status, 400);
+  assert.equal((await call('/api/cloud-certificates', { action: 'configure', refreshUrl: 'https://api.bambulab.com/applications/test/cert?secret=NEVER-DISPLAY' }, admin)).status, 200);
+  assert.equal((await call('/api/cloud-certificates', { action: 'refresh' }, observer)).status, 403);
+  assert.equal((await call('/api/cloud-certificates', { action: 'refresh' }, admin, 'http://foreign.test')).status, 403);
+  assert.equal((await call('/api/cloud-certificates', { action: 'refresh' }, admin)).status, 502);
+  const credentials = (await call('/api/cloud-certificates', undefined, admin)).body;
+  assert.equal(credentials.renewal.state, 'failed');
+  assert.doesNotMatch(JSON.stringify(credentials), /NEVER-DISPLAY|PRIVATE KEY|applications/);
+
   const result = await call(url, home, admin); assert.equal(result.status, 200); assert.equal(result.body.outcome, 'accepted');
   const control = published.find(item => item.print); assert.ok(control.header); assert.ok(control.print.param_enc);
   assert.equal(privateDecrypt({ key: printer.key, padding: constants.RSA_PKCS1_PADDING }, Buffer.from(control.print.param_enc, 'base64')).toString(), 'G28\n');

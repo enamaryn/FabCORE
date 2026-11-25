@@ -3153,7 +3153,7 @@
         }
       },
       "post": {
-        "summary": "Importer trois fichiers PEM Bambu (chiffrés au repos, aucune commande machine)",
+        "summary": "Importer les PEM Bambu ou configurer/déclencher leur renouvellement, sans commande machine",
         "tags": [
           "cloud"
         ],
@@ -3226,6 +3226,16 @@
             }
           },
           "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
             "description": "Default Response",
             "content": {
               "application/json": {

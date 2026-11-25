@@ -15,12 +15,12 @@ export function internalNtfy(directory) {
 // Validation et forme publique : implémentation unique dans src/application/notifications.ts (MIG-04).
 export { notificationSettings, publicNotifications } from '../src/application/notifications.ts';
 
-const message = 'Notification de test envoyée par FabCore.';
-export async function sendNotification(channel, config, internal, { fetcher = fetch, transport = nodemailer.createTransport } = {}) {
+const defaultMessage = 'Notification de test envoyée par FabCore.';
+export async function sendNotification(channel, config, internal, { fetcher = fetch, transport = nodemailer.createTransport, title = 'FabCore - Test', message = defaultMessage } = {}) {
   if (channel === 'ntfy') {
     const ntfy = config.ntfy?.mode === 'internal' ? internal : config.ntfy?.mode === 'external' ? config.ntfy : null;
     if (!ntfy) return false;
-    const headers = { Title: 'FabCore - Test', 'Content-Type': 'text/plain; charset=utf-8' };
+    const headers = { Title: title, 'Content-Type': 'text/plain; charset=utf-8' };
     if (ntfy.auth === 'bearer') headers.Authorization = 'Bearer ' + ntfy.secret;
     else if (ntfy.username) headers.Authorization = 'Basic ' + Buffer.from(ntfy.username + ':' + ntfy.secret).toString('base64');
     const response = await fetcher(ntfy.url + '/' + ntfy.topic, {
@@ -37,7 +37,7 @@ export async function sendNotification(channel, config, internal, { fetcher = fe
     ...(smtp.auth ? { auth: { user: smtp.username, pass: smtp.secret } } : {})
   });
   try {
-    const result = await client.sendMail({ from: smtp.from, to: smtp.to, subject: 'FabCore - Test', text: message });
+    const result = await client.sendMail({ from: smtp.from, to: smtp.to, subject: title, text: message });
     return result.accepted?.length === 1;
   } finally {
     client.close();

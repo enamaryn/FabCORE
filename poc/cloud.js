@@ -2,6 +2,8 @@
 const cloudUI = { data: null, certificates: null, loading: false, error: '', busy: false };
 function cloudProblem(code) {
   const labels = {
+    'bambu-cert-refresh-failed': ['Renouvellement échoué. Les PEM précédents sont conservés ; vérifiez l’URL ou réimportez les fichiers.', 'Renewal failed. Previous PEMs are preserved; check the URL or import files again.'],
+    'bambu-cert-no-refresh-url': ['Renseignez d’abord l’URL de renouvellement.', 'Set the renewal URL first.'],
     "bambu-cert-refresh-url": ["URL de rafraîchissement invalide : utilisez l’URL HTTPS complète Bambu contenant /applications/, ou laissez vide.", "Invalid refresh URL: use the complete Bambu HTTPS URL containing /applications/, or leave blank."],
     "bambu-cert-crl-format": ["crl.pem : bloc PEM X509 CRL requis.", "crl.pem: X509 CRL PEM block required."],
     "bambu-cert-chain-format": ["chain.pem : bloc PEM CERTIFICATE requis.", "chain.pem: CERTIFICATE PEM block required."],
@@ -47,6 +49,27 @@ function cloudTelemetry(account) {
       ${device.filaments.map(unit => `<div class="stack"><strong>AMS ${unit.id + 1}${Number.isFinite(unit.humidity) ? ' · 💧 ' + unit.humidity + ' %' : ''}${Number.isFinite(unit.temperature) ? ' · ' + temp(unit.temperature) : ''}</strong><div class="row wrap">${unit.slots.map(slot => `<span style="display:inline-flex;align-items:center;gap:6px"><i style="width:18px;height:18px;border:1px solid #888;border-radius:50%;background:${/^#[0-9A-F]{6}$/.test(slot.color ?? '') ? slot.color : 'transparent'}"></i>${slot.id + 1} · ${esc(slot.occupied === false ? t('Vide', 'Empty') : slot.material || t('Inconnu', 'Unknown'))}</span>`).join('')}</div></div>`).join('')}
       <details><summary>${t('Modules et numéros de série', 'Modules and serial numbers')}</summary>${device.modules.map(module => `<p>${esc(module.model || module.name)} · ${esc(module.serial)} · ${esc(module.firmware)}</p>`).join('') || '—'}</details></article>`).join('')}</section>`;
 }
+function cloudCertificateStatus() {
+  const cert = cloudUI.certificates;
+  if (!cert?.configured) return '';
+  const date = value => value ? esc(new Date(value).toLocaleString(state.lang)) : t('Inconnue', 'Unknown');
+  const renewal = cert.renewal ?? {};
+  const expiring = [cert.certificateExpiresAt, cert.crlExpiresAt].some(value => value && Date.parse(value) <= Date.now() + 7 * 86400000);
+  return `<small>${t('Échéance certificats', 'Certificate expiry')} : ${date(cert.certificateExpiresAt)} · CRL : ${date(cert.crlExpiresAt)}</small>
+    ${expiring ? '<p class="notice">'+t('Échéance proche ou dépassée : vérifiez le renouvellement.', 'Expiry is near or past: check renewal status.')+'</p>' : ''}
+    <small>${cert.refreshConfigured ? t('Renouvellement automatique activé', 'Automatic renewal enabled') : t('Renouvellement manuel : URL non renseignée', 'Manual renewal: URL not set')}</small>
+    ${renewal.nextAttemptAt ? '<small>'+t('Prochaine vérification de renouvellement', 'Next renewal attempt')+' : '+date(renewal.nextAttemptAt)+'</small>' : ''}
+    ${renewal.lastSuccessAt ? '<small>'+t('Dernier renouvellement réussi', 'Last successful renewal')+' : '+date(renewal.lastSuccessAt)+'</small>' : ''}
+    ${renewal.lastError ? '<p class="error" role="alert">'+esc(cloudProblem(renewal.lastError))+'</p>' : ''}
+    <div class="row wrap">${btn('cloud-certs-configure', t('URL de renouvellement', 'Renewal URL'))}${cert.refreshConfigured ? btn('cloud-certs-refresh', t('Renouveler maintenant', 'Renew now'), '', '', cloudUI.busy ? 'disabled' : '') : ''}</div>`;
+}
+function cloudRenewalForm() {
+  dialog.innerHTML = `<form id="cloud-renewal-form" class="stack" autocomplete="off"><h2>${t('URL de renouvellement Bambu', 'Bambu renewal URL')}</h2>
+    <label>trigger-url<input name="refreshUrl" type="url" maxlength="4096" placeholder="https://…/applications/…/cert?aes256=…"></label>
+    <p>${t('Cette URL est secrète et ne sera jamais réaffichée. Un champ vide désactive le renouvellement automatique.', 'This URL is secret and will never be displayed again. A blank field disables automatic renewal.')}</p>
+    <p class="error" role="alert"></p><div class="row">${btn('close',t('Annuler','Cancel'))}<button type="submit">${t('Enregistrer','Save')}</button></div></form>`;
+  if (!dialog.open) dialog.showModal();
+}
 function cloudPage() {
   const header = title(t('Comptes cloud', 'Cloud accounts'), t('Comptes constructeur · plusieurs fabricants et plusieurs comptes par fabricant.', 'Manufacturer accounts · multiple manufacturers and accounts.'),
     btn('cloud-add', t('Ajouter un compte', 'Add account'), 'plus', 'primary', cloudUI.loading ? 'disabled' : ''));
@@ -58,7 +81,7 @@ function cloudPage() {
       <div class="row between wrap"><div class="stack"><h2>${t('Certificats applicatifs Bambu', 'Bambu application certificates')}</h2><small>${t('Ensemble global pour ce serveur, indépendant des comptes Cloud.', 'One server-wide set, independent of Cloud accounts.')}</small></div>${btn('cloud-certs-upload',t('Importer 3 fichiers PEM','Import 3 PEM files'),'plus')}</div>
       <strong>${cloudUI.certificates?.configured ? t('Fichiers importés', 'Files imported') : t('Aucun certificat importé', 'No certificate imported')}</strong>
       ${cloudUI.certificates?.fingerprint ? '<small>'+esc(cloudUI.certificates.fingerprint)+'</small>' : ''}
-      ${cloudUI.certificates?.refreshConfigured ? '<small>'+t('URL de renouvellement de la CRL enregistrée','CRL renewal URL saved')+'</small>' : ''}
+      ${cloudCertificateStatus()}
       <small>${t('Stockage chiffré local. Format PEM uniquement ; l’imprimante décidera de l’acceptation. Cet import ne déclenche aucune commande.', 'Encrypted local storage. PEM format only; the printer decides acceptance. Import does not trigger commands.')}</small>
     </section>
     <p class="notice">${t('Bambu Lab : les machines ajoutées depuis ce compte utilisent les commandes cloud signées avec les PEM importés. Fichiers via FTPS local ; renseignez leur adresse dans les réglages caméra.', 'Bambu Lab: devices imported from this account use signed cloud commands with the imported PEMs. Files use local FTPS; set the address in camera settings.')}</p>
@@ -97,7 +120,7 @@ function cloudCertificateForm() {
     <label>chain.pem — ${t('Chaîne de certificats','Certificate chain')}<input name="chain" type="file" accept=".pem,text/plain" required></label>
     <label>crl.pem — ${t('Liste de révocation','Certificate revocation list')}<input name="crl" type="file" accept=".pem,text/plain" required></label>
     <label>${t('URL de rafraîchissement (optionnel)','Refresh URL (optional)')} — trigger-url<input name="refreshUrl" type="url" inputmode="url" placeholder="https://…/applications/…/cert?aes256=…"></label>
-    <p class="notice">${t('URL conservée pour un futur renouvellement de la CRL. Le renouvellement automatique n’est pas encore activé. À traiter comme un secret.', 'URL saved for future CRL renewal. Automatic renewal is not enabled yet. Treat it as a secret.')}</p>
+    <p class="notice">${t('Cette URL active le renouvellement automatique des PEM avant leur échéance. Elle reste secrète.', 'This URL enables automatic PEM renewal before expiry. It remains secret.')}</p>
     <p class="error" role="alert"></p><p role="status" hidden>${t('Vérification et stockage…','Validating and storing…')}</p>
     <div class="row wrap">${btn('close',t('Annuler','Cancel'))}<button class="primary" type="submit">${t('Importer','Import')}</button></div></form>`;
   if (!dialog.open) dialog.showModal();
@@ -135,6 +158,14 @@ async function cloudClick(event) {
   if (!action?.startsWith('cloud-') || live.phase !== 'workshop' || state.role !== 'admin') return;
   const [kind, id, serial] = action.split(':');
   if (kind === 'cloud-open') return openCloudAccounts();
+  if (kind === 'cloud-certs-configure') return cloudRenewalForm();
+  if (kind === 'cloud-certs-refresh') {
+    if (cloudUI.busy) return; cloudUI.busy = true; renderLive();
+    try { await api('cloud-certificates', { action: 'refresh' }); }
+    catch (failure) { cloudUI.error = failure.code; }
+    finally { cloudUI.busy = false; const failure = cloudUI.error; await openCloudAccounts(); if (failure) { cloudUI.error = failure; renderLive(); } }
+    return;
+  }
   if (kind === 'cloud-certs-upload') return cloudCertificateForm();
   if (kind === 'cloud-add') { if (cloudUI.data) cloudAccountForm(); return; }
   const account = cloudUI.data?.accounts.find(item => item.id === id);
@@ -235,3 +266,13 @@ setInterval(async () => {
   catch { /* Explicit refresh still displays connection errors. */ }
   finally { cloudRefreshPending = false; }
 }, 5000);
+
+dialog.addEventListener('submit', async event => {
+  const form = event.target;
+  if (form?.getAttribute?.('id') !== 'cloud-renewal-form') return;
+  event.preventDefault(); if (cloudUI.busy || state.role !== 'admin') return;
+  cloudUI.busy = true;
+  try { await api('cloud-certificates', { action: 'configure', refreshUrl: form.elements.namedItem('refreshUrl').value.trim() }); form.reset(); dialog.close(); await openCloudAccounts(); }
+  catch (failure) { form.querySelector('[role=alert]').textContent = cloudProblem(failure.code); }
+  finally { cloudUI.busy = false; }
+});
