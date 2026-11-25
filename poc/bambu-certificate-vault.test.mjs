@@ -23,7 +23,12 @@ test('Bambu PEM import: matching chain, encrypted storage, metadata only', { ski
     const crl='-----BEGIN X509 CRL-----\nYQ==\n-----END X509 CRL-----\n';
     const vault=createBambuCertificateVault(join(dir,'data'));
     assert.deepEqual(vault.status(),{configured:false});
-    assert.throws(()=>vault.install({key:'wrong',chain,crl}),/bambu-cert-invalid/);
+    assert.throws(()=>vault.install({key:'wrong',chain,crl}),/bambu-cert-key-format/);
+    assert.throws(()=>vault.install({key,chain,crl,refreshUrl:'https://api.bambulab.com'}), /bambu-cert-refresh-url/);
+    assert.throws(()=>vault.install({key,chain,crl,refreshUrl:'https://evilbambulab.com/applications/test'}), /bambu-cert-refresh-url/);
+    assert.throws(()=>vault.install({key,chain:chain+chain,crl}), /bambu-cert-chain-count/);
+    assert.throws(()=>vault.install({key,chain,crl:'wrong'}), /bambu-cert-crl-format/);
+    assert.throws(()=>vault.install(null), /bambu-cert-invalid/);
     const status=vault.install({key,chain,crl});
     assert.equal(status.configured,true);
     assert.equal(status.certificateCount,3);
@@ -32,7 +37,7 @@ test('Bambu PEM import: matching chain, encrypted storage, metadata only', { ski
     assert.equal(JSON.stringify(vault.status()).includes('PRIVATE KEY'),false);
     assert.equal(statSync(join(dir,'data','bambu-application-credentials','vault.key')).mode & 0o777,0o600);
     assert.equal(createBambuCertificateVault(join(dir,'data')).status().fingerprint,status.fingerprint);
-    assert.throws(()=>vault.install({key,chain:chain.replace('CERTIFICATE','BROKEN'),crl}),/bambu-cert-invalid/);
+    assert.throws(()=>vault.install({key,chain:chain.replace('CERTIFICATE','BROKEN'),crl}),/bambu-cert-chain-count/);
     assert.equal(vault.status().fingerprint,status.fingerprint);
   } finally { rmSync(dir,{recursive:true,force:true}); }
 });

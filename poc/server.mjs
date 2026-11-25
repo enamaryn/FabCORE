@@ -291,7 +291,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     try { data = await readJson(req, 160 * 1024); }
     catch { return error(res, 400, 'bambu-cert-invalid'); }
     try { return answer(res, 200, bambuCertificates.install(data)); }
-    catch (failure) { return error(res, failure.status ?? 503, failure.message === 'bambu-cert-invalid' ? failure.message : 'bambu-cert-storage'); }
+    catch (failure) { return error(res, failure.status ?? 503, failure.status === 400 && /^bambu-cert-[a-z-]+$/.test(failure.message) ? failure.message : 'bambu-cert-storage'); }
   }
 
   async function handleCloudAction(req, res) {
