@@ -42,7 +42,7 @@ test('HTTP caméra Cloud : configuration admin, source réelle, aperçu observat
   assert.equal((await call(config, { mode: 'lan', host: '169.254.169.254' }, admin)).status, 400);
   assert.equal((await call(camera, undefined, admin)).data.error, 'camera-disabled');
   assert.equal((await call(config, { ...body, accessCode: 'IGNORE' }, admin)).status, 200);
-  const fleet = (await call('/api/machines', undefined, observer)).data.machines[0]; assert.equal(fleet.kind, 'bambu-cloud'); assert.equal(fleet.camera.source, 'lan'); assert.equal(fleet.camera.transport, 'rtsps'); assert.equal(fleet.capabilities.commands, false); assert.doesNotMatch(JSON.stringify(fleet), /ABCD1234|IGNORE|TEST.private/);
+  const fleet = (await call('/api/machines', undefined, observer)).data.machines[0]; assert.equal(fleet.kind, 'bambu-cloud'); assert.equal(fleet.camera.source, 'lan'); assert.equal(fleet.camera.transport, 'rtsps'); assert.equal(fleet.capabilities.commands, true); assert.doesNotMatch(JSON.stringify(fleet), /ABCD1234|IGNORE|TEST.private/);
   assert.equal((await call(camera)).status, 401); assert.equal(opens, 0);
   const preview = await call(camera, undefined, observer); assert.equal(preview.status, 200); assert.equal(preview.headers['content-type'], 'image/jpeg'); assert.deepEqual([...preview.bytes], [255, 216, 255, 217]);
   const again = await call(camera, undefined, admin); assert.equal(again.status, 200); assert.equal(binds, 2, 'credential inventory shared for preview/reopen');

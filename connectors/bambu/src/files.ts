@@ -10,11 +10,13 @@ type MakeClient = () => Client;
 /** Fichiers P2S en FTPS implicite (port 990) ; le lancement passe par la session MQTT existante. */
 export function createP2SFiles(send: Send, { ca, productionPath }: P2SFilePorts, makeClient: MakeClient = () => new Client(15000, { allowSeparateTransferHost: false })) {
   async function access(machine: P2SConnection) {
+    if (machine.authorized && !machine.authorized()) throw new Error('cloud-auth');
     const client = makeClient();
     try {
       await client.access({ host: new URL(machine.origin).hostname, port: 990, user: 'bblp', password: machine.accessCode,
         secure: 'implicit', secureOptions: { ca, rejectUnauthorized: true, minVersion: 'TLSv1.2', maxVersion: 'TLSv1.2',
           checkServerIdentity: (_host: string, certificate: PeerCertificate) => checkServerIdentity(machine.serial, certificate) } });
+      if (machine.authorized && !machine.authorized()) throw new Error('cloud-auth');
       return client;
     } catch (error) { client.close(); throw error; }
   }

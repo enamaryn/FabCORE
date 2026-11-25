@@ -29,6 +29,7 @@ import { createVersionService } from '../src/application/version.ts';
 import { createFleetWatcher, observeFleet } from '../src/application/fleet-events.ts';
 import { openStore } from './store.mjs';
 import { createCloudAccounts, CloudError } from './cloud-accounts.mjs';
+import { createBambuSigner } from './bambu-signing.mjs';
 import { createBambuCertificateVault } from './bambu-certificate-vault.mjs';
 import { validateControl } from './manual-controls.mjs';
 import { ray5Path } from './longer-ray5-files.mjs';
@@ -129,8 +130,9 @@ export function createFabCore({ directory, store: storage = openStore(directory)
   const store = observeFleet(storage, events);
   // Écriture attendue avant toute réponse ; base indisponible : 503, état précédent conservé (PostgreSQL, MIG-04).
   const persist = createPersist(store);
-  const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt, context: currentRequestId });
   const bambuCertificates = createBambuCertificateVault(directory);
+  const cloud = createCloudAccounts({ store, directory, fetcher: cloudFetch, connectMqtt: cloudMqtt, context: currentRequestId,
+    createSigner: () => { const material = bambuCertificates.load(); return material ? createBambuSigner(material) : null; } });
   const token = store.state.admin ? null : (activationToken ?? randomBytes(24).toString('base64url'));
   const activation = token ? { hash: digest(token), expires: Date.now() + activationAge } : null;
   // Cas d'usage migrés en TypeScript (MIG-04) : comptes, notifications, bobine manuelle.

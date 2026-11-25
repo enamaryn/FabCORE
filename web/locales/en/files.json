@@ -65,7 +65,7 @@
     "command-busy": "A command is already in progress.",
     "command-rejected": "The machine rejected starting. Check its logs.",
     "command-unconfirmed": "Outcome unknown. Check the machine and logs before sending another request. No automatic replay.",
-    "bambu-authorization": "Bambu command not authorized. Check LAN developer mode and logs.",
+    "bambu-authorization": "Bambu command not authorized. In cloud, check imported PEMs; in LAN, check Developer Mode and logs.",
     "forbidden": "This action requires an administrator account.",
     "sign-in": "Session expired. Sign in again.",
     "project-format": "Unsupported project format.",

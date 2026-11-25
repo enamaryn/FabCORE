@@ -65,7 +65,7 @@
     "command-busy": "Une commande est déjà en cours.",
     "command-rejected": "La machine a refusé le lancement. Consultez ses logs.",
     "command-unconfirmed": "Résultat inconnu. Vérifiez la machine et ses logs avant toute nouvelle demande. Aucun renvoi automatique.",
-    "bambu-authorization": "Commande Bambu non autorisée. Vérifiez le mode développeur en LAN et les logs.",
+    "bambu-authorization": "Commande Bambu non autorisée. En cloud, vérifiez les PEM importés ; en LAN, le mode développeur et les logs.",
     "forbidden": "Cette action exige un compte administrateur.",
     "sign-in": "Session expirée. Reconnectez-vous.",
     "project-format": "Format de projet non pris en charge.",

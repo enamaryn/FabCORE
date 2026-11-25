@@ -30,11 +30,12 @@ test('Cockpit : six blocs stables, aucun flux automatique ni fabrication invent�
     assert.match(html, /Avancement non communiqué/);
   }
 });
-test('Cockpit : pause/stop selon état et capacités, aucun bouton d’écriture pour observateur ou cloud', () => {
+test('Cockpit : pause/stop selon état et capacités, commandes cloud selon capacités, aucune écriture observateur', () => {
   assert.match(render(), />Pause<\/button>/); assert.match(render(), />Stop<\/button>/); assert.doesNotMatch(render(), />Reprendre<\/button>/);
   const observer = render(machine, 'observer'); assert.doesNotMatch(observer, />Pause<\/button>|>Stop<\/button>|\/logs"|Renseigner la bobine|Paramètres de la machine/);
   const paused = render({ ...machine, status: 'paused' }); assert.match(paused, />Reprendre<\/button>/); assert.doesNotMatch(paused, />Pause<\/button>/);
-  const cloud = render({ ...machine, kind: 'bambu-cloud', capabilities: { filaments: 'AMS' } }); assert.match(cloud, /lecture seule/); assert.doesNotMatch(cloud, />Pause<\/button>|>Stop<\/button>/);
+  const cloud = render({ ...machine, kind: 'bambu-cloud', capabilities: { filaments: 'AMS' } }); assert.match(cloud, /Commandes cloud signées/); assert.doesNotMatch(cloud, />Pause<\/button>|>Stop<\/button>/);
+  assert.match(render({ ...machine, kind: 'bambu-cloud' }), />Pause<\/button>/);
   assert.doesNotMatch(render({ ...machine, status: 'offline' }), />Pause<\/button>|>Stop<\/button>/);
 });
 test('Cockpit : quatre modules compacts, humidité bornée et priorité sur bobine manuelle', () => {
@@ -56,6 +57,6 @@ test('Températures : ruptures pointillées et historique vide explicite', () =>
 test('Caméra hybride : transport LAN explicitement affiché sous compte Cloud, réglages réservés admin', () => {
   const cloud = { ...machine, kind: 'bambu-cloud', capabilities: { camera: true, filaments: 'AMS' }, camera: { mode: 'auto', host: '192.168.1.20', source: 'lan', transport: 'rtsps', available: true, experimental: true, issue: null } };
   const html = render(cloud); assert.match(html, /télémétrie Cloud \+ caméra LAN/); assert.match(html, /RTSPS/); assert.match(html, /Paramètres vidéo/);
-  assert.doesNotMatch(render(cloud, 'observer'), /Paramètres vidéo/);
+  assert.doesNotMatch(render(cloud, 'observer'), /<button[^>]*>Paramètres vidéo/);
   assert.match(render({ ...cloud, capabilities: { camera: false }, camera: { ...cloud.camera, issue: 'camera-cloud-unqualified', available: false } }), /Cloud distante non qualifiée/);
 });

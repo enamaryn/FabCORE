@@ -1,5 +1,5 @@
 {
-  "settings": "Paramètres vidéo",
+  "settings": "Paramètres vidéo et fichiers",
   "mode": "Source caméra",
   "modes": {
     "auto": "Automatique (LAN si configuré)",
@@ -8,7 +8,7 @@
     "disabled": "Désactivée"
   },
   "host": "Adresse IPv4 locale de la machine",
-  "scope": "La supervision reste Cloud. Le code caméra est demandé côté serveur au compte Bambu ; aucune commande de fabrication ni changement de mode de la machine.",
+  "scope": "L’adresse locale sert à la caméra et aux fichiers FTPS, même si la caméra est désactivée. Les commandes restent sur le compte cloud ; aucun changement de mode sur l’imprimante.",
   "invalid": "Configuration invalide ou enregistrement refusé. Utilisez une IPv4 privée, sans URL ni port.",
   "saving": "Enregistrement…",
   "save": "Enregistrer",

@@ -1,3 +1,4 @@
+import { privateIPv4 } from './connector-http.mjs';
 import { CloudError, safeCloudPayload, createCloudHttp } from '../connectors/bambu/src/cloud-http.ts';
 import { createCloudMonitor } from './bambu-cloud-monitor.mjs';
 import { randomBytes, randomUUID, createCipheriv, createDecipheriv } from 'node:crypto';
@@ -16,7 +17,7 @@ const fail = (code, status) => { throw new CloudError(code, status); };
 const text = (value, max) => typeof value === 'string' && value.length <= max ? value.trim() : '';
 
 // Log sanitized protocol bodies and selected HTTP metadata, never raw credentials or exceptions.
-export function createCloudAccounts({ store, directory, fetcher = fetch, now = Date.now, connectMqtt, context = () => undefined }) {
+export function createCloudAccounts({ store, directory, fetcher = fetch, now = Date.now, connectMqtt, createSigner, context = () => undefined }) {
   const logDirectory = join(directory, 'cloud-logs');
   mkdirSync(logDirectory, { recursive: true, mode: 0o700 });
   const monitors = new Map();
@@ -135,7 +136,12 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       const username = await mqttUsername(account, token);
       const current = find(id);
       if (closed || !current.telemetryEnabled || current.secret !== secret) return;
-      monitors.set(id, createCloudMonitor({ account: current, token, username, now, connectMqtt,
+      monitors.set(id, createCloudMonitor({ account: current, token, username, now, connectMqtt, createSigner,
+        authorized: serial => {
+          const saved = entries().find(item => item.id === id);
+          return !closed && saved?.secret === secret && saved.status === 'connected' && saved.telemetryEnabled && saved.devices?.some(device => device.serial === serial) &&
+            store.state.machines.some(machine => machine.kind === 'bambu-cloud' && machine.cloudAccountId === id && machine.serial === serial);
+        },
         log: (event, details) => log(id, event, safeCloudPayload(details, [token])) }));
     })();
     starts.set(id, task);
@@ -145,7 +151,18 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
   queueMicrotask(() => { if (!closed) for (const account of entries()) if (account.telemetryEnabled && account.status === 'connected') {
     startMonitor(account.id).catch(error => { if (closed || !entries().some(item => item.id === account.id)) return; try { log(account.id, 'mqtt-start-failed', { code: error instanceof CloudError ? error.message : 'cloud-unavailable' }); } catch {} });
   } });
+  function commandMonitor(machine) {
+    const target = store.state.machines.find(item => item.id === machine.id);
+    const account = entries().find(item => item.id === machine.cloudAccountId);
+    if (closed || machine.kind !== 'bambu-cloud' || target?.kind !== 'bambu-cloud' || target.cloudAccountId !== machine.cloudAccountId || target.serial !== machine.serial ||
+        !account?.secret || account.provider !== 'bambu' || account.status !== 'connected' || !account.telemetryEnabled || !account.devices?.some(device => device.serial === target.serial)) fail('cloud-auth', 401);
+    const monitor = monitors.get(account.id);
+    if (!monitor) fail('cloud-unavailable');
+    return monitor;
+  }
   return {
+    send(machine, command, params = {}, channel = 'print') { return commandMonitor(machine).send(machine.serial, command, params, channel); },
+    controlState(machine) { return commandMonitor(machine).controlState(machine.serial); },
     list() { return { providers: cloudProviders, accounts: entries().map(publicAccount) }; },
     async add(data) {
       if (entries().length >= 24) fail('cloud-limit', 409);
@@ -205,6 +222,15 @@ export function createCloudAccounts({ store, directory, fetcher = fetch, now = D
       log(id, 'machine-imported', { serial, machineId: machine.id });
       return { id: machine.id };
     }); },
+    async fileConnection(machine, signal) {
+      commandMonitor(machine);
+      const target = store.state.machines.find(item => item.id === machine.id);
+      const host = target?.camera?.host;
+      if (!privateIPv4(host)) fail('files-host-required', 400);
+      const { accessCode, authorized } = await this.cameraConnection(target, signal);
+      if (!authorized()) fail('cloud-auth', 401);
+      return { ...target, origin: 'mqtts://' + host + ':8883', accessCode, authorized };
+    },
     async cameraConnection(machine, signal) {
       const account = find(machine.cloudAccountId);
       const authorized = () => {

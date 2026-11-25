@@ -61,7 +61,7 @@ function cloudPage() {
       ${cloudUI.certificates?.refreshConfigured ? '<small>'+t('URL de renouvellement de la CRL enregistrée','CRL renewal URL saved')+'</small>' : ''}
       <small>${t('Stockage chiffré local. Format PEM uniquement ; l’imprimante décidera de l’acceptation. Cet import ne déclenche aucune commande.', 'Encrypted local storage. PEM format only; the printer decides acceptance. Import does not trigger commands.')}</small>
     </section>
-    <p class="notice">${t('Pilote Bambu Lab : authentification, inventaire et suivi des températures/AMS en lecture seule. Aucun lancement, chauffe ou mouvement. Ajoutez chaque machine au parc avec Ajout automatique.', 'Bambu Lab pilot: sign-in, inventory and read-only temperature/AMS monitoring. No printing, heating or motion. Use Add automatically to add a device to the fleet.')}</p>
+    <p class="notice">${t('Bambu Lab : les machines ajoutées depuis ce compte utilisent les commandes cloud signées avec les PEM importés. Fichiers via FTPS local ; renseignez leur adresse dans les réglages caméra.', 'Bambu Lab: devices imported from this account use signed cloud commands with the imported PEMs. Files use local FTPS; set the address in camera settings.')}</p>
     ${cloudUI.error ? `<p class="error" role="alert">${esc(cloudProblem(cloudUI.error))}</p>` : ''}
     <div class="stack">${cloudUI.data.accounts.map(account => {
       const provider = providers.get(account.provider);
