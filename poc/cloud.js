@@ -3,14 +3,9 @@ const cloudUI = { data: null, certificates: null, loading: false, error: '', bus
 function cloudProblem(code) {
   const labels = {
     "bambu-cert-refresh-url": ["URL de rafraîchissement invalide : utilisez l’URL HTTPS complète Bambu contenant /applications/, ou laissez vide.", "Invalid refresh URL: use the complete Bambu HTTPS URL containing /applications/, or leave blank."],
-    "bambu-cert-certificate-dates": ["Un certificat est expiré ou pas encore valide. Vérifiez aussi la date du serveur.", "A certificate has expired or is not valid yet. Also check the server clock."],
-    "bambu-cert-chain-signature": ["Chaîne incohérente : vérifiez les signatures et l’ordre application, intermédiaire, racine.", "Invalid chain: check signatures and application, intermediate, root order."],
-    "bambu-cert-key-mismatch": ["La clé privée ne correspond pas au premier certificat de chain.pem. Vérifiez aussi leur ordre.", "Private key does not match the first chain.pem certificate. Check certificate order."],
-    "bambu-cert-chain-count": ["chain.pem : exactement trois certificats sont attendus (application, intermédiaire, racine).", "chain.pem: exactly three certificates required (application, intermediate, root)."],
     "bambu-cert-crl-format": ["crl.pem : bloc PEM X509 CRL requis.", "crl.pem: X509 CRL PEM block required."],
-    "bambu-cert-chain-format": ["chain.pem : certificat PEM illisible.", "chain.pem: unreadable PEM certificate."],
-    "bambu-cert-key-type": ["key.pem : une clé RSA de 2048 bits minimum est requise.", "key.pem: RSA key of at least 2048 bits required."],
-    "bambu-cert-key-format": ["key.pem : clé privée PEM illisible ou chiffrée.", "key.pem: unreadable or encrypted PEM private key."],
+    "bambu-cert-chain-format": ["chain.pem : bloc PEM CERTIFICATE requis.", "chain.pem: CERTIFICATE PEM block required."],
+    "bambu-cert-key-format": ["key.pem : bloc PEM de clé privée requis.", "key.pem: private key PEM block required."],
     'bambu-cert-invalid': ['Fichiers PEM invalides : vérifiez la clé et les certificats.', 'Invalid PEM files: check the key and certificates.'],
     'bambu-cert-storage': ['Stockage chiffré indisponible.', 'Encrypted storage unavailable.'],
     'cloud-machine-exists': ['Cette machine est déjà dans FabCore, en LAN ou en cloud.', 'This device is already in FabCore, via LAN or cloud.'],
@@ -64,7 +59,7 @@ function cloudPage() {
       <strong>${cloudUI.certificates?.configured ? t('Fichiers importés', 'Files imported') : t('Aucun certificat importé', 'No certificate imported')}</strong>
       ${cloudUI.certificates?.fingerprint ? '<small>'+esc(cloudUI.certificates.fingerprint)+'</small>' : ''}
       ${cloudUI.certificates?.refreshConfigured ? '<small>'+t('URL de renouvellement de la CRL enregistrée','CRL renewal URL saved')+'</small>' : ''}
-      <small>${t('Stockage chiffré local. Cet import ne déclenche aucune commande sur la machine.', 'Encrypted local storage. Import does not trigger printer commands.')}</small>
+      <small>${t('Stockage chiffré local. Format PEM uniquement ; l’imprimante décidera de l’acceptation. Cet import ne déclenche aucune commande.', 'Encrypted local storage. PEM format only; the printer decides acceptance. Import does not trigger commands.')}</small>
     </section>
     <p class="notice">${t('Pilote Bambu Lab : authentification, inventaire et suivi des températures/AMS en lecture seule. Aucun lancement, chauffe ou mouvement. Ajoutez chaque machine au parc avec Ajout automatique.', 'Bambu Lab pilot: sign-in, inventory and read-only temperature/AMS monitoring. No printing, heating or motion. Use Add automatically to add a device to the fleet.')}</p>
     ${cloudUI.error ? `<p class="error" role="alert">${esc(cloudProblem(cloudUI.error))}</p>` : ''}
@@ -99,7 +94,7 @@ function cloudCertificateForm() {
     <h2>${t('Importer les certificats Bambu','Import Bambu certificates')}</h2>
     <p class="notice">${t('Trois fichiers PEM requis. La clé privée est conservée chiffrée, jamais affichée ni renvoyée par le serveur. Aucun pilotage activé.', 'Three PEM files required. Private key encrypted, never displayed or returned. No controls enabled.')}</p>
     <label>key.pem — ${t('Clé privée RSA','RSA private key')}<input name="key" type="file" accept=".pem,.key,text/plain" required></label>
-    <label>chain.pem — ${t('Chaîne de trois certificats','Three-certificate chain')}<input name="chain" type="file" accept=".pem,text/plain" required></label>
+    <label>chain.pem — ${t('Chaîne de certificats','Certificate chain')}<input name="chain" type="file" accept=".pem,text/plain" required></label>
     <label>crl.pem — ${t('Liste de révocation','Certificate revocation list')}<input name="crl" type="file" accept=".pem,text/plain" required></label>
     <label>${t('URL de rafraîchissement (optionnel)','Refresh URL (optional)')} — trigger-url<input name="refreshUrl" type="url" inputmode="url" placeholder="https://…/applications/…/cert?aes256=…"></label>
     <p class="notice">${t('URL conservée pour un futur renouvellement de la CRL. Le renouvellement automatique n’est pas encore activé. À traiter comme un secret.', 'URL saved for future CRL renewal. Automatic renewal is not enabled yet. Treat it as a secret.')}</p>
