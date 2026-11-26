@@ -66,8 +66,8 @@ export const operationRoutes = (handlers: OperationHandlers): RouteModule => (ap
   // Commandes et contrôles : confirmations, état requis, verrou par machine, aucun rejeu (MIG-03.2.1).
   app.post(`/api/machines/${id}/command`, {
     onRequest: guards.raw(handlers.command, admin),
-    schema: { summary: 'Pause, reprise, arrêt ou lancement préparé (confirmation pour arrêt et lancement)', tags: ['commandes'], security: session, params: Params,
-      response: { 200: json('État observé après la commande.'), ...errorResponses(400, 401, 403, 404, 409, 415, 421, 502, 504) } },
+    schema: { summary: 'Pause, reprise, annulation, urgence logicielle selon capacités ou lancement préparé (confirmation pour annulation, urgence et lancement)', tags: ['commandes'], security: session, params: Params,
+      response: { 200: json('État observé ; urgence : issue accepted/confirmed/rejected/unknown et code HTTP natif, sans garantie de coupure matérielle.'), ...errorResponses(400, 401, 403, 404, 409, 415, 421, 429, 502, 504) } },
   }, none);
   for (const method of ['GET', 'POST'] as const) {
     app.route({ method, url: `/api/machines/${id}/controls`,

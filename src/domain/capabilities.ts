@@ -1,7 +1,7 @@
 import Type from 'typebox';
 
 /** Commandes de fabrication réellement implémentées par un connecteur (CONNECTORS.md). */
-export const CommandAction = Type.Union([Type.Literal('start'), Type.Literal('pause'), Type.Literal('resume'), Type.Literal('stop')]);
+export const CommandAction = Type.Union([Type.Literal('start'), Type.Literal('pause'), Type.Literal('resume'), Type.Literal('stop'), Type.Literal('emergencyStop')]);
 export type CommandAction = Type.Static<typeof CommandAction>;
 
 export const FileFamily = Type.Union([Type.Literal('fdm'), Type.Literal('laser')]);

@@ -22,6 +22,7 @@ interface LegacyDefinition {
 /** Connecteur chargé par le registre du POC. */
 interface LegacyConnector {
   read(machine: unknown, options?: { signal?: AbortSignal }): Promise<Record<string, unknown>>;
+  emergencyStop?(machine: unknown): Promise<{ outcome: 'accepted' | 'rejected' | 'unknown'; nativeCode?: number }>;
   command?(machine: unknown, action: CommandAction): Promise<unknown>;
 }
 
@@ -123,6 +124,11 @@ export function createTypedConnectorRegistry(options: Record<string, unknown>, r
             ({ commandId, outcome, at: now().toISOString(), ...(code ? { error: { code } } : {}) });
           if (!declared.capabilities.commands || !declared.capabilities.commandActions.includes(action)) return result('rejected', 'command.unsupported');
           const connector = await load(kind);
+          if (action === 'emergencyStop') {
+            if (!connector.emergencyStop) return result('rejected', 'command.unsupported');
+            try { const emergency = await connector.emergencyStop(machine); return { ...result(emergency.outcome), ...(emergency.nativeCode === undefined ? {} : { nativeCode: emergency.nativeCode }) }; }
+            catch { return result('unknown', 'command.unconfirmed'); }
+          }
           if (!connector.command) return result('rejected', 'command.unsupported');
           try {
             return await connector.command(machine, action) ? result('accepted') : result('rejected', 'command.rejected');

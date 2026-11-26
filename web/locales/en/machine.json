@@ -80,7 +80,8 @@
     "pause": "Pause",
     "resume": "Resume",
     "stop": "Stop",
-    "start": "Start"
+    "start": "Start",
+    "emergencyStop": "Software emergency stop"
   },
   "outcomes": {
     "accepted": "Command accepted; execution still needs to be checked on the machine.",
@@ -105,5 +106,17 @@
   "cameraEnlarge": "Enlarge camera",
   "cameraReduce": "Shrink camera",
   "cameraPage": "Full page",
-  "cameraExitPage": "Exit full page (Esc)"
+  "cameraExitPage": "Exit full page (Esc)",
+  "emergencyTitle": "Software emergency stop",
+  "emergencyLimitation": "Depends on network and firmware. Hardware or heater shutdown is not guaranteed.",
+  "emergencyUnavailable": "Unavailable: no qualified emergency primitive for this connector, model and firmware. Stop remains cancellation.",
+  "confirmEmergency": "Send a software emergency stop to “{name}”?",
+  "emergencyOutcomes": {
+    "accepted": "Command accepted; stop not confirmed.",
+    "confirmed": "Software shutdown state confirmed; heaters not measured.",
+    "rejected": "Command refused.",
+    "unknown": "Outcome unknown; check the machine. No automatic resend."
+  },
+  "nativeState": "Manufacturer state",
+  "nativeExceptions": "Exceptions"
 }

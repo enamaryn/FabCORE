@@ -9,7 +9,7 @@ export const Command = Type.Object({
   action: CommandAction,
   requestedBy: Type.String({ minLength: 1, maxLength: 120 }),
   requestedAt: Type.String({ format: 'date-time' }),
-  /** Confirmation explicite de l'utilisateur, requise pour `start` et `stop`. */
+  /** Confirmation explicite de l'utilisateur, requise pour `start`, `stop` et `emergencyStop`. */
   confirmed: Type.Boolean(),
 }, { additionalProperties: false });
 
@@ -37,6 +37,8 @@ export const CommandResult = Type.Object({
   outcome: CommandOutcome,
   at: Type.String({ format: 'date-time' }),
   error: Type.Optional(FabError),
+  /** Code HTTP natif conservé sans l’assimiler à une confirmation physique. */
+  nativeCode: Type.Optional(Type.Integer()),
 }, { additionalProperties: false });
 
 export type CommandResult = Type.Static<typeof CommandResult>;

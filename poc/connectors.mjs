@@ -86,10 +86,10 @@ const definitions = {
   klipper: httpConnector('Klipper · Moonraker', 7125, false, async ({ readPrinter, sendCommand, sendGcode, fetchFiles }) => {
     const mod = await import('./moonraker.mjs');
     const read = readPrinter ?? mod.readMoonraker;
-    return { read: machine => read(machine), probe: probeStatus(machine => read(machine), ['print']), command: sendCommand ?? mod.commandMoonraker,
+    return { read: machine => read(machine), probe: probeStatus(machine => read(machine), ['print']), command: sendCommand ?? mod.commandMoonraker, emergencyStop: machine => mod.emergencyStopMoonraker(machine, fetchFiles),
       files: mod.createMoonrakerFiles(fetchFiles), gcode: sendGcode ?? mod.sendMoonrakerGcode,
       camera: (machine, output, signal, frame) => declaredCamera(mod.moonrakerWebcam(machine, fetchFiles), output, signal, frame) };
-  }, { camera: true, commands: true, commandActions: ['pause', 'resume', 'stop'], files: true, terminal: true, controls: true }),
+  }, { camera: true, commands: true, commandActions: ['pause', 'resume', 'stop', 'emergencyStop'], files: true, terminal: true, controls: true }),
   octoprint: httpConnector('OctoPrint', 5000, true, async ({ readOcto, sendGcode, fetchFiles, sendCommand }) => {
     const mod = await import('./octoprint.mjs');
     const read = readOcto ?? mod.readOctoPrint;

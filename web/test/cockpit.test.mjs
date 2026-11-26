@@ -60,3 +60,16 @@ test('Caméra hybride : transport LAN explicitement affiché sous compte Cloud, 
   assert.doesNotMatch(render(cloud, 'observer'), /<button[^>]*>Paramètres vidéo/);
   assert.match(render({ ...cloud, capabilities: { camera: false }, camera: { ...cloud.camera, issue: 'camera-disabled', available: false } }), /Caméra désactivée/);
 });
+
+test('urgence : commande distincte hors impression, indisponibilité explicite, droits et codes natifs', () => {
+  const capable = { ...machine, name: 'Voron cible', kind: 'klipper', status: 'error', capabilities: { ...machine.capabilities, commandActions: ['emergencyStop'] } };
+  const html = render(capable);
+  assert.match(html, />Arrêt d’urgence logiciel<\/button>/);
+  assert.doesNotMatch(html, /disabled=""[^>]*>Arrêt d’urgence logiciel/);
+  assert.match(html, /Aucune coupure matérielle ou de chauffe garantie/);
+  assert.doesNotMatch(render(capable, 'observer'), /Arrêt d’urgence logiciel/);
+  assert.match(render(machine), /disabled=""[^>]*>Arrêt d’urgence logiciel/);
+  assert.match(render(machine), /aucune primitive d’urgence qualifiée/);
+  const cc2 = render({ ...machine, nativeStatus: 14, nativeSubStatus: 0, exceptionCodes: [803], issue: 'elegoo-emergency-stop' });
+  assert.match(cc2, /14 \/ 0/); assert.match(cc2, /803/); assert.match(cc2, /elegoo-emergency-stop/);
+});

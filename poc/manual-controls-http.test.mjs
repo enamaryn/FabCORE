@@ -39,7 +39,7 @@ test('HTTP contrôles : droits, origine, état, limites, confirmation, débit et
   const fleet = (await call('/api/machines', undefined, viewer)).body.machines;
   assert.equal(fleet[0].capabilities.controls, true);
   assert.equal(fleet[0].capabilities.camera, true);
-  assert.deepEqual(fleet[0].capabilities.commandActions, ['pause', 'resume', 'stop']);
+  assert.deepEqual(fleet[0].capabilities.commandActions, ['pause', 'resume', 'stop', 'emergencyStop']);
   assert.doesNotMatch(JSON.stringify(fleet[0].capabilities), /password|apiKey|accessCode/);
   const path = '/api/machines/' + id + '/controls';
   const heat = { action: 'heat', id: 'nozzle', value: 200, confirm: true };
