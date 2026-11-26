@@ -7,11 +7,12 @@ export interface EventStream {
 }
 interface EventOptions {
   invalidate(): void;
+  events?: string[];
   open?: ((url: string) => EventStream) | undefined;
   now?: () => number;
 }
 /** Même stratégie que le POC : regroupement 1 s, sécurité 30 s, secours 2 s, aucune commande. */
-export function subscribeFleet({ invalidate, open = typeof EventSource === 'undefined' ? undefined : url => new EventSource(url), now = Date.now }: EventOptions) {
+export function subscribeFleet({ invalidate, events = ['machine.telemetry', 'fleet.changed'], open = typeof EventSource === 'undefined' ? undefined : url => new EventSource(url), now = Date.now }: EventOptions) {
   let reconnecting = false;
   let stopped = false, source: EventStream | null = null, last = -Infinity;
   let timer: ReturnType<typeof setTimeout> | undefined, retry: ReturnType<typeof setTimeout> | undefined;
@@ -29,7 +30,7 @@ export function subscribeFleet({ invalidate, open = typeof EventSource === 'unde
     if (stopped || source || !open) return;
     const current = open('/api/events'); source = current;
     current.onopen = () => { if (source === current && !stopped) { poll(false); if (reconnecting) { reconnecting = false; refresh(); } } };
-    for (const event of ['machine.telemetry', 'fleet.changed']) current.addEventListener(event, schedule);
+    for (const event of events) current.addEventListener(event, schedule);
     current.addEventListener('resync', refresh);
     current.onerror = () => {
       if (stopped || source !== current) return;

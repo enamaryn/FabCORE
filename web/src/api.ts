@@ -1,3 +1,4 @@
+import type { ProjectBoard, Project, ProductionWork } from '../../src/domain/projects.ts';
 import { bambuCameraConfig } from '../../src/domain/camera.ts';
 import type { SessionState } from '../../src/http/routes/session.ts';
 import type { ControlState } from '../../src/domain/control.ts';
@@ -36,6 +37,14 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
     return payload;
   }
   return {
+    async projects(signal?: AbortSignal): Promise<ProjectBoard> {
+      const value = await request('projects', undefined, signal);
+      if (!value || typeof value !== 'object' || !('version' in value) || value.version !== 1 || !('projects' in value) || !Array.isArray(value.projects) || value.projects.length > 250 || !('work' in value) || !Array.isArray(value.work) || value.work.length > 1000) throw new ApiError('response', 502);
+      return value as ProjectBoard;
+    },
+    async createProject(data: Record<string, unknown>): Promise<Project> { return await request('projects', data) as Project; },
+    async updateProject(id: string, data: Record<string, unknown>): Promise<Project> { return await request('projects/' + encodeURIComponent(id), data) as Project; },
+    async saveProjectWork(id: string, workId: string | undefined, data: Record<string, unknown>): Promise<ProductionWork> { return await request('projects/' + encodeURIComponent(id) + '/work' + (workId ? '/' + encodeURIComponent(workId) : ''), data) as ProductionWork; },
     async session(signal?: AbortSignal): Promise<SessionState> {
       const value = await request('session', undefined, signal);
       if (!value || typeof value !== 'object' || !('installed' in value) || typeof value.installed !== 'boolean' || !('authenticated' in value) || typeof value.authenticated !== 'boolean') throw new ApiError('response', 502);

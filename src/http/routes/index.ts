@@ -1,3 +1,4 @@
+import { projectRoutes, type ProjectDependencies } from './projects.ts';
 import type { RouteModule } from '../app.ts';
 import { accountRoutes, type AccountDependencies } from './accounts.ts';
 import { diagnosticsRoutes, type DiagnosticsDependencies } from './diagnostics.ts';
@@ -12,6 +13,7 @@ import { sessionRoutes, type SessionDependencies } from './session.ts';
 import { versionRoutes, type VersionDependencies } from './version.ts';
 
 export interface RouteDependencies {
+  projects: ProjectDependencies;
   accounts: AccountDependencies;
   session: SessionDependencies;
   diagnostics: DiagnosticsDependencies;
@@ -28,6 +30,7 @@ export interface RouteDependencies {
 /** Liste unique des routes du serveur : utilisée par le serveur et par la génération OpenAPI. */
 export const migratedRoutes = (dependencies: RouteDependencies): RouteModule[] => [
   sessionRoutes(dependencies.session),
+  projectRoutes(dependencies.projects),
   accountRoutes(dependencies.accounts),
   diagnosticsRoutes(dependencies.diagnostics),
   fleetRoutes(dependencies.fleet),

@@ -104,3 +104,18 @@ test('base vide à côté d’un state.json : démarrage refusé tant que l’im
   const reopened = await openPostgresStore({ url, directory }).catch(error => error as Error);
   assert.match(String(reopened), /database-import-required/, 'verrou libéré après refus');
 });
+
+test('projets créatifs : Kanban et travaux persistants après fermeture/réouverture PostgreSQL', { skip }, async t => {
+  const { createProjectService } = await import('../application/projects.ts');
+  const { url, directory } = await isolated(t);
+  const store = await openPostgresStore({ url, directory });
+  const service = createProjectService({ store, persist: next => store.save(next) });
+  const project = await service.create({ title: 'Conception 2D/3D', format: 'mixed', origin: 'client', client: 'Référence de test' }, 'atelier');
+  await service.update(project.id, { expectedRevision: 1, stage: 'design', notes: 'Version de conception' }, 'atelier');
+  await service.saveWork(project.id, null, { title: 'Prototype', kind: 'prototype', format: '3d', quantity: 2, estimatedMinutes: 45 }, 'atelier');
+  const expected = service.list();
+  await store.close();
+  const reopened = await openPostgresStore({ url, directory }); t.after(() => reopened.close());
+  assert.deepEqual(reopened.state.projectBoard, expected);
+  assert.equal(reopened.state.machines.length, 0, 'le projet n’a créé ni commandé de machine');
+});

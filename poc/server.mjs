@@ -1,3 +1,4 @@
+import { createProjectService } from '../src/application/projects.ts';
 import { bambuCameraInfo } from '../src/domain/camera.ts';
 import { manualSpool, supportsManualSpool } from './manual-spool.mjs';
 import { createServer } from 'node:http';
@@ -926,8 +927,10 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     const entry = key ? sessions.get(key) : null;
     return entry ? { session: key, username: entry.username, role: entry.role } : null;
   };
+  const projectService = createProjectService({ store, persist, changed: () => events.publish('projects.changed', {}) });
   const http = createHttpApp({ allowedHost, origin: publicUrl.origin, limit: withinLimit, viewer: viewerOf, onFailure: () => diagnostics.record('server', 'request-failed'), fallback: handleFallback }, migratedRoutes({
     accounts,
+    projects: projectService,
     session: { installed: () => Boolean(store.state.admin), oidcEnabled: () => Boolean(secure && oidc && store.state.admin), viewer: viewerOf },
     diagnostics: { view: () => diagnostics.view(), fleet: () => store.state.machines.map(({ id, name }) => ({ id, name })) },
     fleet: { list: viewer => listFleet(viewer.session) },

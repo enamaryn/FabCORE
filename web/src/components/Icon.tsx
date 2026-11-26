@@ -1,5 +1,6 @@
-export function Icon({ name }: { name: 'home' | 'machines' | 'history' | 'arrow' | 'plus' | 'theme' }) {
+export function Icon({ name }: { name: 'home' | 'machines' | 'history' | 'arrow' | 'plus' | 'theme' | 'projects' }) {
   const paths = {
+    projects: 'M3 4h18v16H3z M9 4v16 M15 4v16 M5 8h2 M11 10h2 M17 7h2',
     home: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
     machines: 'M4 3h16v18H4z M7 7h10v10H7z M9 21v-4 M15 21v-4',
     history: 'M3 12h4l3-8 4 16 3-8h4',

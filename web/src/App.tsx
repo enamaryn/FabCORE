@@ -1,3 +1,4 @@
+import { ProjectsPage } from './components/projects/ProjectsPage.tsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -31,7 +32,7 @@ export function App() {
   const [theme, setTheme] = useState<Theme>(() => { const value = readPreference('fabcore-theme', 'dark'); return value === 'light' || value === 'dark' ? value : 'system'; });
   const api = useMemo(() => createApi(fetch, () => {
     client.setQueryData(['session'], { installed: true, authenticated: false, username: null });
-    for (const key of ['fleet', 'controls', 'files']) void client.cancelQueries({ queryKey: [key] }).then(() => client.removeQueries({ queryKey: [key] }));
+    for (const key of ['fleet', 'controls', 'files', 'project-board']) void client.cancelQueries({ queryKey: [key] }).then(() => client.removeQueries({ queryKey: [key] }));
   }), [client]);
   useEffect(() => applyTheme(theme), [theme]);
   useEffect(() => { document.documentElement.lang = i18n.resolvedLanguage ?? 'fr'; }, [i18n.resolvedLanguage]);
@@ -55,10 +56,10 @@ export function App() {
       <div className="row auth-preferences"><button type="button" className="ghost" onClick={toggleLanguage}>{i18n.resolvedLanguage?.startsWith('fr') ? 'English' : 'Français'}</button><button type="button" className="ghost" onClick={toggleTheme}>{i18n.t('themeLabel', { ns: 'common', theme: i18n.t('theme.' + theme, { ns: 'common' }) })}</button></div>
     </div>
   </main>;
-  return <Shell username={session.data.username} role={session.data.role} page={page.kind === 'machine' || page.kind === 'viewer' ? 'machines' : ['notifications', 'diagnostics', 'access'].includes(page.kind) ? 'home' : page.kind as 'home' | 'machines' | 'history'} language={i18n.resolvedLanguage ?? 'fr'} theme={theme} onLanguage={toggleLanguage} onTheme={toggleTheme} onLogout={() => { if (!logout.isPending) logout.mutate(); }} version={version.data} onUpdate={() => setPrompt(true)}>
+  return <Shell username={session.data.username} role={session.data.role} page={page.kind === 'machine' || page.kind === 'viewer' ? 'machines' : ['notifications', 'diagnostics', 'access'].includes(page.kind) ? 'home' : page.kind as 'home' | 'machines' | 'history' | 'projects'} language={i18n.resolvedLanguage ?? 'fr'} theme={theme} onLanguage={toggleLanguage} onTheme={toggleTheme} onLogout={() => { if (!logout.isPending) logout.mutate(); }} version={version.data} onUpdate={() => setPrompt(true)}>
     {session.data.role === 'admin' && version.data?.updateAvailable && <UpdatePrompt version={version.data} open={prompt} onClose={() => setPrompt(false)} />}
     {logout.isError && <p className="notice" role="alert">{t('error.internal')}</p>}
-    {logout.isPending ? <p role="status">{t('loggingOut')}</p> : <Workshop key={session.data.username + ':' + session.data.role} api={api} username={session.data.username} role={session.data.role} page={page} />}
+    {logout.isPending ? <p role="status">{t('loggingOut')}</p> : page.kind === 'projects' ? <ProjectsPage key={session.data.username + ':' + session.data.role} api={api} actor={session.data.username} role={session.data.role} /> : <Workshop key={session.data.username + ':' + session.data.role} api={api} username={session.data.username} role={session.data.role} page={page} />}
   </Shell>;
 }
 // Première installation (MIG-06.2.3) : jeton affiché dans le terminal de FabCore, administrateur local.
