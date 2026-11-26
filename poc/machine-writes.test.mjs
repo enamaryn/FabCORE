@@ -23,9 +23,9 @@ async function start(ctx, options = {}) {
   ctx.after(() => new Promise(resolve => server.close(resolve)));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = 'http://127.0.0.1:' + server.address().port;
-  const send = (path, { raw, body, cookie, requestOrigin = origin, method = body === undefined && raw === undefined ? 'GET' : 'POST' } = {}) => new Promise((resolve, reject) => {
+  const send = (path, { raw, body, cookie, contentType = 'application/json', requestOrigin = origin, method = body === undefined && raw === undefined ? 'GET' : 'POST' } = {}) => new Promise((resolve, reject) => {
     const payload = raw ?? (body === undefined ? undefined : JSON.stringify(body));
-    const req = request(base + path, { method, headers: { Host: 'fabcore.test', Origin: requestOrigin, ...(cookie ? { Cookie: cookie } : {}), ...(payload === undefined ? {} : { 'Content-Type': 'application/json' }) } }, async res => {
+    const req = request(base + path, { method, headers: { Host: 'fabcore.test', Origin: requestOrigin, ...(cookie ? { Cookie: cookie } : {}), ...(payload === undefined ? {} : { 'Content-Type': contentType, 'Content-Length': Buffer.byteLength(payload) }) } }, async res => {
       const chunks = []; for await (const chunk of res) chunks.push(chunk);
       const text = Buffer.concat(chunks).toString();
       resolve([res.statusCode, text ? JSON.parse(text) : null]);
@@ -159,4 +159,86 @@ test('urgence : droits, cible, confirmation et résultat natif ; une seule écri
   assert.equal(writes, 5);
   const [, logs] = await send('/api/machines/' + id + '/logs', { cookie: admin });
   assert.ok(logs.lines.some(line => line.event === 'operation-result' && line.details.operation === 'emergencyStop' && line.details.nativeCode === 403 && line.details.outcome === 'rejected'), 'native refusal remains reviewable in machine logs');
+});
+
+function deferred() {
+  let resolve; const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+}
+test('urgence prioritaire : dépasse Stop bloqué, verrou indépendant, refuse les nouvelles écritures et aucun rejeu', async ctx => {
+  const normalEntered = deferred(), normalFinish = deferred(), emergencyEntered = deferred(), emergencyFinish = deferred();
+  let ordinaryWrites = 0, emergencyWrites = 0;
+  const { send, admin } = await start(ctx, {
+    readPrinter: async () => ({ ...ready, status: 'printing' }),
+    sendCommand: async () => { ordinaryWrites++; normalEntered.resolve(); await normalFinish.promise; return false; },
+    fetchFiles: async url => {
+      assert.ok(url.endsWith('/printer/emergency_stop')); emergencyWrites++; emergencyEntered.resolve();
+      await emergencyFinish.promise; return new Response('', { status: 403 });
+    },
+  });
+  // Always release deferred transports before server cleanup, including assertion failures.
+  ctx.after(() => { normalFinish.resolve(); emergencyFinish.resolve(); });
+  const [, { id }] = await send('/api/machines', { body: klipper(7125), cookie: admin });
+  const path = '/api/machines/' + id;
+  const normal = send(path + '/command', { body: { action: 'stop', confirm: true }, cookie: admin });
+  await normalEntered.promise;
+  const emergency = send(path + '/command', { body: { action: 'emergencyStop', confirm: true }, cookie: admin });
+  await emergencyEntered.promise;
+  assert.equal(emergencyWrites, 1, 'emergency reaches its own native transport while Stop is still pending');
+  assert.deepEqual(await send(path + '/command', { body: { action: 'emergencyStop', confirm: true }, cookie: admin }), [409, { error: 'command-busy' }]);
+  assert.deepEqual(await send(path + '/controls', { body: { action: 'light', id: 'main', value: true }, cookie: admin }), [409, { error: 'command-busy' }]);
+  assert.deepEqual(await send(path + '/gcode', { body: { command: 'M105' }, cookie: admin }), [409, { error: 'command-busy' }]);
+  assert.deepEqual(await send(path + '/print', { body: { path: 'part.gcode', confirm: true }, cookie: admin }), [409, { error: 'command-busy' }]);
+  assert.deepEqual(await send(path + '/files?name=part.gcode', { raw: '; fixture', contentType: 'application/octet-stream', cookie: admin }), [409, { error: 'upload-busy' }]);
+  assert.deepEqual(await send('/api/machines/edit', { body: { ...klipper(7125), id }, cookie: admin }), [409, { error: 'command-busy' }]);
+  emergencyFinish.resolve();
+  assert.deepEqual(await emergency, [200, { outcome: 'rejected', nativeCode: 403 }]);
+  // Finishing emergency must not clear the original Stop lock.
+  assert.deepEqual(await send(path + '/command', { body: { action: 'pause' }, cookie: admin }), [409, { error: 'command-busy' }]);
+  normalFinish.resolve(); assert.deepEqual(await normal, [502, { error: 'command-rejected' }]);
+  assert.equal(ordinaryWrites, 1); assert.equal(emergencyWrites, 1);
+  await send('/api/machines', { cookie: admin }); assert.equal(emergencyWrites, 1);
+});
+
+test('urgence prioritaire : dépasse un transfert bloqué sans libérer son verrou', async ctx => {
+  const uploadEntered = deferred(), uploadFinish = deferred(), emergencyEntered = deferred(), emergencyFinish = deferred();
+  let emergencyWrites = 0;
+  const { send, admin } = await start(ctx, {
+    fetchFiles: async url => {
+      if (url.endsWith('/server/files/upload')) { uploadEntered.resolve(); await uploadFinish.promise; return Response.json({ result: { item: { path: 'part.gcode' } } }); }
+      assert.ok(url.endsWith('/printer/emergency_stop')); emergencyWrites++; emergencyEntered.resolve();
+      await emergencyFinish.promise; return new Response('', { status: 403 });
+    },
+  });
+  ctx.after(() => { uploadFinish.resolve(); emergencyFinish.resolve(); });
+  const [, { id }] = await send('/api/machines', { body: klipper(7125), cookie: admin }); const path = '/api/machines/' + id;
+  const upload = send(path + '/files?name=part.gcode', { raw: '; fixture', contentType: 'application/octet-stream', cookie: admin });
+  await uploadEntered.promise;
+  const emergency = send(path + '/command', { body: { action: 'emergencyStop', confirm: true }, cookie: admin });
+  await emergencyEntered.promise;
+  assert.deepEqual(await send(path + '/command', { body: { action: 'pause' }, cookie: admin }), [409, { error: 'command-busy' }]);
+  emergencyFinish.resolve(); await emergency;
+  assert.deepEqual(await send(path + '/command', { body: { action: 'pause' }, cookie: admin }), [409, { error: 'command-busy' }]);
+  uploadFinish.resolve(); assert.deepEqual(await upload, [201, { path: 'part.gcode' }]);
+  assert.equal(emergencyWrites, 1);
+});
+
+test('urgence : verrou et débit propres, sans dépendre du débit terminal ni d’une commande normale', async ctx => {
+  const entered = deferred(), finish = deferred(); let writes = 0;
+  const { send, admin } = await start(ctx, {
+    sendGcode: async () => ({ outcome: 'accepted', responses: null }),
+    fetchFiles: async url => { assert.ok(url.endsWith('/printer/emergency_stop')); writes++; if (writes === 1) { entered.resolve(); await finish.promise; } return new Response('', { status: 403 }); },
+  });
+  ctx.after(() => finish.resolve());
+  const [, { id }] = await send('/api/machines', { body: klipper(7125), cookie: admin }); const path = '/api/machines/' + id;
+  assert.equal((await send(path + '/gcode', { body: { command: 'M105' }, cookie: admin }))[0], 200);
+  assert.deepEqual(await send(path + '/gcode', { body: { command: 'M105' }, cookie: admin }), [429, { error: 'rate' }]);
+  const emergency = send(path + '/command', { body: { action: 'emergencyStop', confirm: true }, cookie: admin }); await entered.promise;
+  assert.deepEqual(await send(path + '/command', { body: { action: 'pause' }, cookie: admin }), [409, { error: 'command-busy' }], 'only the emergency lock is held');
+  assert.deepEqual(await send(path + '/controls', { body: { action: 'light', id: 'main', value: true }, cookie: admin }), [409, { error: 'command-busy' }]);
+  assert.deepEqual(await send(path + '/gcode', { body: { command: 'M105' }, cookie: admin }), [409, { error: 'command-busy' }]);
+  finish.resolve(); assert.equal((await emergency)[0], 200, 'terminal rate cannot block emergency');
+  for (let count = 1; count < 8; count++) assert.equal((await send(path + '/command', { body: { action: 'emergencyStop', confirm: true }, cookie: admin }))[0], 200);
+  assert.deepEqual(await send(path + '/command', { body: { action: 'emergencyStop', confirm: true }, cookie: admin }), [429, { error: 'rate' }]);
+  assert.equal(writes, 8, 'rate rejection sends no ninth request and never replays');
 });

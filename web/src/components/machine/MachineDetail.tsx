@@ -32,16 +32,19 @@ function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machin
   const controlsQuery = useQuery({ queryKey: ['controls', actor, machine.id, machine.kind, machine.origin], queryFn: ({ signal }) => api.controls(machine.id, signal), enabled: capabilities.controls === true && !['offline', 'connecting'].includes(machine.status), retry: false, refetchInterval: 5000, staleTime: 2000 });
   const controls = capabilities.controls !== true || ['offline', 'connecting'].includes(machine.status) || controlsQuery.isError || stale ? null : controlsQuery.data ?? null;
   const [cameraSize, setCameraSize] = useState<'normal' | 'wide' | 'page'>('normal');
+  const [emergencyBusy, setEmergencyBusy] = useState(false);
+  const emergencyLocked = useRef(false), emergencyVersion = useRef(0);
   const [busy, setBusy] = useState(false), [result, setResult] = useState(''), [failure, setFailure] = useState(''), [confirm, setConfirm] = useState<string | null>(null);
   const controller = useRef(new AbortController()), locked = useRef(false), alive = useRef(true);
   const latest = useRef({ machine, controls, role, stale }); latest.current = { machine, controls, role, stale };
   useEffect(() => () => { alive.current = false; controller.current.abort(); }, []);
   const refresh = async () => { if (alive.current) await Promise.all([client.invalidateQueries({ queryKey: ['fleet'] }), client.invalidateQueries({ queryKey: ['controls', actor, machine.id] })]); };
   async function perform(run: () => Promise<string>): Promise<boolean> {
-    if (locked.current || !alive.current || latest.current.role !== 'admin') return false;
+    if (locked.current || emergencyLocked.current || !alive.current || latest.current.role !== 'admin') return false;
+    const version = emergencyVersion.current;
     locked.current = true; setBusy(true); setResult(''); setFailure('');
-    try { const outcome = await run(); if (alive.current) setResult(outcome); return true; }
-    catch (error) { if (alive.current) setFailure(error instanceof ApiError ? error.code : 'command-unconfirmed'); return false; }
+    try { const outcome = await run(); if (alive.current && version === emergencyVersion.current) setResult(outcome); return true; }
+    catch (error) { if (alive.current && version === emergencyVersion.current) setFailure(error instanceof ApiError ? error.code : 'command-unconfirmed'); return false; }
     finally { locked.current = false; if (alive.current) { setBusy(false); await refresh(); } }
   }
   const onControl = async (command: Record<string, unknown>) => {
@@ -65,28 +68,31 @@ function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machin
   };
   const runEmergency = async () => {
     setConfirm(null);
-    await perform(async () => {
+    if (emergencyLocked.current || !alive.current || latest.current.role !== 'admin') return;
+    emergencyLocked.current = true; emergencyVersion.current++; setEmergencyBusy(true); setResult(''); setFailure('');
+    try {
       const current = latest.current;
       if (current.stale || !current.machine.capabilities?.commands || !current.machine.capabilities.commandActions?.includes('emergencyStop')) throw new ApiError('command-state', 409);
       const value = await api.emergencyStop(current.machine.id, controller.current.signal);
-      return 'emergency:' + value.outcome + (value.nativeCode === undefined ? '' : ':' + value.nativeCode);
-    });
+      if (alive.current) setResult('emergency:' + value.outcome + (value.nativeCode === undefined ? '' : ':' + value.nativeCode));
+    } catch (error) { if (alive.current) setFailure(error instanceof ApiError ? error.code : 'command-unconfirmed'); }
+    finally { emergencyLocked.current = false; if (alive.current) { setEmergencyBusy(false); await refresh(); } }
   };
   const saveSpool = (spool: Record<string, unknown> | null) => perform(async () => { await api.spool(machine.id, spool, controller.current.signal); return 'saved'; });
   const errorKey = ['command-rejected', 'command-unconfirmed', 'heater-unconfirmed', 'bambu-authorization', 'control-invalid', 'command-state', 'rate', 'forbidden', 'spool-invalid', 'storage-unavailable'].includes(failure) ? failure : 'command-unconfirmed';
   const date = typeof machine.checkedAt === 'string' && Number.isFinite(Date.parse(machine.checkedAt)) ? new Intl.DateTimeFormat(i18n.resolvedLanguage, { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(machine.checkedAt)) : t('notReported');
   const progress = machine.progressKnown !== false && typeof machine.progress === 'number' && Number.isFinite(machine.progress) && machine.progress >= 0 && machine.progress <= 100 ? machine.progress : null;
-  const props = { machine, controls, role, busy: busy || stale, onControl };
+  const props = { machine, controls, role, busy: busy || emergencyBusy || stale, onControl };
   const temperature = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? new Intl.NumberFormat(i18n.resolvedLanguage, { style: 'unit', unit: 'celsius', maximumFractionDigits: 1 }).format(value) : t('notReported');
   return <>
-    <div aria-live="polite" className="machine-feedback">{failure && <p className="error" role="alert">{t('errors.' + errorKey)}</p>}{result && <p className="notice">{result.startsWith('emergency:') ? <>{t('emergencyOutcomes.' + result.split(':')[1])}{result.split(':')[2] && <code> · HTTP {result.split(':')[2]}</code>}</> : result.startsWith('state:') ? t('stateRead', { state: i18n.t('status.' + result.slice(6), { ns: 'fleet' }) }) : t('outcomes.' + result)}</p>}{busy && <p role="status">{t('sending')}</p>}</div>
+    <div aria-live="polite" className="machine-feedback">{failure && <p className="error" role="alert">{t('errors.' + errorKey)}</p>}{result && <p className="notice">{result.startsWith('emergency:') ? <>{t('emergencyOutcomes.' + result.split(':')[1])}{result.split(':')[2] && <code> · HTTP {result.split(':')[2]}</code>}</> : result.startsWith('state:') ? t('stateRead', { state: i18n.t('status.' + result.slice(6), { ns: 'fleet' }) }) : t('outcomes.' + result)}</p>}{(busy || emergencyBusy) && <p role="status">{t('sending')}</p>}</div>
     {/* Trois rangées en paires, hauteurs alignées : fabrication | déplacements, caméra | températures, filaments | actions rapides. */}
     <div className="react-cockpit">
       <div className="cockpit-row"><section className="panel stack cockpit-job" data-machine-block="fabrication">
       <div className="cockpit-job-main"><h2>{t('fabrication')}</h2><p className="react-job-file">{machine.file || t('noFile')}</p>
         {capabilities.printJob !== false && (progress === null ? <small>{t('progressUnknown')}</small> : <div className="cockpit-progress"><progress value={progress} max={100} aria-label={t('progress')} /><strong>{new Intl.NumberFormat(i18n.resolvedLanguage).format(progress)} %</strong></div>)}</div>
-      <div className="cockpit-job-actions">{role === 'admin' && ['pause', 'resume', 'stop', 'start'].filter(action => commandAllowed(action, machine)).map(action => <button type="button" key={action} className={action === 'stop' ? 'danger' : 'primary'} disabled={busy || stale} onClick={() => { if (['start', 'stop'].includes(action)) setConfirm(action); else void runCommand(action); }}>{t('actions.' + action)}</button>)}{role === 'admin' && capabilities.files && ['ready', 'done'].includes(machine.status) && <a className="button" href={'#machine/' + machine.id + '/files'}>{t('chooseFile')}</a>}</div>
-      {role === 'admin' && <div className="stack"><button type="button" className="danger" disabled={busy || stale || !emergencySupported} onClick={() => setConfirm('emergencyStop')}>{t('emergencyTitle')}</button><small>{t(emergencySupported ? 'emergencyLimitation' : 'emergencyUnavailable')}</small></div>}
+      <div className="cockpit-job-actions">{role === 'admin' && ['pause', 'resume', 'stop', 'start'].filter(action => commandAllowed(action, machine)).map(action => <button type="button" key={action} className={action === 'stop' ? 'danger' : 'primary'} disabled={busy || emergencyBusy || stale} onClick={() => { if (['start', 'stop'].includes(action)) setConfirm(action); else void runCommand(action); }}>{t('actions.' + action)}</button>)}{role === 'admin' && capabilities.files && ['ready', 'done'].includes(machine.status) && <a className="button" href={'#machine/' + machine.id + '/files'}>{t('chooseFile')}</a>}</div>
+      {role === 'admin' && <div className="stack"><button type="button" className="danger" disabled={emergencyBusy || stale || !emergencySupported} onClick={() => setConfirm('emergencyStop')}>{t('emergencyTitle')}</button><small>{t(emergencySupported ? 'emergencyLimitation' : 'emergencyUnavailable')}</small></div>}
       <div className="cockpit-job-notes">{machine.kind === 'bambu-cloud' && <p className="notice">{t('cloudReadOnly')}</p>}{machine.kind === 'xtool-m2' && <p>{t('preparedProject')}</p>}{machine.kind === 'longer-ray5' && <small>GRBL · {machine.nativeState || t('notReported')}{machine.firmware ? ' · ' + machine.firmware : ''}</small>}
         {typeof machine.nativeStatus === 'number' && <small>{t('nativeState')} <code>{machine.nativeStatus} / {machine.nativeSubStatus ?? '—'}</code>{machine.exceptionCodes?.length ? <> · {t('nativeExceptions')} <code>{machine.exceptionCodes.join(', ')}</code></> : null}</small>}
         {machine.issue && <p className="notice">{t('machineIssue')} {codeLabel(t, machine.issue, ['issue']) === machine.issue ? <code>{machine.issue}</code> : codeLabel(t, machine.issue, ['issue'])}</p>}<small>{t('checkedAt')} : <time dateTime={machine.checkedAt ?? undefined}>{date}</time></small></div>
@@ -94,7 +100,7 @@ function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machin
       <section className="panel stack" data-machine-block="motion"><h2>{t('motion')}</h2><div hidden={!controls?.motion && !controls?.laser}><MotionControls {...props} /></div>{!controls?.motion && !controls?.laser && <Unavailable message={t(capabilities.controls ? controlsQuery.isError ? 'controlsUnavailable' : ['offline', 'connecting'].includes(machine.status) ? 'offline' : 'motionNotReported' : 'controlsUnsupported')} />}</section></div>
       <div className="cockpit-row" data-camera={cameraSize}><CameraPanel key={machine.kind === 'bambu-cloud' ? JSON.stringify(machine.camera) : machine.id} role={role} machine={machine} api={api} size={cameraSize} onSize={setCameraSize} />
       <section className="panel stack machine-temperature" data-machine-block="temperature"><h2>{t('temperatures')}</h2>{capabilities.temperatures === false ? <Unavailable message={t('notApplicable')} /> : <>{!controls && <div className="row wrap"><span>{t('nozzle')} <strong>{temperature(machine.nozzle)}</strong></span><span>{t('bed')} <strong>{temperature(machine.bed)}</strong></span></div>}<div hidden={!controls}><HeaterControls {...props} /></div>{!controls && <Unavailable message={t(capabilities.controls ? controlsQuery.isError ? 'controlsUnavailable' : ['offline', 'connecting'].includes(machine.status) ? 'offline' : 'readingControls' : 'heatUnsupported')} />}<TemperatureChart samples={samples} /></>}</section></div>
-      <div className="cockpit-row"><MaterialsPanel machine={machine} role={role} busy={busy} save={saveSpool} />
+      <div className="cockpit-row"><MaterialsPanel machine={machine} role={role} busy={busy || emergencyBusy} save={saveSpool} />
       <section className="panel stack" data-machine-block="quick"><div className="row between wrap"><h2>{t('quick')}</h2>{capabilities.controls && <button type="button" className="ghost" disabled={busy || controlsQuery.isFetching} onClick={() => { void controlsQuery.refetch(); }}>{t('refresh')}</button>}</div><div hidden={!controls}><QuickControls {...props} /></div>{!controls && <Unavailable message={t(capabilities.controls ? controlsQuery.isError ? 'controlsUnavailable' : ['offline', 'connecting'].includes(machine.status) ? 'offline' : 'readingControls' : 'controlsUnsupported')} />}</section></div>
     </div>
     {confirm && <PrintConfirmation action={confirm} machineName={machine.name + ' · ' + (machine.serial || machine.origin || machine.id)} close={() => setConfirm(null)} submit={() => { if (confirm === 'emergencyStop') void runEmergency(); else void runCommand(confirm); }} />}

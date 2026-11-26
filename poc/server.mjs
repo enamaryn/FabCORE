@@ -158,6 +158,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     return telemetry;
   });
   const pendingCommands = new Set();
+  const pendingEmergencies = new Set();
   const pendingUploads = new Set();
   const cc2Tests = new WeakMap();
   const xtoolPairings = new Set();
@@ -424,10 +425,13 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.commands) return error(res, 404, 'missing');
     if (!connectorDefinition(machine.kind ?? 'klipper').commandActions.includes(action)) return error(res, 400, 'command-unsupported');
     if (['stop', 'start', 'emergencyStop'].includes(action) && data.confirm !== true) return error(res, 400, 'invalid');
-    if (pendingCommands.has(machine.id) || pendingUploads.has(machine.id)) return error(res, 409, 'command-busy');
+    const emergency = action === 'emergencyStop';
+    if (pendingEmergencies.has(machine.id) || (!emergency && (pendingCommands.has(machine.id) || pendingUploads.has(machine.id)))) return error(res, 409, 'command-busy');
+    if (emergency && !withinLimit('emergency:' + machine.id)) return error(res, 429, 'rate');
+    const lock = emergency ? pendingEmergencies : pendingCommands;
     const before = { pause: ['printing'], resume: ['paused'], stop: ['printing', 'paused'], start: ['ready', 'done'] }[action];
     const after = { pause: ['paused'], resume: ['printing'], stop: ['ready', 'done'], start: ['printing'] }[action];
-    pendingCommands.add(machine.id);
+    lock.add(machine.id);
     try {
       const connector = await connectors.get(machine.kind ?? 'klipper');
       if (action === 'emergencyStop') {
@@ -453,6 +457,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       if (res.destroyed) return;
       if (!session(req)) return error(res, 401, 'sign-in');
       try {
+        if (pendingEmergencies.has(machine.id)) return error(res, 409, 'command-busy');
         if (!(await connector.command(machine, action))) return error(res, 502, 'command-rejected');
         for (let attempt = 0; attempt < 4; attempt++) {
           const report = await connector.read(machine), status = report.status;
@@ -466,7 +471,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       return error(res, 504, 'command-unconfirmed');
     } finally {
       snapshot.forget(machine.id);
-      pendingCommands.delete(machine.id);
+      lock.delete(machine.id);
     }
   }
 
@@ -481,7 +486,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     if (req.method === 'POST' && !requireJson(req, res)) return;
     let data;
     if (req.method === 'POST') { try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); } }
-    if (req.method === 'POST' && (pendingCommands.has(machine.id) || pendingUploads.has(machine.id))) return error(res, 409, 'command-busy');
+    if (req.method === 'POST' && (pendingEmergencies.has(machine.id) || pendingCommands.has(machine.id) || pendingUploads.has(machine.id))) return error(res, 409, 'command-busy');
     if (req.method === 'POST') {
       const now = Date.now(), key = 'controls:' + machine.id;
       const recent = (terminalUse.get(key) ?? []).filter(at => now - at < minute);
@@ -503,6 +508,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       if (['printing', 'paused'].includes(status) && ['heat', 'fan', 'speed'].includes(command.action) && data.duringPrint !== true) return error(res, 409, 'control-confirm');
       if (res.destroyed) return;
       if (!session(req)) return error(res, 401, 'sign-in');
+      if (pendingEmergencies.has(machine.id)) return error(res, 409, 'command-busy');
       attempted = true;
       const result = await connector.control.execute(machine, command, controls);
       diagnostics.record('controls', result.outcome, machine.id);
@@ -527,7 +533,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     if (!/^[\x20-\x7E]{1,256}$/.test(script)) return error(res, 400, 'invalid');
     const machine = store.state.machines.find(({ id }) => id === terminal[1]);
     if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.terminal) return error(res, 404, 'missing');
-    if (pendingCommands.has(machine.id)) return error(res, 409, 'command-busy');
+    if (pendingEmergencies.has(machine.id) || pendingCommands.has(machine.id)) return error(res, 409, 'command-busy');
     const now = Date.now();
     const use = terminalUse.get(machine.id);
     const recent = (use ?? []).filter(time => now - time < minute);
@@ -544,6 +550,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       if (res.destroyed) return;
       if (!session(req)) return error(res, 401, 'sign-in');
       try {
+        if (pendingEmergencies.has(machine.id)) return error(res, 409, 'command-busy');
         const result = await connector.gcode(machine, script);
         diagnostics.record('terminal', result.outcome, machine.id);
         return answer(res, 200, result);
@@ -620,7 +627,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       const name = data.name;
       if (!sourcePath || data.confirm !== true || !destination || destination.id === machine.id || !definition?.files ||
         (definition.fileFamily ?? 'fdm') !== (connectorDefinition(machine.kind ?? 'klipper').fileFamily ?? 'fdm') || !destinationPath(name) || name.includes('/') || /\.3mf$/i.test(sourcePath) !== /\.3mf$/i.test(name)) return error(res, 400, 'invalid');
-      if ([machine.id, destination.id].some(id => pendingUploads.has(id) || pendingCommands.has(id))) return error(res, 409, 'upload-busy');
+      if ([machine.id, destination.id].some(id => pendingEmergencies.has(id) || pendingUploads.has(id) || pendingCommands.has(id))) return error(res, 409, 'upload-busy');
       pendingUploads.add(machine.id);
       pendingUploads.add(destination.id);
       const controller = new AbortController();
@@ -646,7 +653,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       if (req.headers['content-type'] !== 'application/octet-stream' || !validPath(name) || name.includes('/')) return error(res, 400, 'invalid');
       if (!Number.isSafeInteger(size) || size < 1) return error(res, 411, 'invalid');
       if (size > (machine.kind === 'longer-ray5' ? 16 * 1024 * 1024 : fileLimit)) return error(res, 413, 'file-too-large');
-      if (pendingUploads.has(machine.id) || pendingCommands.has(machine.id)) return error(res, 409, 'upload-busy');
+      if (pendingEmergencies.has(machine.id) || pendingUploads.has(machine.id) || pendingCommands.has(machine.id)) return error(res, 409, 'upload-busy');
       pendingUploads.add(machine.id);
       try {
         const stored = await files.upload(machine, name, req, size);
@@ -668,7 +675,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       if (!target || data.confirm !== true) return error(res, 400, 'invalid');
       if (machine.kind === 'longer-ray5' && data.operatorPresent !== true) return error(res, 400, 'laser-confirm');
       if (connectorDefinition(machine.kind ?? 'klipper').externalFilament && data.filamentMode !== 'external') return error(res, 400, 'filament-confirm');
-      if (pendingCommands.has(machine.id) || pendingUploads.has(machine.id)) return error(res, 409, 'command-busy');
+      if (pendingEmergencies.has(machine.id) || pendingCommands.has(machine.id) || pendingUploads.has(machine.id)) return error(res, 409, 'command-busy');
       pendingCommands.add(machine.id);
       try {
         const connector = await connectors.get(machine.kind ?? 'klipper');
@@ -676,6 +683,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
         if (res.destroyed) return;
         if (!session(req)) return error(res, 401, 'sign-in');
         try {
+          if (pendingEmergencies.has(machine.id)) return error(res, 409, 'command-busy');
           if (!(await files.start(machine, target))) return error(res, 502, 'command-rejected');
           diagnostics.record('files', 'print-started', machine.id);
           for (let attempt = 0; attempt < 6; attempt++) {
@@ -741,7 +749,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
   const machineAdmin = {
     async write(action, data, { viewer, signal, stillSignedIn }) {
       const existing = store.state.machines.find((machine) => machine.id === data.id);
-      if (existing && pendingCommands.has(existing.id)) throw new HttpError(409, 'command-busy');
+      if (existing && (pendingEmergencies.has(existing.id) || pendingCommands.has(existing.id))) throw new HttpError(409, 'command-busy');
       if (action === 'delete') {
         if (!existing) throw new HttpError(404, 'missing');
         const machines = store.state.machines.filter((machine) => machine !== existing);
