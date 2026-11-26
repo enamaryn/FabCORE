@@ -2,3 +2,29 @@
 @media(max-width:650px){.project-board{grid-template-columns:1fr;overflow:visible}.project-column-cards{min-height:90px}.project-fields{grid-template-columns:1fr}.project-link-fields{grid-template-columns:1fr 38px}.project-link-fields select{grid-row:2;grid-column:1}.project-link-fields input[type=url]{grid-row:3;grid-column:1/-1}.project-link-fields button{grid-column:2;grid-row:1}.project-dialog{padding:16px}.project-filters>label{flex:1;min-width:130px}}
 
 @media(max-width:800px){.react-shell~.mobile{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+/* Keep the workshop board inside the viewport; long columns and details scroll independently. */
+.react-shell[data-page=projects]{height:100dvh;min-height:0;overflow:hidden}
+.react-shell[data-page=projects] .react-workspace{display:flex;flex-direction:column;min-height:0;height:100%;overflow:hidden}
+.react-shell[data-page=projects] .top{flex:none}
+.react-shell[data-page=projects] .area{flex:1;min-height:0;overflow:hidden;padding:16px 20px}
+.projects-page{height:100%;min-height:0;display:flex;flex-direction:column;gap:12px}
+.projects-page>header,.project-tabs,.project-filters,.projects-page>p{flex:none}
+.projects-page h1{font-size:28px;line-height:1.15;margin:0}.projects-page>header p{margin:4px 0 0;font-size:13px}
+.projects-page button,.projects-page input,.projects-page select{min-height:36px;padding:7px 10px}
+.project-filters{gap:10px}.project-filters>label{min-width:100px;font-size:12px}.project-filters>label:first-child{min-width:160px}.project-filters .project-checkbox{min-height:36px}
+.project-board{flex:1;min-height:0;grid-template-columns:repeat(5,minmax(0,1fr));overflow:hidden;gap:10px;padding:3px 3px 8px;align-items:stretch}
+.project-column{display:flex;flex-direction:column;min-height:0;overflow:hidden}.project-column>header{padding:10px;flex:none}.project-column h2{font-size:13px}
+.project-column-cards{display:flex;flex-direction:column;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:8px;gap:10px;scrollbar-gutter:stable}
+.project-card{flex:none;padding:10px;gap:7px;cursor:pointer;transition:border-color .15s,box-shadow .15s,background .15s}
+.project-card:hover{background:var(--raised);box-shadow:0 3px 10px var(--shadow)}
+.project-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.project-card[data-selected=true]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 4px 14px var(--shadow)}
+.project-card .project-card-title{font-size:15px;text-align:left;justify-content:flex-start;padding:0;min-height:26px}.project-card p{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12px}
+.project-card small{font-size:11px}.project-card-tools{gap:4px}.project-card .project-card-edit{display:grid;place-items:center;min-height:30px;min-width:30px;padding:2px;border-color:transparent;background:transparent;font-size:20px;line-height:1;color:var(--dim)}
+.project-card .project-card-edit:hover{color:var(--accent);border-color:var(--line);background:var(--card)}
+.project-move{gap:2px}.project-card .project-move select{min-height:30px;padding:4px 6px;width:100%;min-width:0}
+.project-detail{flex:0 1 35%;min-height:0;overflow:auto;overscroll-behavior:contain;padding:14px}.project-detail h2{font-size:20px;margin:4px 0}.project-detail h3{font-size:14px;margin:4px 0}
+.projects-page>section:not(.project-detail){min-height:0;overflow:auto}.projects-page>.project-board+section{flex-shrink:0}
+@media(max-width:760px){.react-shell[data-page=projects]{height:calc(100dvh - 70px)}.react-shell[data-page=projects] .area{padding:10px 12px}.projects-page{gap:8px}.projects-page h1{font-size:23px}.project-board{grid-template-columns:1fr;overflow:auto;align-items:start}.project-column{max-height:45dvh;min-height:120px;overflow:visible}.project-column-cards{overflow:auto}.project-detail{flex-basis:40%}.project-filters>label:first-child{flex-basis:100%}}
+@media(prefers-reduced-motion:reduce){.project-card{transition:none}}
