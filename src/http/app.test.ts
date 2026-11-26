@@ -14,6 +14,7 @@ const viewer = (request: IncomingMessage) => viewers[String(request.headers.cook
 let failures = 0;
 function build(view: () => Record<string, unknown> = () => ({ events: [] })) {
   return createHttpApp({ allowedHost: host, origin: 'http://fabcore.test', limit: () => true, viewer, onFailure: () => { failures += 1; } }, migratedRoutes({
+    projects: { list: () => ({ version: 1, projects: [], work: [] }), create: async () => { throw new Error('unused'); }, update: async () => { throw new Error('unused'); }, saveWork: async () => { throw new Error('unused'); } },
     accounts: { installed: () => true, setup: async () => { throw new Error('unused'); }, login: async () => { throw new Error('unused'); }, logout: () => ({ body: { authenticated: false as const }, cookie: '' }), addObserver: async () => ({ username: 'x' }) },
     session: { installed: () => true, oidcEnabled: () => false, viewer },
     diagnostics: { view, fleet: () => [{ id: 'm1', name: 'P2S' }] },

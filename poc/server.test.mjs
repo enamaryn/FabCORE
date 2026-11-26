@@ -74,7 +74,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   const cameraInputs = new Map();
   let cc2Probes = 0;
   let cameraContentType = 'multipart/x-mixed-replace; boundary=frame';
-  const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token',
+  const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token', fetchFiles: async () => Response.json({ result: { webcams: [] } }),
     notify: async (channel, config, internal) => {
       notices.push([channel, config.ntfy.topic, internal]);
       return true;

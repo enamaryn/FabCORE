@@ -1,3 +1,4 @@
+import type { ProjectBoard } from '../domain/projects.ts';
 import { ServiceError } from './errors.ts';
 
 // Port de persistance de l'état d'installation (ADR 0003) : implémenté par `poc/store.mjs` (JSON) et
@@ -15,6 +16,7 @@ export type FabCoreState = {
   machines: MachineRecord[];
   cloudAccounts?: CloudAccountRecord[];
   notifications?: Record<string, unknown>;
+  projectBoard?: ProjectBoard;
 };
 
 export interface StateStore {

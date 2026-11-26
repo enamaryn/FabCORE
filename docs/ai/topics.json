@@ -754,5 +754,33 @@
       "docs/protocols/BAMBU-CLOUD-CAMERA.md",
       "docs/protocols/BAMBU-CLOUD-CAMERA-RESEARCH.md"
     ]
+  },
+  {
+    "id": "projects",
+    "title": "Projets créatifs et travaux à produire",
+    "files": [
+      "src/domain/projects.ts",
+      "src/application/projects.ts",
+      "src/http/routes/projects.ts",
+      "web/src/components/projects/ProjectsPage.tsx",
+      "web/src/components/projects/ProjectEditor.tsx"
+    ],
+    "symbols": [
+      "projectFields",
+      "workFields",
+      "createProjectService",
+      "projectRoutes",
+      "ProjectsPage",
+      "ProjectBoardView"
+    ],
+    "tests": [
+      "src/application/projects.test.ts",
+      "poc/projects-http.test.mjs",
+      "web/test/projects.test.mjs",
+      "src/persistence/postgres.test.ts"
+    ],
+    "docs": [
+      "docs/protocols/PROJECT-KANBAN.md"
+    ]
   }
 ]

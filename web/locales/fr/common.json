@@ -23,7 +23,8 @@
     "cloud": "Comptes cloud",
     "diagnostics": "Diagnostics",
     "notifications": "Notifications",
-    "observer": "Ajouter un observateur"
+    "observer": "Ajouter un observateur",
+    "projects": "Projets"
   },
   "languageName": {
     "fr": "Français",

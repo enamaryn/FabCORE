@@ -12,7 +12,7 @@ const unknownId = '00000000-0000-0000-0000-000000000000';
 async function start(ctx) {
   const directory = await mkdtemp(join(tmpdir(), 'fabcore-routing-'));
   ctx.after(() => rm(directory, { recursive: true, force: true }));
-  const { server, token } = createFabCore({ directory, origin, activationToken: 'routing-activation',
+  const { server, token } = createFabCore({ directory, origin, activationToken: 'routing-activation', fetchFiles: async () => Response.json({ result: { webcams: [] } }),
     readPrinter: async () => ({ status: 'ready', issue: null, progress: 0, nozzle: 20, bed: 20, file: '' }) });
   ctx.after(() => new Promise(resolve => server.close(resolve)));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));

@@ -210,6 +210,7 @@ function liveNavigation() {
   return [
     ['home', t('Vue d’ensemble', 'Overview'), 'grid'],
     ['machines', t('Machines', 'Machines'), 'machine'],
+    ['projects', t('Projets', 'Projects'), 'grid'],
     ['history', t('Activité récente', 'Recent activity'), 'activity']
   ].map(([id, title, glyph]) => btn('nav:' + id, title, glyph, '', live.page === id ? 'aria-current="page"' : '')).join('');
 }
@@ -698,7 +699,7 @@ function renderLive() {
       ${live.refreshError?`<p class="notice" role="status">${t('Actualisation indisponible. Les données affichées datent de la dernière réponse.','Refresh unavailable. Showing the last response.')}</p>`:''}
       ${signedIn?screens[live.page]():credentialsPage()}
     </main></div></div>
-    ${signedIn?`<nav class="mobile" style="grid-template-columns:repeat(3,1fr)" aria-label="${t('Navigation mobile','Mobile navigation')}">${liveNavigation()}</nav>`:''}`;
+    ${signedIn?`<nav class="mobile" style="grid-template-columns:repeat(4,1fr)" aria-label="${t('Navigation mobile','Mobile navigation')}">${liveNavigation()}</nav>`:''}`;
   if (compact) app.querySelectorAll('.sidebar nav button').forEach(button => { button.title = button.textContent.trim(); });
   if (signedIn && live.page === 'detail' && machineTab() === 'overview') { showPreview(); loadManualControls(state.machine); }
   if (signedIn && live.page === 'viewer') mountGcode();
@@ -1107,7 +1108,7 @@ document.addEventListener('click', async (event) => {
     renderLive();
   }
   if (live.phase !== 'workshop') return;
-  if (action === 'nav' && ['home', 'machines', 'history'].includes(value)) { location.assign('/app#' + value); return; }
+  if (action === 'nav' && ['home', 'machines', 'history', 'projects'].includes(value)) { location.assign('/app#' + value); return; }
   if (action === 'nav') {
     live.page = value;
     renderLive();
