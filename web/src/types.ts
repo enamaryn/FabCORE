@@ -30,6 +30,9 @@ export type MachineData = Static<typeof FleetMachine> & {
   origin?: string;
   capabilities?: MachineCapabilities;
   transport?: string;
+  nativeStatus?: number | null;
+  nativeSubStatus?: number | null;
+  exceptionCodes?: number[];
   nativeState?: string;
   firmware?: string;
   feedRate?: number | null;

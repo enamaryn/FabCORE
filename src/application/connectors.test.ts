@@ -101,3 +101,17 @@ test('une action non déclarée est refusée sans contacter la machine', async (
   assert.equal(called, false);
   assert.equal(calls.get, 0);
 });
+
+test('urgence typée : méthode distincte, résultat et code natif sans rejeu ni repli', async () => {
+  let writes = 0;
+  const { registry } = fakeRegistry({
+    async read() { return {}; },
+    async command() { assert.fail('no fallback to stop'); },
+    async emergencyStop() { writes++; return { outcome: 'accepted', nativeCode: 200 }; },
+  });
+  const connector = createTypedConnectorRegistry({}, registry, () => at).connector('klipper');
+  assert.deepEqual(await connector.command(machine, 'emergencyStop', commandId), { commandId, outcome: 'accepted', nativeCode: 200, at: at.toISOString() });
+  assert.equal(writes, 1);
+  const refused = await createTypedConnectorRegistry({}, registry, () => at).connector('elegoo').command(machine, 'emergencyStop', commandId);
+  assert.equal(refused.outcome, 'rejected'); assert.equal(writes, 1);
+});

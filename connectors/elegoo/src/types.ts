@@ -15,12 +15,15 @@ export interface CC2Snapshot {
   bed: number | null;
   progress: number;
   file: string;
+  nativeStatus?: number | null;
+  nativeSubStatus?: number | null;
+  exceptionCodes?: number[];
   serial?: string;
   filaments?: unknown;
 }
 export type CC2Identity = { serial: string } | (CC2Snapshot & { serial?: never });
 export interface CC2Report {
-  machine_status?: { status?: number; sub_status?: number; progress?: unknown };
+  machine_status?: { status?: number; sub_status?: number; exception_status?: unknown[]; progress?: unknown };
   extruder?: { temperature?: unknown };
   heater_bed?: { temperature?: unknown };
   print_status?: { filename?: unknown };

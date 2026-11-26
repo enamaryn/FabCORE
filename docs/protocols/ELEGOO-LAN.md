@@ -30,7 +30,9 @@ Valentin confirme ajout/suppression/redécouverte CC2, hors ligne après extinct
 
 Incident réel : pendant préparation/nivellement (status 2, sub_status 2901), le Stop normal n’a pas été confirmé. Lors de l’intervention, 1022 n’a pas eu de réponse corrélée ; cela ne prouve pas un refus constructeur. Les tentatives avec un identifiant MQTT concurrent ont perturbé la session et limitent l’interprétation. Avec une nouvelle session enregistrée, méthode 1007 : réponse `error_code=0`, exception 803 et état 14 reçus. Les cibles de chauffe après urgence n’ont pas été relues avec succès : ne pas affirmer leur valeur.
 
-À corriger dans #78 : conserver le code natif, différencier 2501 (pause en cours) de pause effective, 2503 (annulation en cours) de 2504 (terminée), gérer état 14 et exception 803. Actuellement l’ACK est réduit à un booléen et le délai RPC est six secondes. Ni l’ACK seul ni un délai expiré ne prouvent le résultat physique.
+Implémenté pour #78 : 2501 reste en fabrication (pause en cours), 2502/2505 = pause effective, 2503 reste en fabrication (annulation en cours), 2504 = annulation terminée. État 14 conservé en erreur explicite `elegoo-emergency-stop` ; `nativeStatus`, `nativeSubStatus` et `exceptionCodes` (dont 803) restent visibles. Le Stop normal garde son contrat booléen et le délai RPC de six secondes. Ni l’ACK seul ni un délai expiré ne prouvent le résultat physique.
+
+L’action d’urgence CC2 reste explicitement indisponible dans FabCore : firmware exact et paramètres complets de la requête non relevés, aucune primitive d’urgence exposée dans le SDK officiel consulté. La correction de l’état 14 ne suffit pas à qualifier une commande. Voir [matrice et recette](EMERGENCY-STOP.md).
 
 1007 constitue une piste d’urgence CC2 corroborée par cette intervention et le client elegoo-web ; ne pas la transposer à CC1. Elle ne doit pas remplacer automatiquement 1022. Aucune garantie matérielle générale déduite d’un seul essai. La couche MQTT propriétaire n’est pas entièrement décrite par les sources du firmware publiées.
 

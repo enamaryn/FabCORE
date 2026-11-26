@@ -121,3 +121,42 @@ test('découverte : un client qui ferme la requête annule le scan et libère la
   const [status] = await send('/api/discovery', { body: { network: '10.0.0.0/8' }, cookie: admin });
   assert.equal(status, 400, 'découverte libérée : nouvelle requête traitée');
 });
+
+test('urgence : droits, cible, confirmation et résultat natif ; une seule écriture sans rejeu', async ctx => {
+  let writes = 0, mode = 'accepted', shutdown = false;
+  const { send, admin, observer } = await start(ctx, {
+    readPrinter: async () => shutdown ? { ...ready, status: 'error', issue: 'moonraker-shutdown' } : ready,
+    fetchFiles: async (url, options) => {
+      assert.ok(url.endsWith('/printer/emergency_stop'));
+      assert.equal(options.method, 'POST'); writes++;
+      if (mode === 'network') throw new Error('connection lost');
+      if (mode === 'refused') return new Response('', { status: 403 });
+      if (mode === 'confirmed') shutdown = true;
+      return Response.json({ result: 'ok' });
+    },
+  });
+  const [, { id }] = await send('/api/machines', { body: klipper(7125), cookie: admin });
+  const path = '/api/machines/' + id + '/command';
+  const command = { action: 'emergencyStop', confirm: true };
+  assert.deepEqual(await send(path, { body: command, cookie: observer }), [403, { error: 'forbidden' }]);
+  assert.deepEqual(await send(path, { body: command }), [401, { error: 'sign-in' }]);
+  assert.deepEqual(await send(path, { body: command, cookie: admin, requestOrigin: 'http://evil.test' }), [403, { error: 'origin' }]);
+  assert.deepEqual(await send(path, { body: { ...command, confirm: false }, cookie: admin }), [400, { error: 'invalid' }]);
+  assert.equal(writes, 0);
+  assert.deepEqual(await send(path, { body: command, cookie: admin }), [200, { outcome: 'accepted', nativeCode: 200 }]);
+  assert.equal(writes, 1);
+  mode = 'refused';
+  assert.deepEqual(await send(path, { body: command, cookie: admin }), [200, { outcome: 'rejected', nativeCode: 403 }]);
+  mode = 'network';
+  assert.deepEqual(await send(path, { body: command, cookie: admin }), [200, { outcome: 'unknown' }]);
+  await send('/api/machines', { cookie: admin });
+  assert.equal(writes, 3, 'a read/reconnect never resends an emergency');
+  mode = 'confirmed';
+  assert.deepEqual(await send(path, { body: command, cookie: admin }), [200, { outcome: 'confirmed', nativeCode: 200, status: 'error', issue: 'moonraker-shutdown' }]);
+  // A shutdown/error state must not hide the emergency endpoint behind a printing-only gate.
+  mode = 'refused';
+  assert.equal((await send(path, { body: command, cookie: admin }))[0], 200);
+  assert.equal(writes, 5);
+  const [, logs] = await send('/api/machines/' + id + '/logs', { cookie: admin });
+  assert.ok(logs.lines.some(line => line.event === 'operation-result' && line.details.operation === 'emergencyStop' && line.details.nativeCode === 403 && line.details.outcome === 'rejected'), 'native refusal remains reviewable in machine logs');
+});

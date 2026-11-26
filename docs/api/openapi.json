@@ -3851,7 +3851,7 @@
     },
     "/api/machines/{id}/command": {
       "post": {
-        "summary": "Pause, reprise, arrêt ou lancement préparé (confirmation pour arrêt et lancement)",
+        "summary": "Pause, reprise, annulation, urgence logicielle selon capacités ou lancement préparé (confirmation pour annulation, urgence et lancement)",
         "tags": [
           "commandes"
         ],
@@ -3872,7 +3872,7 @@
         ],
         "responses": {
           "200": {
-            "description": "État observé après la commande.",
+            "description": "État observé ; urgence : issue accepted/confirmed/rejected/unknown et code HTTP natif, sans garantie de coupure matérielle.",
             "content": {
               "application/json": {
                 "schema": {

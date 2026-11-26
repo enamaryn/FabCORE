@@ -419,17 +419,36 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     let data;
     try { data = await readJson(req); } catch { return error(res, 400, 'invalid'); }
     const action = data.action;
-    if (!['start', 'pause', 'resume', 'stop'].includes(action)) return error(res, 400, 'invalid');
+    if (!['start', 'pause', 'resume', 'stop', 'emergencyStop'].includes(action)) return error(res, 400, 'invalid');
     const machine = store.state.machines.find(({ id }) => id === command[1]);
     if (!machine || !connectorDefinition(machine.kind ?? 'klipper')?.commands) return error(res, 404, 'missing');
     if (!connectorDefinition(machine.kind ?? 'klipper').commandActions.includes(action)) return error(res, 400, 'command-unsupported');
-    if (['stop', 'start'].includes(action) && data.confirm !== true) return error(res, 400, 'invalid');
+    if (['stop', 'start', 'emergencyStop'].includes(action) && data.confirm !== true) return error(res, 400, 'invalid');
     if (pendingCommands.has(machine.id) || pendingUploads.has(machine.id)) return error(res, 409, 'command-busy');
     const before = { pause: ['printing'], resume: ['paused'], stop: ['printing', 'paused'], start: ['ready', 'done'] }[action];
     const after = { pause: ['paused'], resume: ['printing'], stop: ['ready', 'done'], start: ['printing'] }[action];
     pendingCommands.add(machine.id);
     try {
       const connector = await connectors.get(machine.kind ?? 'klipper');
+      if (action === 'emergencyStop') {
+        // Admin/CSRF guards run before this handler. No state gate: emergencies also happen during preparation.
+        // Exactly one write; all following calls are read-only. Network loss never triggers a resend.
+        if (res.destroyed) return;
+        if (!session(req)) return error(res, 401, 'sign-in');
+        let result;
+        try { result = await connector.emergencyStop(machine); }
+        catch { result = { outcome: 'unknown' }; }
+        if (result.outcome === 'accepted') {
+          for (let attempt = 0; attempt < 4; attempt++) {
+            try {
+              const report = await connector.read(machine);
+              if (report.issue === 'moonraker-shutdown') return answer(res, 200, { ...result, outcome: 'confirmed', status: report.status, issue: report.issue });
+            } catch { /* Preserve the acknowledged result even when observation fails. */ }
+            if (attempt < 3) await delay(350);
+          }
+        }
+        return answer(res, 200, result);
+      }
       if (!before.includes((await connector.read(machine)).status)) return error(res, 409, 'command-state');
       if (res.destroyed) return;
       if (!session(req)) return error(res, 401, 'sign-in');
