@@ -782,5 +782,31 @@
     "docs": [
       "docs/protocols/PROJECT-KANBAN.md"
     ]
+  },
+  {
+    "id": "emergency-stop",
+    "title": "Urgence logicielle par capacité et transitions CC2",
+    "files": [
+      "connectors/moonraker/src/index.ts",
+      "connectors/elegoo/src/monitor.ts",
+      "poc/server.mjs",
+      "poc/connectors.mjs",
+      "web/src/components/machine/MachineDetail.tsx"
+    ],
+    "symbols": [
+      "emergencyStopMoonraker",
+      "createCC2Services",
+      "handleCommand"
+    ],
+    "tests": [
+      "poc/emergency-stop.test.mjs",
+      "poc/machine-writes.test.mjs",
+      "connectors/elegoo/test/monitor.test.ts",
+      "web/test/cockpit.test.mjs"
+    ],
+    "docs": [
+      "docs/protocols/EMERGENCY-STOP.md",
+      "poc/CONNECTORS.md"
+    ]
   }
 ]

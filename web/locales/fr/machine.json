@@ -80,7 +80,8 @@
     "pause": "Pause",
     "resume": "Reprendre",
     "stop": "Stop",
-    "start": "Lancer"
+    "start": "Lancer",
+    "emergencyStop": "Arrêt d’urgence logiciel"
   },
   "outcomes": {
     "accepted": "Commande acceptée ; son exécution reste à vérifier sur la machine.",
@@ -105,5 +106,17 @@
   "cameraEnlarge": "Agrandir la caméra",
   "cameraReduce": "Réduire la caméra",
   "cameraPage": "Pleine page",
-  "cameraExitPage": "Quitter la pleine page (Échap)"
+  "cameraExitPage": "Quitter la pleine page (Échap)",
+  "emergencyTitle": "Arrêt d’urgence logiciel",
+  "emergencyLimitation": "Dépend du réseau et du firmware. Aucune coupure matérielle ou de chauffe garantie.",
+  "emergencyUnavailable": "Indisponible : aucune primitive d’urgence qualifiée pour ce connecteur, modèle et firmware. Stop reste une annulation.",
+  "confirmEmergency": "Envoyer un arrêt d’urgence logiciel à « {name} » ?",
+  "emergencyOutcomes": {
+    "accepted": "Commande acceptée ; arrêt non confirmé.",
+    "confirmed": "État logiciel d’arrêt confirmé ; chauffe non mesurée.",
+    "rejected": "Commande refusée.",
+    "unknown": "Résultat inconnu ; vérifier la machine. Aucun renvoi automatique."
+  },
+  "nativeState": "État constructeur",
+  "nativeExceptions": "Exceptions"
 }

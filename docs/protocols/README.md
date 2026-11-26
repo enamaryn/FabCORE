@@ -17,7 +17,7 @@ Contrat de développement : [CONNECTORS.md](../../poc/CONNECTORS.md). Phase : [P
 
 ## Ordre de travail
 
-1. [Urgence #78](https://github.com/enamaryn/FabCORE/issues/78) : qualifier l’arrêt d’urgence par modèle et corriger le suivi Pause/Stop CC2.
+1. [Matrice urgence et recette](EMERGENCY-STOP.md) · [Urgence #78](https://github.com/enamaryn/FabCORE/issues/78) : qualifier l’arrêt d’urgence par modèle et corriger le suivi Pause/Stop CC2.
 2. [Cloud Bambu #79](https://github.com/enamaryn/FabCORE/issues/79) : comptes multiples, authentification et lecture seule, puis commandes/fichiers/vidéo par capacités prouvées.
 3. Reprendre la recette matérielle POC-10. Aucun test simulé ne remplace la recette matérielle.
 

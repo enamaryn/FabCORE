@@ -1,7 +1,7 @@
 import { mkdirSync, appendFileSync, readFileSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
-const fields = new Set(('file_list filename size create_time type storage_media operation kind transport mode host port path topic channel elapsedMs bytes count status issue outcome action id value max current target writable confirmed expected actual attempt code error_code reason result sequence_id command param params payload print system info data method nozzle bed progress file checkedAt gcode_state print_error nozzle_temper nozzle_target_temper bed_temper bed_target_temper chamber_temper temp device extruder heater_bed temperature machine_status sub_status sub_status_reason_code exception_status heater heaters lights fans motion percent rpm connected timeout qos retain result_code correlated omittedFields omittedItems').split(' '));
+const fields = new Set(('file_list filename size create_time type storage_media operation kind transport mode host port path topic channel elapsedMs bytes count status issue outcome action id value max current target writable confirmed expected actual attempt code error_code reason result sequence_id command param params payload print system info data method nozzle bed progress file checkedAt gcode_state print_error nozzle_temper nozzle_target_temper bed_temper bed_target_temper chamber_temper temp device extruder heater_bed temperature machine_status sub_status sub_status_reason_code exception_status nativeCode nativeStatus nativeSubStatus exceptionCodes heater heaters lights fans motion percent rpm connected timeout qos retain result_code correlated omittedFields omittedItems').split(' '));
 const secretName = /password|passwd|token|secret|cookie|auth|access.?code|api.?key|session.?key|pairing|user.?key/i;
 export function safeMachineDetails(value, secrets = [], depth = 0, name = '') {
   if (depth > 6) return '[depth limit]';
@@ -90,7 +90,7 @@ export function instrumentConnector(connector, diagnostics) {
       }
     };
   }
-  for (const key of ['read', 'probe', 'command', 'gcode']) wrap(connector, key, key);
+  for (const key of ['read', 'probe', 'command', 'emergencyStop', 'gcode']) wrap(connector, key, key);
   for (const key of ['read', 'execute']) wrap(connector.control, key, 'control.' + key);
   for (const key of ['list', 'download', 'downloadOriginal', 'upload', 'start']) wrap(connector.files, key, 'files.' + key);
   return connector;

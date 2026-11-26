@@ -112,3 +112,27 @@ test('CC2 typé : identité différente refusée avant MQTT et identifiant stabl
   assert.equal('issue' in read && read.issue, 'elegoo-identity'); assert.equal(opened, false);
   assert.equal(api.elegooClientId(m.serial), services().elegooClientId(m.serial));
 });
+
+test('CC2 : transitions non finales et urgence conservent les codes constructeur', async ctx => {
+  const api = services(), clients: Printer[] = [], m = machine('transition');
+  const monitor = api.createElegooMonitor(options(clients, m)); ctx.after(() => monitor.close());
+  await monitor.read(m); await setImmediate(); const printer = clients[0]!;
+  for (const [sub, status] of [[2501, 'printing'], [2502, 'paused'], [2503, 'printing'], [2504, 'ready']] as const) {
+    printer.deliver(printer.response, { method: 6000, result: { machine_status: { status: 2, sub_status: sub } } });
+    const report = await monitor.read(m);
+    assert.equal('status' in report && report.status, status);
+    assert.equal('nativeSubStatus' in report && report.nativeSubStatus, sub);
+  }
+  printer.deliver(printer.response, { method: 6000, result: { machine_status: { status: 14, exception_status: [803] }, exception: { exception_code: { '803': { level: 1 } } } } });
+  const report = await monitor.read(m);
+  assert.equal('status' in report && report.status, 'error');
+  assert.equal('issue' in report && report.issue, 'elegoo-emergency-stop');
+  assert.equal('nativeStatus' in report && report.nativeStatus, 14);
+  assert.deepEqual('exceptionCodes' in report && report.exceptionCodes, [803]);
+  printer.deliver(printer.response, { method: 6000, result: { machine_status: { exception_status: [] }, exception: { exception_code: { '803': {} } } } });
+  assert.deepEqual((await monitor.read(m) as { exceptionCodes: number[] }).exceptionCodes, [803], 'exception object alone is preserved');
+  printer.deliver(printer.response, { method: 6000, result: { exception: { exception_code: {} } } });
+  assert.deepEqual((await monitor.read(m) as { exceptionCodes: number[] }).exceptionCodes, [], 'cleared exception lists do not retain old codes');
+  assert.equal(monitor.command(m, 'emergencyStop'), false);
+  assert.equal(printer.sent.some(s => s.data.method === 1007), false);
+});

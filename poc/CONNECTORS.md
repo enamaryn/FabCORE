@@ -19,7 +19,9 @@ Utiliser des tests de réponses simulées et vérifier le parcours d’ajout dan
 
 ### Fichiers et commandes de production
 
-`commandActions` énumère les commandes réellement implémentées (`pause`, `resume`, `stop` et, pour un projet déjà préparé sur la M2, `start`). La route serveur vérifie cette liste, les droits administrateur, l’état de la machine et la confirmation d’un arrêt ou lancement. `stop` annule la fabrication ; ce n’est pas un arrêt d’urgence matériel. Une réponse perdue reste non confirmée, sans rejeu automatique.
+`commandActions` énumère les commandes réellement implémentées (`pause`, `resume`, `stop`, `emergencyStop` si prouvé et, pour un projet déjà préparé sur la M2, `start`). La route serveur vérifie cette liste, les droits administrateur, l’état de la machine et la confirmation d’un arrêt ou lancement. `stop` annule la fabrication ; ce n’est pas un arrêt d’urgence matériel. Une réponse perdue reste non confirmée, sans rejeu automatique.
+
+`emergencyStop(machine)` est une méthode distincte de `command` qui renvoie `{ outcome: 'accepted' | 'rejected' | 'unknown', nativeCode? }`. Seul Moonraker la fournit actuellement. La route suit ensuite le retour natif `webhooks.state=shutdown` pour `confirmed` (logiciel uniquement), sans inférer une coupure de chauffe. Verrou et clé de débit séparés des opérations ordinaires : un Stop ou transfert bloqué n’empêche pas l’urgence, et sa fin ne libère pas leur verrou. Pendant une urgence, les nouvelles écritures ordinaires sont refusées. Aucun rejeu, aucun G-code de repli, aucune escalade de Stop. Les autres connecteurs affichent leur indisponibilité. Matrice et limites : [urgence](../docs/protocols/EMERGENCY-STOP.md).
 
 Les commandes Bambu et CC2 utilisent la session MQTT existante, avec identifiants de transaction et sans mise en file hors connexion. La CC2 n’expose pas de reprise : elegoo-link laisse la correspondance 1023 commentée, sans implémentation utilisable. Ne pas la déclarer fonctionnelle sur cette seule base.
 

@@ -21,8 +21,8 @@ interface Session {
 
 /** Une seule implémentation CC2. Les projections encore partagées sont injectées par le POC. */
 export function createCC2Services({ reportedControls, canvasFilaments, readResponse }: CC2Ports) {
-  const states = new Map<number | undefined, CC2Status>([[0, 'connecting'], [1, 'ready'], [2, 'printing'], [3, 'ready'], [4, 'ready'], [5, 'connecting'], [6, 'error']]);
-  const printStates = new Map<number | undefined, CC2Status>([[2501, 'paused'], [2502, 'paused'], [2505, 'paused'], [2504, 'ready'], [2077, 'done']]);
+  const states = new Map<number | undefined, CC2Status>([[0, 'connecting'], [1, 'ready'], [2, 'printing'], [3, 'ready'], [4, 'ready'], [5, 'connecting'], [6, 'error'], [14, 'error']]);
+  const printStates = new Map<number | undefined, CC2Status>([[2501, 'printing'], [2503, 'printing'], [2502, 'paused'], [2505, 'paused'], [2504, 'ready'], [2077, 'done']]);
   const empty = (status: CC2Status, issue: string | null): CC2Snapshot => ({ status, issue, nozzle: null, bed: null, progress: 0, file: '' });
   const finite = (value: unknown): value is number => Number.isFinite(value);
   const temperature = (value: unknown) => finite(value) ? Math.round(value * 10) / 10 : null;
@@ -31,8 +31,12 @@ export function createCC2Services({ reportedControls, canvasFilaments, readRespo
     const machine = result?.machine_status;
     const status = (machine?.status === 2 && printStates.get(machine.sub_status)) || states.get(machine?.status);
     if (!status) return empty('error', 'elegoo-report');
+    const exception = result?.exception as { exception_code?: Record<string, unknown> } | undefined;
+    const exceptionCodes = [...new Set([...(Array.isArray(machine?.exception_status) ? machine.exception_status : []), ...Object.keys(exception?.exception_code ?? {}).map(Number)].filter((code): code is number => typeof code === 'number' && Number.isInteger(code)))];
     return {
-      status, issue: status === 'error' ? 'elegoo-print' : null,
+      status, issue: machine?.status === 14 ? 'elegoo-emergency-stop' : status === 'error' ? 'elegoo-print' : null,
+      nativeStatus: machine?.status ?? null, nativeSubStatus: machine?.sub_status ?? null,
+      exceptionCodes,
       nozzle: temperature(result?.extruder?.temperature), bed: temperature(result?.heater_bed?.temperature),
       progress: status === 'done' ? 100 : finite(machine?.progress)
         ? Math.round(Math.max(0, Math.min(100, machine.progress))) : 0,
@@ -284,6 +288,8 @@ export function createCC2Services({ reportedControls, canvasFilaments, readRespo
             latest[field] = { ...latest[field], ...message.result[field] };
           }
         }
+        // Exception lists are snapshots, not a growing union; an empty object clears old codes.
+        if (message.result.exception && typeof message.result.exception === 'object') latest.exception = message.result.exception;
         if (message.result.led && typeof message.result.led === 'object') latest.led = { ...latest.led, ...message.result.led };
         // Position (`gcode_move`, ancien nom `gcode_move_inf`) et axes à l'origine (`tool_head`, ou `toolhead` selon le firmware).
         for (const [field, target] of [['gcode_move', 'gcode_move'], ['gcode_move_inf', 'gcode_move'], ['tool_head', 'tool_head'], ['toolhead', 'tool_head']] as const) {

@@ -69,7 +69,7 @@ test('HTTP : deux secondes minimum entre deux contrôles CC2, 500 ms ailleurs', 
   const ready = { status: 'ready', issue: null, progress: 0, nozzle: 20, bed: 20, file: '' };
   const { server, token } = createFabCore({ directory, origin, activationToken: 'cc2-rate-activation',
     readCC2: async () => ({ ...ready, serial: 'CC2RATE01' }), readPrinter: async () => ready,
-    // Fixture isolation: never query the fake Moonraker private address.
+    // Rate-limit fixture: never use the default HTTP transport against the fake private address.
     fetchFiles: async () => Response.json({ result: { objects: [] } }) });
   ctx.after(() => new Promise(resolve => server.close(resolve)));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));

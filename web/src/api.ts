@@ -114,6 +114,11 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
       if (!value || typeof value !== 'object' || !('outcome' in value) || !['accepted', 'executed', 'confirmed'].includes(String(value.outcome))) throw new ApiError('command-unconfirmed', 504);
       return value as { outcome: string };
     },
+    async emergencyStop(id: string, signal?: AbortSignal): Promise<{ outcome: string; nativeCode?: number }> {
+      const value = await request('machines/' + encodeURIComponent(id) + '/command', { action: 'emergencyStop', confirm: true }, signal);
+      if (!value || typeof value !== 'object' || !('outcome' in value) || !['accepted', 'confirmed', 'rejected', 'unknown'].includes(String(value.outcome))) throw new ApiError('command-unconfirmed', 504);
+      return value as { outcome: string; nativeCode?: number };
+    },
     async command(id: string, action: string, confirm: boolean, signal?: AbortSignal): Promise<{ status: string }> {
       const value = await request('machines/' + encodeURIComponent(id) + '/command', { action, confirm }, signal);
       if (!value || typeof value !== 'object' || !('status' in value) || !['ready', 'done', 'printing', 'paused', 'error'].includes(String(value.status))) throw new ApiError('command-unconfirmed', 504);

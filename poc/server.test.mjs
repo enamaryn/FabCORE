@@ -47,7 +47,7 @@ test('Moonraker envoie uniquement les commandes pause, reprise et arrêt vers la
 
 test('Moonraker distingue un accès refusé, Klippy indisponible et la perte de liaison', async () => {
   assert.equal((await readMoonraker(printer, async () => new Response('', { status: 401 }))).issue, 'access');
-  assert.equal((await readMoonraker(printer, async () => Response.json({ result: { status: { webhooks: { state: 'shutdown' } } } }))).issue, 'klippy');
+  assert.equal((await readMoonraker(printer, async () => Response.json({ result: { status: { webhooks: { state: 'shutdown' } } } }))).issue, 'moonraker-shutdown');
   assert.equal((await readMoonraker(printer, async () => { throw new TypeError('connection'); })).status, 'offline');
   assert.equal((await readMoonraker(printer, async () => new Response('bad JSON'))).issue, 'moonraker');
 });
@@ -74,7 +74,8 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   const cameraInputs = new Map();
   let cc2Probes = 0;
   let cameraContentType = 'multipart/x-mixed-replace; boundary=frame';
-  const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token', fetchFiles: async () => Response.json({ result: { webcams: [] } }),
+  const { server, token } = createFabCore({ directory, origin, activationToken: 'test-activation-token',
+    fetchFiles: async () => Response.json({ result: { webcams: [] } }),
     notify: async (channel, config, internal) => {
       notices.push([channel, config.ntfy.topic, internal]);
       return true;

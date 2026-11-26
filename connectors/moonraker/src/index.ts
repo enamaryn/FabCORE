@@ -36,6 +36,7 @@ export function createMoonrakerServices({ encodePath, filePath, validOrigin: moo
 
       const objects = (await decode<{ status?: MoonrakerObjects }>(response))?.result?.status;
       if (objects?.webhooks?.state === 'startup') return unavailable('connecting', 'klippy');
+      if (objects?.webhooks?.state === 'shutdown') return unavailable('error', 'moonraker-shutdown');
       if (objects?.webhooks?.state !== 'ready') return unavailable('error', 'klippy');
       const print = objects.print_stats ?? {};
       const status = statuses.get(print?.state);
@@ -78,6 +79,25 @@ export function createMoonrakerServices({ encodePath, filePath, validOrigin: moo
     }
     if ((await decode<unknown>(response))?.result !== 'ok') throw new Error('Moonraker command outcome unknown');
     return true;
+  }
+
+  /** Native API, never G-code, never retried. An ACK is not a physical shutdown measurement. */
+  async function emergencyStopMoonraker(machine: MoonrakerConnection, fetcher: MoonrakerFetch = fetch) {
+    if (moonrakerOrigin(machine.origin) !== machine.origin) return { outcome: 'rejected' as const };
+    let nativeCode: number | undefined;
+    try {
+      const response = await fetcher(machine.origin + '/printer/emergency_stop', {
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(2500),
+        headers: machine.apiKey ? { 'X-Api-Key': machine.apiKey } : {},
+      });
+      nativeCode = response.status;
+      if (!response.ok) {
+        await response.body?.cancel();
+        return { outcome: response.status >= 500 ? 'unknown' as const : 'rejected' as const, nativeCode };
+      }
+      const body = await decode<unknown>(response);
+      return { outcome: body?.result === 'ok' ? 'accepted' as const : 'unknown' as const, nativeCode };
+    } catch { return { outcome: 'unknown' as const, ...(nativeCode === undefined ? {} : { nativeCode }) }; }
   }
 
   // Fichiers du dossier gcodes de Moonraker : liste, lecture pour le visualiseur, envoi et lancement d’une impression.
@@ -185,5 +205,5 @@ export function createMoonrakerServices({ encodePath, filePath, validOrigin: moo
     return null;
   }
 
-  return { readMoonraker, commandMoonraker, createMoonrakerFiles, sendMoonrakerGcode, moonrakerWebcam };
+  return { readMoonraker, commandMoonraker, emergencyStopMoonraker, createMoonrakerFiles, sendMoonrakerGcode, moonrakerWebcam };
 }

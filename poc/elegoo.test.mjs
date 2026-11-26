@@ -48,7 +48,7 @@ test('CC2 enregistre une session et demande exclusivement le statut 1002', async
     return client;
   };
   const state = await readElegoo(cc2, { fetcher: identify(serial), connectPrinter });
-  assert.deepEqual(state, { status: 'paused', issue: null, progress: 52, nozzle: 214.5, bed: 60, file: 'part.gcode', serial });
+  assert.deepEqual(state, { status: 'paused', issue: null, nativeStatus: 2, nativeSubStatus: 2502, exceptionCodes: [], progress: 52, nozzle: 214.5, bed: 60, file: 'part.gcode', serial });
   assert.equal(publications, 2);
   assert.ok(closed);
 });
