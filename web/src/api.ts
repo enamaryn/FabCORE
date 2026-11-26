@@ -37,6 +37,12 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
     return payload;
   }
   return {
+    async production(signal?: AbortSignal): Promise<ProjectBoard> {
+      const value = await request('production', undefined, signal);
+      if (!value || typeof value !== 'object' || !('version' in value) || value.version !== 1 || !('projects' in value) || !Array.isArray(value.projects) || value.projects.length > 250 || !('work' in value) || !Array.isArray(value.work) || value.work.length > 1000) throw new ApiError('response', 502);
+      return value as ProjectBoard;
+    },
+    async saveProductionWork(workId: string | undefined, data: Record<string, unknown>): Promise<ProductionWork> { return await request('production/work' + (workId ? '/' + encodeURIComponent(workId) : ''), data) as ProductionWork; },
     async projects(signal?: AbortSignal): Promise<ProjectBoard> {
       const value = await request('projects', undefined, signal);
       if (!value || typeof value !== 'object' || !('version' in value) || value.version !== 1 || !('projects' in value) || !Array.isArray(value.projects) || value.projects.length > 250 || !('work' in value) || !Array.isArray(value.work) || value.work.length > 1000) throw new ApiError('response', 502);

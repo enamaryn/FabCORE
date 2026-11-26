@@ -48,7 +48,7 @@
   "machine": "Machine indicative",
   "unassigned": "À affecter",
   "removedMachine": "Machine retirée du parc",
-  "estimatedMinutes": "Durée estimée (min)",
+  "estimatedMinutes": "Durée totale estimée (min)",
   "material": "Matière",
   "fileReference": "Fichier / version à produire",
   "fileHelp": "Nom, version ou lien vers le fichier final",
@@ -77,7 +77,7 @@
   "restore": "Restaurer",
   "close": "Fermer",
   "history": "Historique des changements",
-  "ganttNext": "Ces travaux sont préparés pour une planification future par machine. Le Gantt et le lancement des fabrications ne sont pas déclenchés depuis ce tableau.",
+  "ganttNext": "Retrouvez et planifiez les travaux dans le planning de production, également accessible sans projet.",
   "stages": {
     "idea": "Idées",
     "scoping": "À cadrer",
@@ -139,5 +139,11 @@
     "rate": "Trop de modifications rapprochées. Patientez un instant.",
     "missing": "Le projet ou travail n’existe plus."
   },
-  "editProjectNamed": "Modifier le projet : {title}"
+  "editProjectNamed": "Modifier le projet : {title}",
+  "standaloneWork": "Fabrication directe, sans projet",
+  "scheduledStart": "Début planifié",
+  "localTime": "Heure locale du navigateur ; renseignez une machine et la durée totale pour planifier.",
+  "unschedule": "Remettre à planifier",
+  "invalidTime": "Date ou heure locale invalide (vérifiez aussi le changement d’heure).",
+  "openProduction": "Ouvrir le planning de production"
 }

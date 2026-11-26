@@ -24,7 +24,8 @@
     "diagnostics": "Diagnostics",
     "notifications": "Notifications",
     "observer": "Ajouter un observateur",
-    "projects": "Projets"
+    "projects": "Projets",
+    "production": "Production"
   },
   "languageName": {
     "fr": "Français",

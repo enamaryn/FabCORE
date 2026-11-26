@@ -808,5 +808,35 @@
       "docs/protocols/EMERGENCY-STOP.md",
       "poc/CONNECTORS.md"
     ]
+  },
+  {
+    "id": "production",
+    "title": "Planning autonome et Gantt horaire par machine",
+    "files": [
+      "src/domain/projects.ts",
+      "src/application/projects.ts",
+      "src/http/routes/projects.ts",
+      "web/src/components/production/ProductionPage.tsx",
+      "web/src/components/projects/ProjectEditor.tsx",
+      "web/src/production.ts"
+    ],
+    "symbols": [
+      "createProjectService",
+      "ProductionPage",
+      "ProductionBoard",
+      "productionWarnings",
+      "instantFromLocal",
+      "dropInstant"
+    ],
+    "tests": [
+      "src/application/production.test.ts",
+      "poc/production-http.test.mjs",
+      "web/test/production.test.ts",
+      "web/test/production-page.test.mjs",
+      "src/persistence/postgres.test.ts"
+    ],
+    "docs": [
+      "docs/protocols/PRODUCTION-PLANNING.md"
+    ]
   }
 ]

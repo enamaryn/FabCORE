@@ -11,7 +11,7 @@ export function createProjectService({ store, persist, changed = () => {}, now =
   const board = (): ProjectBoard => {
     const value = store.state.projectBoard;
     if (value === undefined) return { version: 1, projects: [], work: [] };
-    if (!Value.Check(ProjectBoardSchema, value) || value.projects.some(item => !projectFields(item as unknown as Record<string, unknown>))) throw new ServiceError(503, 'projects-storage');
+    if (!Value.Check(ProjectBoardSchema, value) || value.projects.some(item => !projectFields(item as unknown as Record<string, unknown>)) || value.work.some(item => !workFields(item as unknown as Record<string, unknown>))) throw new ServiceError(503, 'projects-storage');
     return value;
   };
   const serial = <T>(operation: () => Promise<T>): Promise<T> => {
@@ -38,20 +38,25 @@ export function createProjectService({ store, persist, changed = () => {}, now =
       const project = audit({ ...previous, ...fields }, actor, action, now(), previous.stage !== fields.stage ? { from: previous.stage, to: fields.stage } : {});
       await save({ ...current, projects: current.projects.map(item => item.id === id ? project : item) }); return project;
     }); },
-    saveWork(projectId: string, id: string | null, input: Record<string, unknown>, actor: string) { return serial(async () => {
-      const current = board(), parent = find(current, projectId);
-      const previous = id ? current.work.find(item => item.id === id && item.projectId === projectId) ?? fail(404, 'missing') : null;
+    saveWork(projectId: string | null, id: string | null, input: Record<string, unknown>, actor: string) { return serial(async () => {
+      const current = board();
+      const previous = id ? current.work.find(item => item.id === id && (projectId === null || item.projectId === projectId)) ?? fail(404, 'missing') : null;
+      // Production routes accept standalone work; project routes keep their explicit parent boundary.
+      const parentId: unknown = previous ? previous.projectId : projectId ?? input.projectId ?? null;
+      if (parentId !== null && (typeof parentId !== 'string' || !/^[a-f0-9-]{36}$/.test(parentId))) return fail(400, 'project-invalid');
+      if (previous && input.projectId !== undefined && input.projectId !== previous.projectId) return fail(400, 'project-invalid');
+      const parent = parentId === null ? null : find(current, parentId as string);
       if (previous) revision(input.expectedRevision, previous);
-      if (!previous && parent.archived) return fail(409, 'project-archived');
+      if (!previous && parent?.archived) return fail(409, 'project-archived');
       if (!previous && current.work.length >= 1000) return fail(409, 'project-limit');
-      const fields = workFields({ format: parent.format, ...previous, ...input }); if (!fields) return fail(400, 'project-invalid');
+      const fields = workFields({ format: parent?.format ?? '3d', client: parent?.client ?? '', ...previous, ...input }); if (!fields) return fail(400, 'project-invalid');
       const machine = fields.machineId ? store.state.machines.find(item => item.id === fields.machineId) : undefined;
       if (fields.machineId && !machine && fields.machineId !== previous?.machineId) return fail(400, 'project-machine');
-      const at = now(); const work: ProductionWork = { ...fields, id: previous?.id ?? randomUUID(), projectId,
+      const at = now(); const work: ProductionWork = { ...fields, id: previous?.id ?? randomUUID(), projectId: parent?.id ?? null,
         revision: (previous?.revision ?? 0) + 1, machineNameSnapshot: fields.machineId ? machine?.name ?? previous?.machineNameSnapshot ?? null : null,
         createdAt: previous?.createdAt ?? at, updatedAt: at, createdBy: previous?.createdBy ?? actor };
-      const project = audit(parent, actor, previous ? 'work-edited' : 'work-created', at);
-      await save({ ...current, projects: current.projects.map(item => item.id === projectId ? project : item),
+      const project = parent ? audit(parent, actor, previous ? 'work-edited' : 'work-created', at) : null;
+      await save({ ...current, projects: current.projects.map(item => project && item.id === project.id ? project : item),
         work: previous ? current.work.map(item => item.id === id ? work : item) : [...current.work, work] }); return work;
     }); },
   };

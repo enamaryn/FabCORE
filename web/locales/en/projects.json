@@ -48,7 +48,7 @@
   "machine": "Proposed machine",
   "unassigned": "Unassigned",
   "removedMachine": "Machine removed from fleet",
-  "estimatedMinutes": "Estimated duration (min)",
+  "estimatedMinutes": "Total estimated duration (min)",
   "material": "Material",
   "fileReference": "File / version to produce",
   "fileHelp": "Name, version or link to the final file",
@@ -77,7 +77,7 @@
   "restore": "Restore",
   "close": "Close",
   "history": "Change history",
-  "ganttNext": "This work prepares future machine planning. Gantt scheduling and fabrication are not triggered from this board.",
+  "ganttNext": "Find and schedule jobs in the production planner, also available without a project.",
   "stages": {
     "idea": "Ideas",
     "scoping": "Scope",
@@ -139,5 +139,11 @@
     "rate": "Too many changes. Wait a moment.",
     "missing": "The project or work no longer exists."
   },
-  "editProjectNamed": "Edit project: {title}"
+  "editProjectNamed": "Edit project: {title}",
+  "standaloneWork": "Direct production job, without a project",
+  "scheduledStart": "Scheduled start",
+  "localTime": "Browser-local time; choose a machine and total duration to schedule.",
+  "unschedule": "Unschedule",
+  "invalidTime": "Invalid local date/time (also check daylight-saving changes).",
+  "openProduction": "Open production schedule"
 }

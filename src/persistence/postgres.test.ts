@@ -113,6 +113,7 @@ test('projets créatifs : Kanban et travaux persistants après fermeture/réouve
   const project = await service.create({ title: 'Conception 2D/3D', format: 'mixed', origin: 'client', client: 'Référence de test' }, 'atelier');
   await service.update(project.id, { expectedRevision: 1, stage: 'design', notes: 'Version de conception' }, 'atelier');
   await service.saveWork(project.id, null, { title: 'Prototype', kind: 'prototype', format: '3d', quantity: 2, estimatedMinutes: 45 }, 'atelier');
+  await service.saveWork(null, null, { title: 'Commande directe indépendante', client: 'Client production', quantity: 3 }, 'atelier');
   const expected = service.list();
   await store.close();
   const reopened = await openPostgresStore({ url, directory }); t.after(() => reopened.close());
