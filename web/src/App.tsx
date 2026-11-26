@@ -1,3 +1,4 @@
+import { ProductionPage } from './components/production/ProductionPage.tsx';
 import { ProjectsPage } from './components/projects/ProjectsPage.tsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -56,10 +57,10 @@ export function App() {
       <div className="row auth-preferences"><button type="button" className="ghost" onClick={toggleLanguage}>{i18n.resolvedLanguage?.startsWith('fr') ? 'English' : 'Français'}</button><button type="button" className="ghost" onClick={toggleTheme}>{i18n.t('themeLabel', { ns: 'common', theme: i18n.t('theme.' + theme, { ns: 'common' }) })}</button></div>
     </div>
   </main>;
-  return <Shell username={session.data.username} role={session.data.role} page={page.kind === 'machine' || page.kind === 'viewer' ? 'machines' : ['notifications', 'diagnostics', 'access'].includes(page.kind) ? 'home' : page.kind as 'home' | 'machines' | 'history' | 'projects'} language={i18n.resolvedLanguage ?? 'fr'} theme={theme} onLanguage={toggleLanguage} onTheme={toggleTheme} onLogout={() => { if (!logout.isPending) logout.mutate(); }} version={version.data} onUpdate={() => setPrompt(true)}>
+  return <Shell username={session.data.username} role={session.data.role} page={page.kind === 'machine' || page.kind === 'viewer' ? 'machines' : ['notifications', 'diagnostics', 'access'].includes(page.kind) ? 'home' : page.kind as 'home' | 'machines' | 'history' | 'projects' | 'production'} language={i18n.resolvedLanguage ?? 'fr'} theme={theme} onLanguage={toggleLanguage} onTheme={toggleTheme} onLogout={() => { if (!logout.isPending) logout.mutate(); }} version={version.data} onUpdate={() => setPrompt(true)}>
     {session.data.role === 'admin' && version.data?.updateAvailable && <UpdatePrompt version={version.data} open={prompt} onClose={() => setPrompt(false)} />}
     {logout.isError && <p className="notice" role="alert">{t('error.internal')}</p>}
-    {logout.isPending ? <p role="status">{t('loggingOut')}</p> : page.kind === 'projects' ? <ProjectsPage key={session.data.username + ':' + session.data.role} api={api} actor={session.data.username} role={session.data.role} /> : <Workshop key={session.data.username + ':' + session.data.role} api={api} username={session.data.username} role={session.data.role} page={page} />}
+    {logout.isPending ? <p role="status">{t('loggingOut')}</p> : page.kind === 'production' ? <ProductionPage key={session.data.username + ':' + session.data.role} api={api} actor={session.data.username} role={session.data.role} /> : page.kind === 'projects' ? <ProjectsPage key={session.data.username + ':' + session.data.role} api={api} actor={session.data.username} role={session.data.role} /> : <Workshop key={session.data.username + ':' + session.data.role} api={api} username={session.data.username} role={session.data.role} page={page} />}
   </Shell>;
 }
 // Première installation (MIG-06.2.3) : jeton affiché dans le terminal de FabCore, administrateur local.

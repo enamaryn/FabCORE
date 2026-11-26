@@ -24,14 +24,15 @@ export const WorkFields = Type.Object({
   quantity: Type.Integer({ minimum: 1, maximum: 1000000 }), machineId: Type.Union([id, Type.Null()]),
   estimatedMinutes: Type.Union([Type.Integer({ minimum: 1, maximum: 525600 }), Type.Null()]),
   dueDate: date, notes: Type.String({ maxLength: 4000 }), state: enumeration(['todo', 'done', 'cancelled'] as const),
+  client: Type.Optional(Type.String({ maxLength: 120 })), scheduledStart: Type.Optional(Type.Union([Type.String({ maxLength: 30 }), Type.Null()])),
 }, { additionalProperties: false });
 export type WorkFields = Type.Static<typeof WorkFields>;
-export interface ProductionWork extends WorkFields { id: string; projectId: string; revision: number; machineNameSnapshot: string | null; createdAt: string; updatedAt: string; createdBy: string }
+export interface ProductionWork extends WorkFields { id: string; projectId: string | null; revision: number; machineNameSnapshot: string | null; createdAt: string; updatedAt: string; createdBy: string }
 export interface ProjectBoard { version: 1; projects: Project[]; work: ProductionWork[] }
 const stamp = Type.String({ minLength: 1, maxLength: 64 });
 export const ProjectRecord = Type.Object({ ...ProjectFields.properties, id, revision: Type.Integer({ minimum: 1 }), createdAt: stamp, updatedAt: stamp, createdBy: Type.String({ maxLength: 80 }),
   history: Type.Array(Type.Object({ at: stamp, actor: Type.String({ maxLength: 80 }), action: Type.String({ maxLength: 40 }), from: Type.Optional(Type.String()), to: Type.Optional(Type.String()) }, { additionalProperties: false }), { maxItems: 50 }) }, { additionalProperties: false });
-export const WorkRecord = Type.Object({ ...WorkFields.properties, id, projectId: id, revision: Type.Integer({ minimum: 1 }), machineNameSnapshot: Type.Union([Type.String({ maxLength: 120 }), Type.Null()]), createdAt: stamp, updatedAt: stamp, createdBy: Type.String({ maxLength: 80 }) }, { additionalProperties: false });
+export const WorkRecord = Type.Object({ ...WorkFields.properties, id, projectId: Type.Union([id, Type.Null()]), revision: Type.Integer({ minimum: 1 }), machineNameSnapshot: Type.Union([Type.String({ maxLength: 120 }), Type.Null()]), createdAt: stamp, updatedAt: stamp, createdBy: Type.String({ maxLength: 80 }) }, { additionalProperties: false });
 export const ProjectBoardSchema = Type.Object({ version: Type.Literal(1), projects: Type.Array(ProjectRecord, { maxItems: 250 }), work: Type.Array(WorkRecord, { maxItems: 1000 }) }, { additionalProperties: false });
 const validDate = (value: string | null) => value === null || Number.isFinite(Date.parse(value + 'T00:00:00.000Z')) && new Date(value + 'T00:00:00.000Z').toISOString().slice(0, 10) === value;
 
@@ -49,6 +50,14 @@ export function projectFields(input: Record<string, unknown>): ProjectFields | n
 }
 export function workFields(input: Record<string, unknown>): WorkFields | null {
   const value = { title: typeof input.title === 'string' ? input.title.trim() : input.title, format: (input.format === undefined ? '3d' : input.format), material: (input.material === undefined ? '' : input.material), fileReference: (input.fileReference === undefined ? '' : input.fileReference), kind: (input.kind === undefined ? 'production' : input.kind), quantity: (input.quantity === undefined ? 1 : input.quantity),
-    machineId: input.machineId ?? null, estimatedMinutes: input.estimatedMinutes ?? null, dueDate: input.dueDate ?? null, notes: (input.notes === undefined ? '' : input.notes), state: (input.state === undefined ? 'todo' : input.state) };
-  return Value.Check(WorkFields, value) && validDate(value.dueDate) ? structuredClone(value) : null;
+    machineId: input.machineId ?? null, estimatedMinutes: input.estimatedMinutes ?? null, dueDate: input.dueDate ?? null, client: input.client === undefined ? '' : input.client, scheduledStart: input.scheduledStart ?? null, notes: (input.notes === undefined ? '' : input.notes), state: (input.state === undefined ? 'todo' : input.state) };
+  if (!Value.Check(WorkFields, value) || !validDate(value.dueDate)) return null;
+  if (value.scheduledStart !== null) {
+    // Instants are stored in UTC; local display/conversion belongs to the UI. Reject normalised impossible dates.
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value.scheduledStart)) return null;
+    const time = Date.parse(value.scheduledStart);
+    if (!Number.isFinite(time) || new Date(time).toISOString() !== value.scheduledStart.replace(/Z$/, value.scheduledStart.includes('.') ? 'Z' : '.000Z') || !value.machineId || !value.estimatedMinutes) return null;
+    if (!Number.isFinite(time + value.estimatedMinutes * 60000) || time + value.estimatedMinutes * 60000 > Date.parse('9999-12-31T23:59:59.999Z')) return null;
+  }
+  return structuredClone(value);
 }

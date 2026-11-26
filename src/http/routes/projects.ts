@@ -20,6 +20,12 @@ export const projectRoutes = (service: ProjectDependencies): RouteModule => (app
       response: { 200: result, ...errorResponses(400, 401, 403, 404, 409, 415, 421, 429, 503) } });
     scope.get('/api/projects', { onRequest: async request => { guards.signedIn(request); }, schema: { summary: 'Kanban des projets créatifs et travaux à produire', tags: ['projets'], security,
       response: { 200: ProjectBoardSchema, ...errorResponses(401, 403, 421, 503) } } }, () => service.list());
+    scope.get('/api/production', { onRequest: async request => { guards.signedIn(request); }, schema: { summary: 'Planning autonome : travaux directs et liés aux projets', tags: ['production'], security,
+      response: { 200: ProjectBoardSchema, ...errorResponses(401, 403, 421, 503) } } }, () => service.list());
+    scope.post<{ Body: Record<string, unknown> }>('/api/production/work', { onRequest: write, schema: schema('Créer un travail autonome ou lié à un projet, sans ordre machine', WorkRecord) },
+      request => service.saveWork(null, null, request.body, guards.admin(request).username));
+    scope.post<{ Body: Record<string, unknown>; Params: { id: string } }>('/api/production/work/:id([a-f0-9-]{36})', { onRequest: write, schema: schema('Planifier ou modifier un travail avec contrôle de révision, sans lancement', WorkRecord) },
+      request => service.saveWork(null, request.params.id, request.body, guards.admin(request).username));
     scope.post<{ Body: Record<string, unknown> }>('/api/projects', { onRequest: write, schema: schema('Créer une idée, création personnelle ou demande client', ProjectRecord) },
       request => service.create(request.body, guards.admin(request).username));
     scope.post<{ Body: Record<string, unknown>; Params: { id: string } }>('/api/projects/:id([a-f0-9-]{36})', { onRequest: write, schema: schema('Modifier, déplacer ou archiver un projet avec contrôle de révision', ProjectRecord) },

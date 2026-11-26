@@ -1,6 +1,6 @@
 # Projets créatifs et travaux à produire — issue #94
 
-Le Kanban suit un projet personnel ou une demande client, depuis l’idée jusqu’au livrable 2D/3D. Ce n’est pas une file d’impression. Le futur Gantt planifiera les travaux issus de ces projets par machine ; il n’est pas inclus dans ce premier jalon.
+Le Kanban suit un projet personnel ou une demande client, depuis l’idée jusqu’au livrable 2D/3D. Ce n’est pas une file d’impression. Le [planning Production](PRODUCTION-PLANNING.md) est autonome : il réunit les travaux issus de ces projets et ceux créés directement sans Kanban.
 
 ## Parcours
 
@@ -8,7 +8,7 @@ Cinq étapes : Idées, À cadrer, Conception, Prototype, Création finalisée. U
 
 Une fiche conserve titre, brief, notes, client, responsable libre, échéance, priorité, étiquettes, blocage, checklist et liens de référence/conception/livrable. Les liens HTTP(S) n’acceptent pas d’identifiants intégrés et ne sont jamais téléchargés par le serveur. Aucun fichier binaire n’est téléversé depuis cette fiche : les documents restent à leur emplacement d’origine. L’archivage est réversible.
 
-Un projet peut produire plusieurs travaux de prototype ou de production. Chacun conserve quantité, matière, format, référence de fichier/version, durée estimée, échéance et affectation indicative à une machine. L’état « à faire / terminé / annulé » est manuel. Les affectations ne vérifient pas la compatibilité d’un fichier, ne réservent aucun créneau et n’envoient aucune commande. La suppression d’une machine conserve son nom dans les anciens travaux. Le futur Gantt s’appuiera sur ces données pour les capacités, créneaux et conflits ; ces fonctions restent à développer.
+Un projet peut produire plusieurs travaux de prototype ou de production. Chacun conserve quantité, matière, format, référence de fichier/version, durée estimée, échéance et affectation indicative à une machine. L’état « à faire / terminé / annulé » est manuel. Les affectations ne vérifient pas la compatibilité d’un fichier et n’envoient aucune commande. Les créneaux sont éditables dans le planning Production. La suppression d’une machine conserve son nom dans les anciens travaux. Le Gantt utilise ces mêmes travaux sans duplication ; calendriers de capacité et indisponibilités restent des évolutions ultérieures.
 
 ## Persistance et concurrence
 
