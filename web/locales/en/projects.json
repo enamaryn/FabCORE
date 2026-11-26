@@ -138,5 +138,6 @@
     "origin": "Request origin denied.",
     "rate": "Too many changes. Wait a moment.",
     "missing": "The project or work no longer exists."
-  }
+  },
+  "editProjectNamed": "Edit project: {title}"
 }

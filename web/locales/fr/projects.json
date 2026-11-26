@@ -138,5 +138,6 @@
     "origin": "Origine de la requête refusée.",
     "rate": "Trop de modifications rapprochées. Patientez un instant.",
     "missing": "Le projet ou travail n’existe plus."
-  }
+  },
+  "editProjectNamed": "Modifier le projet : {title}"
 }
