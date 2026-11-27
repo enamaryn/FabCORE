@@ -79,6 +79,19 @@ export function createMoonrakerConfig({ encodePath, validOrigin, multipart, read
         return { ...saved, backupPath };
       } catch { throw new Error('config-save-unknown'); }
     },
+    /** FIRMWARE_RESTART natif après un arrêt d'urgence (M112) ou une erreur Klipper : seul moyen de remettre les
+     * microcontrôleurs en service. Refusé si Klipper est prêt ou démarre ; un seul envoi, jamais rejoué. */
+    async firmwareRestart(machine: MoonrakerConnection, canWrite = () => true) {
+      const state = (await json(machine, '/printer/info')).result?.state;
+      if (state !== 'shutdown' && state !== 'error') throw new Error('config-state');
+      if (!canWrite()) throw new Error('command-busy');
+      try {
+        const response = await call(machine, '/printer/firmware_restart', { method: 'POST' });
+        if (!response.ok) { await response.body?.cancel(); return { outcome: response.status >= 500 ? 'unknown' : 'rejected' }; }
+        const body = await readResponse(response) as { result?: unknown };
+        return { outcome: body.result === 'ok' ? 'accepted' : 'unknown' };
+      } catch { return { outcome: 'unknown' }; }
+    },
     async restart(machine: MoonrakerConnection, canWrite = () => true) {
       await idle(machine); if (!canWrite()) throw new Error('command-busy');
       try {

@@ -43,6 +43,7 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
     async klipperConfigList(id: string): Promise<{ files: { path: string; writable: boolean }[] }> { return await request('machines/' + encodeURIComponent(id) + '/klipper-config') as { files: { path: string; writable: boolean }[] }; },
     async klipperConfigRead(id: string, path: string): Promise<KlipperConfigFile> { return await request('machines/' + encodeURIComponent(id) + '/klipper-config?path=' + encodeURIComponent(path)) as KlipperConfigFile; },
     async klipperConfigSave(id: string, data: Record<string, unknown>): Promise<KlipperConfigFile & { backupPath: string | null }> { return await request('machines/' + encodeURIComponent(id) + '/klipper-config', data) as KlipperConfigFile & { backupPath: string | null }; },
+    async klipperFirmwareRestart(id: string): Promise<{ outcome: string }> { return await request('machines/' + encodeURIComponent(id) + '/klipper-firmware-restart', { confirm: true }) as { outcome: string }; },
     async klipperRestart(id: string): Promise<{ outcome: string }> { return await request('machines/' + encodeURIComponent(id) + '/klipper-restart', { confirm: true }) as { outcome: string }; },
     async production(signal?: AbortSignal): Promise<ProjectBoard> {
       const value = await request('production', undefined, signal);

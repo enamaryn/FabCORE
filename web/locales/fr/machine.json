@@ -81,7 +81,8 @@
     "resume": "Reprendre",
     "stop": "Stop",
     "start": "Lancer",
-    "emergencyStop": "Arrêt d’urgence logiciel"
+    "emergencyStop": "Arrêt d’urgence logiciel",
+    "firmwareRestart": "Redémarrer le firmware"
   },
   "outcomes": {
     "accepted": "Commande acceptée ; son exécution reste à vérifier sur la machine.",
@@ -100,7 +101,10 @@
     "rate": "Commandes trop rapprochées. Attendez avant de réessayer.",
     "forbidden": "Droits insuffisants pour cette action.",
     "spool-invalid": "Information de bobine invalide.",
-    "storage-unavailable": "Enregistrement indisponible. Réessayez plus tard."
+    "storage-unavailable": "Enregistrement indisponible. Réessayez plus tard.",
+    "config-state": "Klipper n’est pas à l’arrêt : redémarrage du firmware inutile.",
+    "command-busy": "Une autre opération est en cours sur cette machine.",
+    "config-unavailable": "Moonraker ne répond pas. Vérifiez la connexion."
   },
   "machineSettings": "Paramètres de la machine",
   "cameraEnlarge": "Agrandir la caméra",
@@ -119,5 +123,14 @@
   },
   "nativeState": "État constructeur",
   "nativeExceptions": "Exceptions",
-  "configuration": "Configuration"
+  "configuration": "Configuration",
+  "klipperStoppedTitle": "Klipper est à l’arrêt (arrêt d’urgence ou erreur)",
+  "klipperStoppedText": "Aucune impression ni commande n’est possible tant que le firmware n’a pas été redémarré. Vérifiez la machine avant de relancer : têtes et plateau refroidis, zone dégagée.",
+  "confirmFirmwareTitle": "Redémarrer le firmware Klipper ?",
+  "confirmFirmware": "Envoyer FIRMWARE_RESTART à « {name} » ? Klipper et ses microcontrôleurs redémarrent ; les chauffes restent coupées et les axes devront refaire leur origine.",
+  "firmwareOutcomes": {
+    "accepted": "Redémarrage du firmware accepté. Klipper sera prêt dans quelques secondes.",
+    "rejected": "Moonraker a refusé le redémarrage du firmware.",
+    "unknown": "Résultat inconnu ; vérifiez la machine. Aucun renvoi automatique."
+  }
 }

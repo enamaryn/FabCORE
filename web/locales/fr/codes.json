@@ -46,7 +46,8 @@
     "klippy": "Klippy est indisponible ou en cours de démarrage.",
     "print_stats": "Les informations de fabrication sont indisponibles.",
     "print": "Klipper signale une erreur de fabrication.",
-    "connection": "FabCore ne parvient pas à joindre Moonraker."
+    "connection": "FabCore ne parvient pas à joindre Moonraker.",
+    "moonraker-shutdown": "Klipper en arrêt d’urgence (shutdown) : redémarrez le firmware."
   },
   "diagnostic": {
     "started": "FabCore a démarré.",

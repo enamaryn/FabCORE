@@ -46,7 +46,8 @@
     "klippy": "Klippy is unavailable or starting.",
     "print_stats": "Print information is unavailable.",
     "print": "Klipper reports a print error.",
-    "connection": "FabCore cannot reach Moonraker."
+    "connection": "FabCore cannot reach Moonraker.",
+    "moonraker-shutdown": "Klipper emergency shutdown: restart the firmware."
   },
   "diagnostic": {
     "started": "FabCore started.",
