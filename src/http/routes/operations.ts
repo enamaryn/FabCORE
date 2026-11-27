@@ -8,6 +8,7 @@ import { errorResponses } from '../errors.ts';
  * corps, état), ses flux (fichiers, caméras), son annulation et son absence de rejeu.
  */
 export interface OperationHandlers {
+  klipperConfig: RawHandler;
   cloudAction: RawHandler;
   cloudCertificates: RawHandler;
   camera: RawHandler;
@@ -61,6 +62,12 @@ export const operationRoutes = (handlers: OperationHandlers): RouteModule => (ap
       onRequest: guards.raw(handlers.camera, signedIn),
       schema: { summary, tags: ['caméras'], security: session, response: { 200: { description: 'Flux `multipart/x-mixed-replace` ou image `image/jpeg`.' }, ...errorResponses(401, 404, 421, 429, 502, 503, 504) } },
     }, none);
+  }
+
+  for (const [method, endpoint] of [['GET', 'klipper-config'], ['POST', 'klipper-config'], ['POST', 'klipper-restart']] as const) {
+    app.route({ method, url: `/api/machines/${id}/${endpoint}`, config: { query: method === 'GET' },
+      onRequest: guards.raw(handlers.klipperConfig, admin), schema: { summary: endpoint === 'klipper-restart' ? 'Redémarrer Klipper uniquement (confirmation)' : method === 'GET' ? 'Lire les fichiers cfg Klipper (administrateur)' : 'Sauvegarder une configuration Klipper avec copie de secours et révision', tags: ['configuration Klipper'], security: session, params: Params,
+        response: { 200: json('Lecture/configuration sauvegardée ; restart accepté, refusé ou inconnu.'), ...errorResponses(400, 401, 403, 404, 409, 415, 421, 429, 502) } }, handler: none });
   }
 
   // Commandes et contrôles : confirmations, état requis, verrou par machine, aucun rejeu (MIG-03.2.1).

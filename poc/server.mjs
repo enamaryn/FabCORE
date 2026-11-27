@@ -1,3 +1,5 @@
+import { createMoonrakerConfig, configPath, configLimit } from '../connectors/moonraker/src/config.ts';
+import { encodePath, moonrakerOrigin, multipart, readResponse as readMoonrakerResponse } from './connector-http.mjs';
 import { createProjectService } from '../src/application/projects.ts';
 import { bambuCameraInfo } from '../src/domain/camera.ts';
 import { manualSpool, supportsManualSpool } from './manual-spool.mjs';
@@ -158,8 +160,10 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     const { serial, fingerprint, ...telemetry } = await connectors.read(machine.kind ?? 'klipper', machine);
     return telemetry;
   });
+  const klipperConfig = createMoonrakerConfig({ encodePath, validOrigin: moonrakerOrigin, multipart, readResponse: readMoonrakerResponse }, fetchFiles ?? fetch);
   const pendingCommands = new Set();
   const pendingEmergencies = new Set();
+  const emergencyGenerations = new Map();
   const pendingUploads = new Set();
   const cc2Tests = new WeakMap();
   const xtoolPairings = new Set();
@@ -412,6 +416,39 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     return;
   }
 
+  async function handleKlipperConfig(req, res) {
+    const url = new URL(req.url, origin);
+    const match = url.pathname.match(/^\/api\/machines\/([a-f0-9-]{36})\/(klipper-config|klipper-restart)$/);
+    const machine = store.state.machines.find(item => item.id === match?.[1]);
+    if (!machine || (machine.kind ?? 'klipper') !== 'klipper') return error(res, 404, 'missing');
+    if (req.method === 'GET') {
+      try {
+        const path = url.searchParams.get('path');
+        if (path && !configPath(path)) return error(res, 400, 'config-invalid');
+        if (path && url.searchParams.get('download') === '1') {
+          const file = await klipperConfig.read(machine, path); res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': 'attachment; filename="' + path.split('/').at(-1) + '"' }); res.end(file.content); return;
+        }
+        return answer(res, 200, path ? await klipperConfig.read(machine, path) : { files: await klipperConfig.list(machine) });
+      } catch (failure) { return error(res, failure.message === 'config-missing' ? 404 : 502, /^config-/.test(failure.message) ? failure.message : 'config-unavailable'); }
+    }
+    if (!requireJson(req, res)) return;
+    if (!withinLimit('klipper-config:' + machine.id)) return error(res, 429, 'rate');
+    let data; try { data = await readJson(req, configLimit * 6 + 4096); } catch { return error(res, 400, 'config-invalid'); }
+    if (pendingCommands.has(machine.id) || pendingUploads.has(machine.id) || pendingEmergencies.has(machine.id)) return error(res, 409, 'command-busy');
+    if (data.confirm !== true) return error(res, 400, 'config-confirm');
+    const emergencyGeneration = emergencyGenerations.get(machine.id) ?? 0;
+    pendingCommands.add(machine.id);
+    const canWrite = () => !res.destroyed && sessions.get(session(req))?.role === 'admin' && store.state.machines.includes(machine) && !pendingEmergencies.has(machine.id) && (emergencyGenerations.get(machine.id) ?? 0) === emergencyGeneration;
+    try {
+      const result = match[2] === 'klipper-restart' ? await klipperConfig.restart(machine, canWrite) : await klipperConfig.save(machine, data.path, data.content, data.expectedRevision, canWrite);
+      snapshot.forget(machine.id);
+      return answer(res, 200, result);
+    } catch (failure) {
+      const code = /^config-|^command-busy$/.test(failure.message) ? failure.message : 'config-unavailable';
+      return error(res, ['config-conflict', 'config-state', 'command-busy'].includes(code) ? 409 : ['config-invalid', 'config-confirm'].includes(code) ? 400 : 502, code);
+    } finally { pendingCommands.delete(machine.id); }
+  }
+
   async function handleCommand(req, res) {
     const path = req.url;
     const activeSession = session(req);
@@ -429,6 +466,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     const emergency = action === 'emergencyStop';
     if (pendingEmergencies.has(machine.id) || (!emergency && (pendingCommands.has(machine.id) || pendingUploads.has(machine.id)))) return error(res, 409, 'command-busy');
     if (emergency && !withinLimit('emergency:' + machine.id)) return error(res, 429, 'rate');
+    if (emergency) emergencyGenerations.set(machine.id, (emergencyGenerations.get(machine.id) ?? 0) + 1);
     const lock = emergency ? pendingEmergencies : pendingCommands;
     const before = { pause: ['printing'], resume: ['paused'], stop: ['printing', 'paused'], start: ['ready', 'done'] }[action];
     const after = { pause: ['paused'], resume: ['printing'], stop: ['ready', 'done'], start: ['printing'] }[action];
@@ -959,7 +997,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     },
     events: { stream: handleEvents },
     version: { status: () => versionService.status() },
-    operations: { cloudAction: handleCloudAction, cloudCertificates: handleBambuCertificates, camera: handleCamera, command: handleCommand, controls: handleControls, terminal: handleTerminal, files: handleFiles },
+    operations: { klipperConfig: handleKlipperConfig, cloudAction: handleCloudAction, cloudCertificates: handleBambuCertificates, camera: handleCamera, command: handleCommand, controls: handleControls, terminal: handleTerminal, files: handleFiles },
     pages: { asset: handleAsset, oidc: handleOidc }
   }));
   const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => http.dispatch(req, res));

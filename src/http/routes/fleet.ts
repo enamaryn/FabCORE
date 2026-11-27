@@ -3,6 +3,7 @@ import type { RouteModule, Viewer } from '../app.ts';
 import { errorResponses } from '../errors.ts';
 
 export const FleetCapabilities = Type.Object({
+  configuration: Type.Optional(Type.Boolean()),
   camera: Type.Optional(Type.Boolean()), controls: Type.Optional(Type.Boolean()),
   commands: Type.Optional(Type.Boolean()), commandActions: Type.Optional(Type.Array(Type.String())),
   projects: Type.Optional(Type.Boolean()), retainedOnly: Type.Optional(Type.Boolean()),

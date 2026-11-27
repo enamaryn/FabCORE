@@ -1,3 +1,4 @@
+import { KlipperConfigPanel } from '../config/KlipperConfigPanel.tsx';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -18,12 +19,12 @@ import { LogsPanel } from './LogsPanel.tsx';
 import { codeLabel } from '../admin/codes.ts';
 import './machine.css';
 
-type Props = { id: string; machines: MachineData[]; api: ReturnType<typeof createApi>; actor: string; role: 'admin' | 'observer'; samples: TemperatureSample[]; stale: boolean; tab?: 'files' | 'logs' | undefined };
+type Props = { id: string; machines: MachineData[]; api: ReturnType<typeof createApi>; actor: string; role: 'admin' | 'observer'; samples: TemperatureSample[]; stale: boolean; tab?: 'files' | 'logs' | 'config' | undefined };
 export function MachineDetail(props: Props) {
   const { t } = useTranslation('machine');
   const machine = props.machines.find(item => item.id === props.id);
   if (!machine) return <section className="panel stack"><h1 tabIndex={-1}>{t('missing')}</h1><a href="#machines">{t('back')}</a></section>;
-  return <div className="react-detail"><MachineHeader machine={machine} role={props.role} tab={props.tab ?? 'overview'} />{props.tab === 'logs' && props.role === 'admin' ? <LogsPanel machine={machine} api={props.api} /> : props.tab === 'files' ? <FilesPanel key={machine.id + ':' + connectionSignature(machine)} machine={machine} machines={props.machines} actor={props.actor} role={props.role} stale={props.stale} api={props.api} /> : <Cockpit key={machine.id + ':' + connectionSignature(machine)} {...props} machine={machine} />}</div>;
+  return <div className="react-detail"><MachineHeader machine={machine} role={props.role} tab={props.tab ?? 'overview'} />{props.tab === 'config' && props.role === 'admin' && machine.kind === 'klipper' && machine.capabilities?.configuration ? <KlipperConfigPanel key={machine.id + ':' + connectionSignature(machine)} machine={machine} api={props.api} stale={props.stale} /> : props.tab === 'logs' && props.role === 'admin' ? <LogsPanel machine={machine} api={props.api} /> : props.tab === 'files' ? <FilesPanel key={machine.id + ':' + connectionSignature(machine)} machine={machine} machines={props.machines} actor={props.actor} role={props.role} stale={props.stale} api={props.api} /> : <Cockpit key={machine.id + ':' + connectionSignature(machine)} {...props} machine={machine} />}</div>;
 }
 function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machine: MachineData }) {
   const { t, i18n } = useTranslation('machine'); const client = useQueryClient();

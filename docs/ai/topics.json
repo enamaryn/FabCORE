@@ -846,5 +846,29 @@
     "docs": [
       "docs/protocols/PRODUCTION-PLANNING.md"
     ]
+  },
+  {
+    "id": "klipper-config",
+    "title": "Éditeur, import/export et restart Klipper",
+    "files": [
+      "connectors/moonraker/src/config.ts",
+      "poc/server.mjs",
+      "src/http/routes/operations.ts",
+      "web/src/components/config/KlipperConfigPanel.tsx"
+    ],
+    "symbols": [
+      "configPath",
+      "createMoonrakerConfig",
+      "handleKlipperConfig",
+      "KlipperConfigPanel"
+    ],
+    "tests": [
+      "connectors/moonraker/test/config.test.ts",
+      "poc/klipper-config-http.test.mjs",
+      "web/test/klipper-config.test.mjs"
+    ],
+    "docs": [
+      "docs/protocols/HTTP-LAN.md"
+    ]
   }
 ]

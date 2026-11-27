@@ -21,6 +21,7 @@ export const Capabilities = Type.Object({
   projects: Type.Boolean(),
   externalFilament: Type.Boolean(),
   terminal: Type.Boolean(),
+  configuration: Type.Optional(Type.Boolean()),
   /** Système multi-filament remonté par la machine, ou `null` s'il n'y en a pas. */
   filaments: Type.Union([Type.String({ minLength: 1, maxLength: 40 }), Type.Null()]),
   temperatures: Type.Boolean(),
@@ -33,7 +34,7 @@ export type Capabilities = Type.Static<typeof Capabilities>;
 
 /** Une restriction (fiche modèle) ne peut jamais ajouter une capacité absente du connecteur. */
 export function restrictCapabilities(base: Capabilities, restriction: Partial<Capabilities>): Capabilities {
-  const flag = (key: Exclude<keyof Capabilities, 'commandActions' | 'filaments' | 'fileFamily'>): boolean =>
+  const flag = (key: Exclude<keyof Capabilities, 'commandActions' | 'filaments' | 'fileFamily' | 'configuration'>): boolean =>
     base[key] && (restriction[key] ?? true);
   return {
     camera: flag('camera'),
@@ -44,6 +45,7 @@ export function restrictCapabilities(base: Capabilities, restriction: Partial<Ca
     projects: flag('projects'),
     externalFilament: flag('externalFilament'),
     terminal: flag('terminal'),
+    ...(base.configuration === undefined ? {} : { configuration: base.configuration && restriction.configuration !== false }),
     filaments: base.filaments !== null && restriction.filaments !== null ? base.filaments : null,
     temperatures: flag('temperatures'),
     printJob: flag('printJob'),
