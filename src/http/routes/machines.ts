@@ -22,6 +22,8 @@ export interface MachineDependencies {
   camera?(id: string, data: Body): Promise<{ camera: { mode: string; host: string } }>;
   spool(id: string, data: Body): SpoolResult | Promise<SpoolResult>;
   networks(): { networks: string[] };
+  /** Types de machines configurables localement (formulaire, modèle, port par défaut, clé API requise). */
+  catalog(): { connectors: { kind: string; model: string; form: string; port: number | null; required: boolean }[] };
   discover(data: Body, signal: AbortSignal): Promise<{ devices: Record<string, unknown>[] } | null>;
 }
 
@@ -29,6 +31,7 @@ const Identifier = Type.Object({ id: Type.String() }, { additionalProperties: fa
 const ProbeResult = Type.Object({ ok: Type.Boolean(), issue: Type.Union([Type.String(), Type.Null()]), serial: Type.Optional(Type.String()) }, { additionalProperties: false });
 const Spool = Type.Object({ manualSpool: Type.Union([Type.Object({ material: Type.String(), name: Type.String(), color: Type.Union([Type.String(), Type.Null()]) }, { additionalProperties: false }), Type.Null()]) }, { additionalProperties: false });
 const Networks = Type.Object({ networks: Type.Array(Type.String()) }, { additionalProperties: false });
+const Catalog = Type.Object({ connectors: Type.Array(Type.Object({ kind: Type.String(), model: Type.String(), form: Type.String(), port: Type.Union([Type.Number(), Type.Null()]), required: Type.Boolean() }, { additionalProperties: false })) }, { additionalProperties: false });
 const Devices = Type.Object({ devices: Type.Array(Type.Object({}, { additionalProperties: true })) }, { additionalProperties: false });
 
 /** Annulation liée à la fermeture de la réponse, comme `res.once('close')` dans le POC. */
@@ -84,6 +87,10 @@ export const machineRoutes = (dependencies: MachineDependencies): RouteModule =>
     if (!dependencies.camera) throw new HttpError(404, 'camera-unsupported');
     return dependencies.camera(request.params.id, request.body);
   });
+  app.get('/api/connectors', {
+    schema: { summary: 'Types de machines proposés à l’ajout (hors comptes cloud)', tags: ['parc'], security: [{ session: [] }],
+      response: { 200: Catalog, ...errorResponses(401, 403, 421) } },
+  }, async request => { guards.admin(request); return dependencies.catalog(); });
   app.get('/api/discovery', {
     schema: { summary: 'Réseaux locaux proposés à la découverte', tags: ['parc'], security: [{ session: [] }],
       response: { 200: Networks, ...errorResponses(401, 403, 421) } },

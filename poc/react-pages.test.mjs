@@ -35,15 +35,16 @@ test('React HTTP : build servi sans CDN, assets confinés, shell public et API a
   for (const [screen, hash] of [['diagnostics', 'diagnostics'], ['notifications', 'notifications'], ['observer', 'access']]) await redirect('/?screen=' + screen, '/app#' + hash);
   const id = '11111111-1111-4111-8111-111111111111';
   await redirect('/?machine=' + id, '/app#machine/' + id);
-  for (const tab of ['files', 'logs', 'config']) await redirect('/?machine=' + id + '&tab=' + tab, '/app#machine/' + id + '/' + tab);
+  for (const tab of ['files', 'logs', 'config', 'settings']) await redirect('/?machine=' + id + '&tab=' + tab, '/app#machine/' + id + '/' + tab);
   for (const view of ['usb/part.gcode', 'part.gcode.3mf', 'folder/laser.nc']) await redirect('/?machine=' + id + '&view=' + encodeURIComponent(view), '/app#machine/' + id + '/view/' + encodeURIComponent(view));
   await redirect('/?machine=' + id + '&view=part.gcode&follow=1', '/app#machine/' + id + '/view/part.gcode/follow');
   assert.equal((await get(server, '/', 'evil.test')).status, 421);
   assert.equal((await get(server, '/?machine=' + id + '&view=part.gcode&follow=invalid')).status, 404);
   for (const view of ['../part.gcode', '<script>', 'a.png', 'a\\part.gcode']) assert.equal((await get(server, '/?machine=' + id + '&view=' + encodeURIComponent(view))).status, 404);
   // Unmigrated tools remain reachable; they must not be caught in a redirect loop.
+  await redirect('/?screen=add', '/app#machines/add');
   await redirect('/?screen=cloud', '/app#cloud');
-  for (const path of ['/?screen=add', '/?machine=' + id + '&tab=console', '/?machine=' + id + '&tab=settings']) {
+  for (const path of ['/?machine=' + id + '&tab=console']) {
     const result = await get(server, path); assert.equal(result.status, 200, path); assert.match(result.body, /live.js/); assert.equal(result.headers.location, undefined);
   }
 });

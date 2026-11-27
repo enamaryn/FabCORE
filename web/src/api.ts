@@ -31,6 +31,9 @@ export type TrammingCorner = 'front-left' | 'front-right' | 'back-right' | 'back
 export type TrammingMeasure = { corner: TrammingCorner; x: number; y: number; z: number };
 export type TrammingResult = { at: string; points: TrammingMeasure[]; range: number; deviations: { corner: TrammingCorner; delta: number }[] };
 export type TrammingGeometry = { available: boolean; reason?: string; offset?: { x: number; y: number }; points?: { corner: TrammingCorner; x: number; y: number }[]; last: TrammingResult | null };
+export type ConnectorKind = { kind: string; model: string; form: string; port: number | null; required: boolean };
+export type DiscoveredDevice = { kind: string; host: string; origin?: string; serial?: string; name?: string; transport?: string; httpPort?: number; wsPort?: number; registered?: boolean; candidate?: boolean; detected?: boolean };
+export type MachineWrite = 'add' | 'edit' | 'test' | 'pair' | 'delete';
 export type CloudDevice = { serial: string; name: string; model?: string; status?: string; online?: boolean; fleetId?: string; fleetMode?: string };
 export type CloudTelemetry = { status?: string; issue?: string; devices?: { serial: string; stale?: boolean; checkedAt?: string; heaters: { id: string; current: number | null; target: number | null }[]; filaments: { id: number; humidity?: number; temperature?: number; slots: { id: number; color?: string | null; material?: string | null; occupied?: boolean }[] }[]; modules: { model?: string; name?: string; serial?: string; firmware?: string }[] }[] };
 export type CloudAccount = { id: string; name: string; provider: string; email?: string; region?: string; status: 'connected' | 'reauth' | 'disconnected' | string; challenge?: string | null; issue?: string | null; checkedAt?: string | null; devices: CloudDevice[]; truncated?: boolean; telemetryEnabled?: boolean; telemetry?: CloudTelemetry | null };
@@ -52,6 +55,15 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
     return payload;
   }
   return {
+    async connectors(signal?: AbortSignal): Promise<ConnectorKind[]> { return ((await request('connectors', undefined, signal)) as { connectors: ConnectorKind[] }).connectors; },
+    async networks(signal?: AbortSignal): Promise<string[]> { return ((await request('discovery', undefined, signal)) as { networks: string[] }).networks; },
+    /** Scan d'un réseau local : jusqu'à deux minutes. */
+    async discover(network: string, signal?: AbortSignal): Promise<DiscoveredDevice[]> { return ((await request('discovery', { network }, signal, 120000)) as { devices: DiscoveredDevice[] }).devices; },
+    /** Ajout, test, appairage (45 s côté M2), modification ou suppression ; aucune nouvelle tentative automatique. */
+    async machineWrite(action: MachineWrite, data: Record<string, unknown>, signal?: AbortSignal): Promise<{ id?: string; ok?: boolean; issue?: string | null; serial?: string }> {
+      const path = { add: 'machines', edit: 'machines/edit', test: 'machines/test', pair: 'machines/pair', delete: 'machines/delete' }[action];
+      return await request(path, data, signal, action === 'pair' ? 90000 : 60000) as { id?: string; ok?: boolean; issue?: string | null; serial?: string };
+    },
     async cloudAccounts(signal?: AbortSignal): Promise<CloudOverview> { return await request('cloud-accounts', undefined, signal, 15000) as CloudOverview; },
     async cloudCertificates(signal?: AbortSignal): Promise<CloudCertificates> { return await request('cloud-certificates', undefined, signal, 15000) as CloudCertificates; },
     /** Import des PEM, URL de renouvellement ou renouvellement immédiat ; jamais de commande machine. */
