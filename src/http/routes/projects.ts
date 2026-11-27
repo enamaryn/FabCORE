@@ -20,6 +20,14 @@ export const projectRoutes = (service: ProjectDependencies): RouteModule => (app
       response: { 200: result, ...errorResponses(400, 401, 403, 404, 409, 415, 421, 429, 503) } });
     scope.get('/api/projects', { onRequest: async request => { guards.signedIn(request); }, schema: { summary: 'Kanban des projets créatifs et travaux à produire', tags: ['projets'], security,
       response: { 200: ProjectBoardSchema, ...errorResponses(401, 403, 421, 503) } } }, () => service.list());
+    scope.post<{ Body: Record<string, unknown>; Params: { id: string } }>('/api/production/work/:id([a-f0-9-]{36})/execution', { onRequest: write, schema: schema('Associer explicitement une fabrication ou déclarer son suivi, sans ordre machine', WorkRecord) },
+      request => service.beginExecution(request.params.id, request.body, guards.admin(request).username));
+    scope.post<{ Body: Record<string, unknown>; Params: { id: string; executionId: string } }>('/api/production/work/:id([a-f0-9-]{36})/execution/:executionId([a-f0-9-]{36})/finish', { onRequest: write, schema: schema('Confirmer le résultat et les heures réelles d’une fabrication', WorkRecord) },
+      request => service.finishExecution(request.params.id, request.params.executionId, request.body, guards.admin(request).username));
+    scope.post<{ Body: Record<string, unknown>; Params: { id: string } }>('/api/production/work/:id([a-f0-9-]{36})/replan-preview', { onRequest: write, schema: schema('Proposer le recalage des travaux suivants après dépassement confirmé') },
+      request => service.previewReplan(request.params.id, request.body));
+    scope.post<{ Body: Record<string, unknown> }>('/api/production/replan-apply', { onRequest: write, schema: schema('Appliquer une proposition de recalage confirmée et non périmée', ProjectBoardSchema) },
+      request => service.applyReplan(request.body, guards.admin(request).username));
     scope.get('/api/production', { onRequest: async request => { guards.signedIn(request); }, schema: { summary: 'Planning autonome : travaux directs et liés aux projets', tags: ['production'], security,
       response: { 200: ProjectBoardSchema, ...errorResponses(401, 403, 421, 503) } } }, () => service.list());
     scope.post<{ Body: Record<string, unknown> }>('/api/production/work', { onRequest: write, schema: schema('Créer un travail autonome ou lié à un projet, sans ordre machine', WorkRecord) },

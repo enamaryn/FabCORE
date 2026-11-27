@@ -27,12 +27,19 @@ export const WorkFields = Type.Object({
   client: Type.Optional(Type.String({ maxLength: 120 })), scheduledStart: Type.Optional(Type.Union([Type.String({ maxLength: 30 }), Type.Null()])),
 }, { additionalProperties: false });
 export type WorkFields = Type.Static<typeof WorkFields>;
-export interface ProductionWork extends WorkFields { id: string; projectId: string | null; revision: number; machineNameSnapshot: string | null; createdAt: string; updatedAt: string; createdBy: string }
+export const ProductionExecutionSchema = Type.Object({
+  id, machineId: id, file: Type.String({ maxLength: 512 }), linkedAt: Type.String({ maxLength: 30 }), linkedBy: Type.String({ maxLength: 80 }),
+  mode: enumeration(['observed', 'manual'] as const), startedAt: Type.Union([Type.String({ maxLength: 30 }), Type.Null()]), endedAt: Type.Union([Type.String({ maxLength: 30 }), Type.Null()]),
+  outcome: enumeration(['active', 'done', 'failed', 'cancelled'] as const), observation: enumeration(['printing', 'paused', 'finish-reported', 'unknown', 'different-job'] as const),
+  observedAt: Type.String({ maxLength: 30 }), plannedStart: Type.Union([Type.String({ maxLength: 30 }), Type.Null()]), plannedMinutes: Type.Union([Type.Integer({ minimum: 1, maximum: 525600 }), Type.Null()]),
+}, { additionalProperties: false });
+export type ProductionExecution = Type.Static<typeof ProductionExecutionSchema>;
+export interface ProductionWork extends WorkFields { id: string; projectId: string | null; revision: number; machineNameSnapshot: string | null; createdAt: string; updatedAt: string; createdBy: string; executions?: ProductionExecution[] }
 export interface ProjectBoard { version: 1; projects: Project[]; work: ProductionWork[] }
 const stamp = Type.String({ minLength: 1, maxLength: 64 });
 export const ProjectRecord = Type.Object({ ...ProjectFields.properties, id, revision: Type.Integer({ minimum: 1 }), createdAt: stamp, updatedAt: stamp, createdBy: Type.String({ maxLength: 80 }),
   history: Type.Array(Type.Object({ at: stamp, actor: Type.String({ maxLength: 80 }), action: Type.String({ maxLength: 40 }), from: Type.Optional(Type.String()), to: Type.Optional(Type.String()) }, { additionalProperties: false }), { maxItems: 50 }) }, { additionalProperties: false });
-export const WorkRecord = Type.Object({ ...WorkFields.properties, id, projectId: Type.Union([id, Type.Null()]), revision: Type.Integer({ minimum: 1 }), machineNameSnapshot: Type.Union([Type.String({ maxLength: 120 }), Type.Null()]), createdAt: stamp, updatedAt: stamp, createdBy: Type.String({ maxLength: 80 }) }, { additionalProperties: false });
+export const WorkRecord = Type.Object({ ...WorkFields.properties, executions: Type.Optional(Type.Array(ProductionExecutionSchema, { maxItems: 20 })), id, projectId: Type.Union([id, Type.Null()]), revision: Type.Integer({ minimum: 1 }), machineNameSnapshot: Type.Union([Type.String({ maxLength: 120 }), Type.Null()]), createdAt: stamp, updatedAt: stamp, createdBy: Type.String({ maxLength: 80 }) }, { additionalProperties: false });
 export const ProjectBoardSchema = Type.Object({ version: Type.Literal(1), projects: Type.Array(ProjectRecord, { maxItems: 250 }), work: Type.Array(WorkRecord, { maxItems: 1000 }) }, { additionalProperties: false });
 const validDate = (value: string | null) => value === null || Number.isFinite(Date.parse(value + 'T00:00:00.000Z')) && new Date(value + 'T00:00:00.000Z').toISOString().slice(0, 10) === value;
 
@@ -60,4 +67,11 @@ export function workFields(input: Record<string, unknown>): WorkFields | null {
     if (!Number.isFinite(time + value.estimatedMinutes * 60000) || time + value.estimatedMinutes * 60000 > Date.parse('9999-12-31T23:59:59.999Z')) return null;
   }
   return structuredClone(value);
+}
+
+/** Canonical UTC instant for operator-declared execution timestamps. */
+export function executionInstant(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) return false;
+  const time = Date.parse(value);
+  return Number.isFinite(time) && new Date(time).toISOString() === value.replace(/Z$/, value.includes('.') ? 'Z' : '.000Z');
 }

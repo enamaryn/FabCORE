@@ -928,10 +928,13 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     try {
       const telemetry = (connectorDefinition(machine.kind ?? 'klipper')?.live ? await connectors.read(machine.kind, machine) : null) ?? snapshot(machine);
       if (!['connecting', 'ready', 'printing', 'paused', 'done', 'offline', 'error'].includes(telemetry?.status)) throw new Error('invalid-telemetry');
+      try { await projectService.observeExecution(machine.id, telemetry); } catch { /* A planning storage failure must not hide machine telemetry. */ }
       return telemetry;
     } catch {
       // One failed connector must not hide the rest of the fleet.
-      return { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' };
+      const unavailable = { status: 'offline', issue: 'connection', progress: 0, nozzle: null, bed: null, file: '' };
+      try { await projectService.observeExecution(machine.id, unavailable); } catch { /* Keep existing machine supervision available. */ }
+      return unavailable;
     }
   }
   // Une seule boucle de lecture pour tous les navigateurs abonnés ; arrêtée sans abonné (MIG-05).
@@ -965,7 +968,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     const entry = key ? sessions.get(key) : null;
     return entry ? { session: key, username: entry.username, role: entry.role } : null;
   };
-  const projectService = createProjectService({ store, persist, changed: () => events.publish('projects.changed', {}) });
+  const projectService = createProjectService({ store, persist, readMachine: machine => connectors.read(machine.kind ?? 'klipper', machine), changed: () => events.publish('projects.changed', {}) });
   const http = createHttpApp({ allowedHost, origin: publicUrl.origin, limit: withinLimit, viewer: viewerOf, onFailure: () => diagnostics.record('server', 'request-failed'), fallback: handleFallback }, migratedRoutes({
     accounts,
     projects: projectService,

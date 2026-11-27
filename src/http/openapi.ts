@@ -5,7 +5,7 @@ import { migratedRoutes } from './routes/index.ts';
 export async function openApiDocument(): Promise<unknown> {
   const unused = () => { throw new Error('unused'); };
   const http = createHttpApp({ allowedHost: 'fabcore.invalid', origin: 'https://fabcore.invalid', limit: () => true, viewer: () => null }, migratedRoutes({
-    projects: { list: () => ({ version: 1, projects: [], work: [] }), create: async () => { throw new Error('unused'); }, update: async () => { throw new Error('unused'); }, saveWork: async () => { throw new Error('unused'); } },
+    projects: { list: () => ({ version: 1, projects: [], work: [] }), create: async () => { throw new Error('unused'); }, update: async () => { throw new Error('unused'); }, beginExecution: async () => { throw new Error('unused'); }, finishExecution: async () => { throw new Error('unused'); }, observeExecution: async () => { throw new Error('unused'); }, previewReplan: async () => { throw new Error('unused'); }, applyReplan: async () => { throw new Error('unused'); }, saveWork: async () => { throw new Error('unused'); } },
     accounts: { installed: unused, setup: unused, login: unused, logout: unused, addObserver: unused },
     session: { installed: unused, oidcEnabled: unused, viewer: () => null },
     diagnostics: { view: unused, fleet: unused },

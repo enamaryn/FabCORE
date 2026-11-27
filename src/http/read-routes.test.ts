@@ -16,7 +16,7 @@ class CloudError extends Error { status = 404; }
 function build(overrides: Partial<RouteDependencies> = {}) {
   const sessions: string[] = [];
   const dependencies: RouteDependencies = {
-    projects: { list: () => ({ version: 1, projects: [], work: [] }), create: async () => { throw new Error('unused'); }, update: async () => { throw new Error('unused'); }, saveWork: async () => { throw new Error('unused'); } },
+    projects: { list: () => ({ version: 1, projects: [], work: [] }), create: async () => { throw new Error('unused'); }, update: async () => { throw new Error('unused'); }, beginExecution: async () => { throw new Error('unused'); }, finishExecution: async () => { throw new Error('unused'); }, observeExecution: async () => { throw new Error('unused'); }, previewReplan: async () => { throw new Error('unused'); }, applyReplan: async () => { throw new Error('unused'); }, saveWork: async () => { throw new Error('unused'); } },
     accounts: { installed: () => true, setup: async () => { throw new Error('unused'); }, login: async () => { throw new Error('unused'); }, logout: () => ({ body: { authenticated: false as const }, cookie: '' }), addObserver: async () => ({ username: 'x' }) },
     session: { installed: () => true, oidcEnabled: () => false, viewer },
     diagnostics: { view: () => ({}), fleet: () => [] },

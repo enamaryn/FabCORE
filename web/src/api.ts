@@ -1,3 +1,4 @@
+import type { ReplanPreview } from './production-actuals.ts';
 import type { ProjectBoard, Project, ProductionWork } from '../../src/domain/projects.ts';
 import { bambuCameraConfig } from '../../src/domain/camera.ts';
 import type { SessionState } from '../../src/http/routes/session.ts';
@@ -48,6 +49,10 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
       if (!value || typeof value !== 'object' || !('version' in value) || value.version !== 1 || !('projects' in value) || !Array.isArray(value.projects) || value.projects.length > 250 || !('work' in value) || !Array.isArray(value.work) || value.work.length > 1000) throw new ApiError('response', 502);
       return value as ProjectBoard;
     },
+    async linkProductionExecution(workId: string, data: Record<string, unknown>): Promise<ProductionWork> { return await request('production/work/' + encodeURIComponent(workId) + '/execution', data) as ProductionWork; },
+    async finishProductionExecution(workId: string, executionId: string, data: Record<string, unknown>): Promise<ProductionWork> { return await request('production/work/' + encodeURIComponent(workId) + '/execution/' + encodeURIComponent(executionId) + '/finish', data) as ProductionWork; },
+    async previewProductionReplan(workId: string, data: Record<string, unknown>): Promise<ReplanPreview> { return await request('production/work/' + encodeURIComponent(workId) + '/replan-preview', data) as ReplanPreview; },
+    async applyProductionReplan(data: Record<string, unknown>): Promise<ProjectBoard> { return await request('production/replan-apply', data) as ProjectBoard; },
     async saveProductionWork(workId: string | undefined, data: Record<string, unknown>): Promise<ProductionWork> { return await request('production/work' + (workId ? '/' + encodeURIComponent(workId) : ''), data) as ProductionWork; },
     async projects(signal?: AbortSignal): Promise<ProjectBoard> {
       const value = await request('projects', undefined, signal);

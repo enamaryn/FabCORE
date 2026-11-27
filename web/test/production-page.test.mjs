@@ -13,6 +13,7 @@ const resources = { fr: Object.fromEntries(readdirSync(new URL('../locales/fr/',
 const i18n = createInstance(); await i18n.use(ICU).init({ resources, lng: 'fr', interpolation: { escapeValue: false } });
 const vite = await createServer({ configFile: new URL('../vite.config.ts', import.meta.url).pathname, server: { middlewareMode: true, hmr: false, ws: false }, optimizeDeps: { noDiscovery: true }, logLevel: 'error' }); after(() => vite.close());
 const { ProductionBoard } = await vite.ssrLoadModule('/src/components/production/ProductionPage.tsx');
+const { ProductionDetails, ExecutionForm } = await vite.ssrLoadModule('/src/components/production/ProductionDetails.tsx');
 const { WorkEditor } = await vite.ssrLoadModule('/src/components/projects/ProjectEditor.tsx');
 const at = '2026-11-26T12:00:00.000Z';
 const work = { ...workFields({ title: '<Commande directe>', client: 'Client <A>', estimatedMinutes: 60 }), id: '11111111-1111-4111-8111-111111111111', projectId: null, machineNameSnapshot: null, revision: 1, createdAt: at, updatedAt: at, createdBy: 'atelier' };
@@ -32,4 +33,17 @@ test('Production : observateur sans création ni déplacement et travaux annulé
 test('Production : formulaire autonome sans Kanban avec client et créneau local facultatif', () => {
   const html = renderToStaticMarkup(createElement(I18nextProvider, { i18n }, createElement(WorkEditor, { project: null, work: null, machines: [], busy: false, error: '', close() {}, save() { assert.fail('SSR never writes'); } })));
   assert.match(html, /Fabrication directe, sans projet/); assert.match(html, /Client \/ référence/); assert.match(html, /datetime-local/); assert.match(html, /Durée totale estimée/);
+});
+
+const observedExecution = { id: '22222222-2222-4222-8222-222222222222', machineId: '33333333-3333-4333-8333-333333333333', file: 'bookmark.gcode', linkedAt: at, linkedBy: 'atelier', mode: 'observed', startedAt: null, endedAt: null, outcome: 'active', observation: 'finish-reported', observedAt: at, plannedStart: null, plannedMinutes: 60 };
+test('Production réel : observateur voit la fin à confirmer et les heures inconnues sans action de confirmation', () => {
+  const html = renderToStaticMarkup(createElement(I18nextProvider, { i18n }, createElement(ProductionDetails, { work: { ...work, executions: [observedExecution] }, machine: undefined, role: 'observer', busy: false, error: '', clearError() {}, execute() { assert.fail('SSR never writes'); }, close() {}, edit() {} })));
+  assert.match(html, /À confirmer/); assert.match(html, /Début réel confirmé/); assert.match(html, /<dd>—<\/dd>/); assert.match(html, /La télémétrie ne clôture pas/);
+  assert.doesNotMatch(html, /Associer une exécution|Confirmer la fin|Confirmer ces décalages|Modifier la fiche/);
+});
+test('Production réel : association explicite de cible et début facultatif sans heure inventée', () => {
+  const machine = { id: observedExecution.machineId, name: 'Laser <A>', status: 'printing', file: 'bookmark.gcode' };
+  const html = renderToStaticMarkup(createElement(I18nextProvider, { i18n }, createElement(ExecutionForm, { kind: 'start', work, machine, busy: false, error: '', cancel() {}, execute() { assert.fail('SSR never writes'); }, completed() {} })));
+  assert.match(html, /Cette action renseigne le suivi FabCore/); assert.match(html, /Laser &lt;A&gt;/); assert.match(html, /bookmark.gcode/); assert.match(html, /Début réel déclaré \(facultatif\)/); assert.match(html, /type="datetime-local" value=""/); assert.match(html, /type="checkbox" required/);
+  assert.doesNotMatch(html, /\/command|\/print/);
 });
