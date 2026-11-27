@@ -33,6 +33,8 @@ test('HTTP Klipper cfg : droits, téléchargement, sauvegarde confirmée et rest
   const path = '/api/machines/' + id + '/klipper-config';
   assert.equal((await call(path)).status, 401);
   const setup = await call('/api/setup', { username: 'admin', password: 'test-config-password', token }); const admin = setup.headers['set-cookie'][0].split(';')[0];
+  const fleet = await call('/api/machines', undefined, admin);
+  assert.equal(fleet.body.machines.find(item => item.id === id).capabilities.configuration, true, 'capacité configuration transmise au navigateur');
   await call('/api/observers', { username: 'viewer', password: 'config-viewer-password' }, admin);
   const observer = (await call('/api/login', { username: 'viewer', password: 'config-viewer-password' })).headers['set-cookie'][0].split(';')[0];
   assert.equal((await call(path, undefined, observer)).status, 403);

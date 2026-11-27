@@ -194,8 +194,8 @@ function identified(result, tolerated) {
 }
 export const connectorDefinition = kind => typeof kind === 'string' && Object.hasOwn(definitions, kind) ? definitions[kind] : null;
 export const connectorCatalog = Object.fromEntries(Object.entries(definitions).map(([kind, {
-  model, form, port, required, camera = false, commands = false, commandActions = [], files = false, projects = false, retainedOnly = false, externalFilament = false, terminal = false, filaments = null, temperatures = true, printJob = true, controls = false, fileFamily = 'fdm'
-}]) => [kind, { model, form, port, required, camera, commands, commandActions, files, projects, retainedOnly, externalFilament, terminal, filaments, temperatures, printJob, controls, fileFamily }]));
+  model, form, port, required, camera = false, commands = false, commandActions = [], files = false, projects = false, retainedOnly = false, externalFilament = false, terminal = false, filaments = null, temperatures = true, printJob = true, controls = false, configuration, fileFamily = 'fdm'
+}]) => [kind, { model, form, port, required, camera, commands, commandActions, files, projects, retainedOnly, externalFilament, terminal, filaments, temperatures, printJob, controls, fileFamily, ...(configuration === undefined ? {} : { configuration }) }]));
 
 export function createConnectorRegistry(options, definition = connectorDefinition) {
   const pending = new Map();

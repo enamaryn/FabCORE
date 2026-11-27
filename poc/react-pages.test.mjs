@@ -35,7 +35,7 @@ test('React HTTP : build servi sans CDN, assets confinés, shell public et API a
   for (const [screen, hash] of [['diagnostics', 'diagnostics'], ['notifications', 'notifications'], ['observer', 'access']]) await redirect('/?screen=' + screen, '/app#' + hash);
   const id = '11111111-1111-4111-8111-111111111111';
   await redirect('/?machine=' + id, '/app#machine/' + id);
-  for (const tab of ['files', 'logs']) await redirect('/?machine=' + id + '&tab=' + tab, '/app#machine/' + id + '/' + tab);
+  for (const tab of ['files', 'logs', 'config']) await redirect('/?machine=' + id + '&tab=' + tab, '/app#machine/' + id + '/' + tab);
   for (const view of ['usb/part.gcode', 'part.gcode.3mf', 'folder/laser.nc']) await redirect('/?machine=' + id + '&view=' + encodeURIComponent(view), '/app#machine/' + id + '/view/' + encodeURIComponent(view));
   await redirect('/?machine=' + id + '&view=part.gcode&follow=1', '/app#machine/' + id + '/view/part.gcode/follow');
   assert.equal((await get(server, '/', 'evil.test')).status, 421);

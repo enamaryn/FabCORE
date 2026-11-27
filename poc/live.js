@@ -498,6 +498,10 @@ function consoleUnavailable(kind) {
   })[kind] || t('Terminal G-code non pris en charge par cette connexion.', 'G-code terminal not supported by this connection.');
 }
 function selectMachineTab(tab) {
+  if (tab === 'config') {
+    if (state.role === 'admin' && machineConnectors[machine(state.machine)?.kind]?.configuration) location.assign('/app#machine/' + encodeURIComponent(state.machine) + '/config');
+    return;
+  }
   if (!['overview', 'files', 'console', 'logs'].includes(tab)) return;
   if (tab === 'logs' && state.role !== 'admin') return;
   if (tab === 'console' && !machineConnectors[machine(state.machine)?.kind]?.terminal) return;
@@ -519,7 +523,7 @@ function liveDetail() {
       <p data-camera-status role="status" hidden></p>
       <div class="row wrap camera-toolbar">${btn('camera-start',t('Voir la caméra','View camera'),'camera')}${btn('camera-stop',t('Fermer le flux','Close stream'),'','','hidden')}</div>
     </section>` : unavailablePanel(t('Caméra','Camera'), t('Caméra non prise en charge par cette connexion.', 'Camera not supported by this connection.'), 'machine-camera');
-  const tabs = [['overview', t('Vue machine','Machine view')], ['files', t('Fichiers','Files')], ...(state.role === 'admin' ? [['logs', t('Logs','Logs')]] : []), ['console', t('Console','Console'), machineConnectors[m.kind]?.terminal ? null : consoleUnavailable(m.kind)]];
+  const tabs = [['overview', t('Vue machine','Machine view')], ['files', t('Fichiers','Files')], ...(state.role === 'admin' ? [['logs', t('Logs','Logs')]] : []), ['console', t('Console','Console'), machineConnectors[m.kind]?.terminal ? null : consoleUnavailable(m.kind)], ...(state.role === 'admin' && machineConnectors[m.kind]?.configuration ? [['config', t('Configuration', 'Configuration')]] : [])];
   return `<div class="machine-cockpit">
     <style>
       .machine-workspace .top{min-height:48px;padding:6px 20px}.machine-workspace .area{max-width:1600px;padding:16px 20px 24px}

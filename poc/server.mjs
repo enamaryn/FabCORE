@@ -245,7 +245,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     const url = new URL(path, publicUrl);
     const keys = [...url.searchParams.keys()];
     const machineLink = /^[a-f0-9-]{36}$/.test(url.searchParams.get('machine') ?? '') &&
-      (keys.length === 1 || (keys.length === 2 && keys.includes('tab') && ['files', 'logs', 'console', 'settings'].includes(url.searchParams.get('tab'))) ||
+      (keys.length === 1 || (keys.length === 2 && keys.includes('tab') && ['files', 'logs', 'console', 'settings', 'config'].includes(url.searchParams.get('tab'))) ||
         ((keys.length === 2 || (keys.length === 3 && keys.includes('follow') && url.searchParams.get('follow') === '1')) && keys.includes('view') && Boolean(productionPath(url.searchParams.get('view')) || ray5Path(url.searchParams.get('view')))));
     const deepLink = url.pathname === '/' && (machineLink || (keys.length === 1 &&
       ['cloud', 'diagnostics', 'notifications', 'observer', 'add'].includes(url.searchParams.get('screen'))));
