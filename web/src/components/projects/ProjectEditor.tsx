@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { projectStages, type Project, type ProjectFields, type ProductionWork, type WorkFields } from '../../../../src/domain/projects.ts';
+import { latestExecution } from '../../production-actuals.ts';
+import { projectStages, workFields, type Project, type ProjectFields, type ProductionWork, type WorkFields } from '../../../../src/domain/projects.ts';
 import { localDateTime, instantFromLocal } from '../../production.ts';
 import type { MachineData } from '../../types.ts';
 
@@ -41,14 +42,16 @@ export function ProjectEditor({ project, busy, error, close, save }: { project: 
       <input required aria-label={t('checkText')} maxLength={200} value={item.text} onChange={event => field('checklist', draft.checklist.map((value, at) => at === index ? { ...value, text: event.target.value } : value))} />
       <button type="button" aria-label={t('removeCheck')} onClick={() => field('checklist', draft.checklist.filter((_, at) => at !== index))}>×</button>
     </div>)}<button type="button" disabled={draft.checklist.length >= 40} onClick={() => field('checklist', [...draft.checklist, { text: '', done: false }])}>{t('addCheck')}</button></section>
-    </fieldset>{error && <p role="alert" className="error">{t('errors.' + error)}</p>}
+    </fieldset>{error && <p role="alert" className="error">{t('errors.' + error, { ns: 'production', defaultValue: t('errors.' + error) })}</p>}
     <div className="row"><button type="button" disabled={busy} onClick={close}>{t('cancel')}</button><button type="submit" className="primary" disabled={busy}>{t(busy ? 'saving' : 'save')}</button></div>
   </form></ProjectDialog>;
 }
 
 export function WorkEditor({ work, project, machines, busy, error, close, save }: { work: ProductionWork | null; project: Project | null; machines: MachineData[]; busy: boolean; error: string; close(): void; save(data: WorkFields): void }) {
   const { t } = useTranslation('projects');
-  const [draft, setDraft] = useState<WorkFields>(() => work ? structuredClone(work) : { title: project?.title ?? '', format: project?.format ?? '3d', kind: 'production', material: '', fileReference: '', quantity: 1, machineId: null, estimatedMinutes: null, dueDate: project?.dueDate ?? null, notes: '', state: 'todo', client: project?.client ?? '', scheduledStart: null });
+  const [draft, setDraft] = useState<WorkFields>(() => work ? workFields(work as unknown as Record<string, unknown>)! : { title: project?.title ?? '', format: project?.format ?? '3d', kind: 'production', material: '', fileReference: '', quantity: 1, machineId: null, estimatedMinutes: null, dueDate: project?.dueDate ?? null, notes: '', state: 'todo', client: project?.client ?? '', scheduledStart: null });
+  const active = work ? latestExecution(work)?.outcome === 'active' : false;
+  const hasExecution = Boolean(work?.executions?.length);
   const [start, setStart] = useState(() => localDateTime(work?.scheduledStart));
   const [invalidTime, setInvalidTime] = useState(false);
   const field = <Key extends keyof WorkFields>(key: Key, value: WorkFields[Key]) => setDraft(previous => ({ ...previous, [key]: value }));
@@ -58,16 +61,16 @@ export function WorkEditor({ work, project, machines, busy, error, close, save }
       <label>{t('workKind')}<select value={draft.kind} onChange={event => field('kind', event.target.value as WorkFields['kind'])}>{['prototype', 'production'].map(value => <option key={value} value={value}>{t('workKinds.' + value)}</option>)}</select></label>
       <label>{t('format')}<select value={draft.format} onChange={event => field('format', event.target.value as WorkFields['format'])}>{['2d', '3d', 'mixed'].map(value => <option key={value} value={value}>{t('formats.' + value)}</option>)}</select></label>
       <label>{t('quantity')}<input type="number" min={1} max={1000000} required step={1} value={draft.quantity} onChange={event => field('quantity', Number(event.target.value))} /></label>
-      <label>{t('machine')}<select required={Boolean(start)} value={draft.machineId ?? ''} onChange={event => field('machineId', event.target.value || null)}><option value="">{t('unassigned')}</option>{work?.machineId && !machines.some(item => item.id === work.machineId) && <option value={work.machineId}>{work.machineNameSnapshot ?? t('removedMachine')}</option>}{machines.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label>{t('machine')}<select disabled={active} required={Boolean(start)} value={draft.machineId ?? ''} onChange={event => field('machineId', event.target.value || null)}><option value="">{t('unassigned')}</option>{work?.machineId && !machines.some(item => item.id === work.machineId) && <option value={work.machineId}>{work.machineNameSnapshot ?? t('removedMachine')}</option>}{machines.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label>{t('material')}<input maxLength={120} value={draft.material} onChange={event => field('material', event.target.value)} /></label>
-      <label>{t('estimatedMinutes')}<input required={Boolean(start)} type="number" min={1} max={525600} step={1} value={draft.estimatedMinutes ?? ''} onChange={event => field('estimatedMinutes', event.target.value ? Number(event.target.value) : null)} /></label>
+      <label>{t('estimatedMinutes')}<input disabled={active} required={Boolean(start)} type="number" min={1} max={525600} step={1} value={draft.estimatedMinutes ?? ''} onChange={event => field('estimatedMinutes', event.target.value ? Number(event.target.value) : null)} /></label>
       <label>{t('dueDate')}<input type="date" value={draft.dueDate ?? ''} onChange={event => field('dueDate', event.target.value || null)} /></label>
-      <label>{t('workState')}<select value={draft.state} onChange={event => field('state', event.target.value as WorkFields['state'])}>{['todo', 'done', 'cancelled'].map(value => <option key={value} value={value}>{t('workStates.' + value)}</option>)}</select></label>
+      <label>{t('workState')}<select disabled={hasExecution} value={draft.state} onChange={event => field('state', event.target.value as WorkFields['state'])}>{['todo', 'done', 'cancelled'].map(value => <option key={value} value={value}>{t('workStates.' + value)}</option>)}</select></label>
       <label>{t('client')}<input maxLength={120} value={draft.client ?? ''} onChange={event => field('client', event.target.value)} /></label>
-      <label>{t('scheduledStart')}<input type="datetime-local" value={start} onChange={event => { setStart(event.target.value); setInvalidTime(false); }} /><small>{t('localTime')}</small></label>
-      <div className="project-full"><button type="button" disabled={!start} onClick={() => { setStart(''); setInvalidTime(false); }}>{t('unschedule')}</button></div>
+      <label>{t('scheduledStart')}<input disabled={active} type="datetime-local" value={start} onChange={event => { setStart(event.target.value); setInvalidTime(false); }} /><small>{t('localTime')}</small></label>
+      <div className="project-full"><button type="button" disabled={active || !start} onClick={() => { setStart(''); setInvalidTime(false); }}>{t('unschedule')}</button></div>
       <label className="project-full">{t('fileReference')}<input maxLength={2048} placeholder={t('fileHelp')} value={draft.fileReference} onChange={event => field('fileReference', event.target.value)} /></label>
       <label className="project-full">{t('notes')}<textarea rows={3} maxLength={4000} value={draft.notes} onChange={event => field('notes', event.target.value)} /></label>
-    </div></fieldset>{invalidTime && <p role="alert" className="error">{t('invalidTime')}</p>}{error && <p role="alert" className="error">{t('errors.' + error)}</p>}<div className="row"><button type="button" disabled={busy} onClick={close}>{t('cancel')}</button><button type="submit" className="primary" disabled={busy}>{t(busy ? 'saving' : 'save')}</button></div></form>
+    </div></fieldset>{invalidTime && <p role="alert" className="error">{t('invalidTime')}</p>}{error && <p role="alert" className="error">{t('errors.' + error, { ns: 'production', defaultValue: t('errors.' + error) })}</p>}<div className="row"><button type="button" disabled={busy} onClick={close}>{t('cancel')}</button><button type="submit" className="primary" disabled={busy}>{t(busy ? 'saving' : 'save')}</button></div></form>
   </ProjectDialog>;
 }
