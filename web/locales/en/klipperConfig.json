@@ -47,5 +47,6 @@
     "sign-in": "Your session expired.",
     "rate": "Too many requests. Please wait."
   },
-  "restartButton": "Restart Klipper"
+  "restartButton": "Restart Klipper",
+  "reload": "Reload file"
 }
