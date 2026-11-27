@@ -73,3 +73,13 @@ test('urgence : commande distincte hors impression, indisponibilité explicite, 
   const cc2 = render({ ...machine, nativeStatus: 14, nativeSubStatus: 0, exceptionCodes: [803], issue: 'elegoo-emergency-stop' });
   assert.match(cc2, /14 \/ 0/); assert.match(cc2, /803/); assert.match(cc2, /elegoo-emergency-stop/);
 });
+
+test('Cockpit Klipper : après arrêt d’urgence, bouton « Redémarrer le firmware » pour l’administrateur seulement', () => {
+  const stopped = { ...machine, kind: 'klipper', model: 'Klipper', status: 'error', issue: 'moonraker-shutdown', capabilities: { ...machine.capabilities, commands: true, commandActions: ['start', 'pause', 'resume', 'stop', 'emergencyStop'] } };
+  const admin = render(stopped);
+  assert.match(admin, /Klipper est à l’arrêt/); assert.match(admin, />Redémarrer le firmware<\/button>/);
+  assert.match(admin, /arrêt d’urgence \(shutdown\)/);
+  const observer = render(stopped, 'observer');
+  assert.match(observer, /Klipper est à l’arrêt/); assert.doesNotMatch(observer, />Redémarrer le firmware<\/button>/);
+  for (const other of [{ ...stopped, status: 'ready', issue: null }, { ...stopped, kind: 'bambu' }]) assert.doesNotMatch(render(other), /Redémarrer le firmware/);
+});

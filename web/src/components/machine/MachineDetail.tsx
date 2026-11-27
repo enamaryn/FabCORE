@@ -67,6 +67,12 @@ function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machin
       return value.status === 'error' && latest.current.machine.kind === 'longer-ray5' ? 'reset-alarm' : 'state:' + value.status;
     });
   };
+  // Klipper arrêté (M112 / arrêt d'urgence ou erreur) : seul FIRMWARE_RESTART remet les microcontrôleurs en service.
+  const klipperStopped = machine.kind === 'klipper' && ['moonraker-shutdown', 'klippy'].includes(machine.issue ?? '') && machine.status === 'error';
+  const runFirmwareRestart = async () => {
+    setConfirm(null);
+    await perform(async () => 'firmware:' + (await api.klipperFirmwareRestart(latest.current.machine.id)).outcome);
+  };
   const runEmergency = async () => {
     setConfirm(null);
     if (emergencyLocked.current || !alive.current || latest.current.role !== 'admin') return;
@@ -80,18 +86,19 @@ function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machin
     finally { emergencyLocked.current = false; if (alive.current) { setEmergencyBusy(false); await refresh(); } }
   };
   const saveSpool = (spool: Record<string, unknown> | null) => perform(async () => { await api.spool(machine.id, spool, controller.current.signal); return 'saved'; });
-  const errorKey = ['command-rejected', 'command-unconfirmed', 'heater-unconfirmed', 'bambu-authorization', 'control-invalid', 'command-state', 'rate', 'forbidden', 'spool-invalid', 'storage-unavailable'].includes(failure) ? failure : 'command-unconfirmed';
+  const errorKey = ['config-state', 'command-busy', 'config-unavailable', 'command-rejected', 'command-unconfirmed', 'heater-unconfirmed', 'bambu-authorization', 'control-invalid', 'command-state', 'rate', 'forbidden', 'spool-invalid', 'storage-unavailable'].includes(failure) ? failure : 'command-unconfirmed';
   const date = typeof machine.checkedAt === 'string' && Number.isFinite(Date.parse(machine.checkedAt)) ? new Intl.DateTimeFormat(i18n.resolvedLanguage, { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(machine.checkedAt)) : t('notReported');
   const progress = machine.progressKnown !== false && typeof machine.progress === 'number' && Number.isFinite(machine.progress) && machine.progress >= 0 && machine.progress <= 100 ? machine.progress : null;
   const props = { machine, controls, role, busy: busy || emergencyBusy || stale, onControl };
   const temperature = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? new Intl.NumberFormat(i18n.resolvedLanguage, { style: 'unit', unit: 'celsius', maximumFractionDigits: 1 }).format(value) : t('notReported');
   return <>
-    <div aria-live="polite" className="machine-feedback">{failure && <p className="error" role="alert">{t('errors.' + errorKey)}</p>}{result && <p className="notice">{result.startsWith('emergency:') ? <>{t('emergencyOutcomes.' + result.split(':')[1])}{result.split(':')[2] && <code> · HTTP {result.split(':')[2]}</code>}</> : result.startsWith('state:') ? t('stateRead', { state: i18n.t('status.' + result.slice(6), { ns: 'fleet' }) }) : t('outcomes.' + result)}</p>}{(busy || emergencyBusy) && <p role="status">{t('sending')}</p>}</div>
+    <div aria-live="polite" className="machine-feedback">{failure && <p className="error" role="alert">{t('errors.' + errorKey)}</p>}{result && <p className="notice">{result.startsWith('firmware:') ? t('firmwareOutcomes.' + result.slice(9)) : result.startsWith('emergency:') ? <>{t('emergencyOutcomes.' + result.split(':')[1])}{result.split(':')[2] && <code> · HTTP {result.split(':')[2]}</code>}</> : result.startsWith('state:') ? t('stateRead', { state: i18n.t('status.' + result.slice(6), { ns: 'fleet' }) }) : t('outcomes.' + result)}</p>}{(busy || emergencyBusy) && <p role="status">{t('sending')}</p>}</div>
     {/* Trois rangées en paires, hauteurs alignées : fabrication | déplacements, caméra | températures, filaments | actions rapides. */}
     <div className="react-cockpit">
       <div className="cockpit-row"><section className="panel stack cockpit-job" data-machine-block="fabrication">
       <div className="cockpit-job-main"><h2>{t('fabrication')}</h2><p className="react-job-file">{machine.file || t('noFile')}</p>
         {capabilities.printJob !== false && (progress === null ? <small>{t('progressUnknown')}</small> : <div className="cockpit-progress"><progress value={progress} max={100} aria-label={t('progress')} /><strong>{new Intl.NumberFormat(i18n.resolvedLanguage).format(progress)} %</strong></div>)}</div>
+      {klipperStopped && <div className="notice stack klipper-stopped" role="status"><strong>{t('klipperStoppedTitle')}</strong><span>{t('klipperStoppedText')}</span>{role === 'admin' && <div><button type="button" className="primary" disabled={busy || emergencyBusy || stale} onClick={() => setConfirm('firmwareRestart')}>{t('actions.firmwareRestart')}</button></div>}</div>}
       <div className="cockpit-job-actions">{role === 'admin' && ['pause', 'resume', 'stop', 'start'].filter(action => commandAllowed(action, machine)).map(action => <button type="button" key={action} className={action === 'stop' ? 'danger' : 'primary'} disabled={busy || emergencyBusy || stale} onClick={() => { if (['start', 'stop'].includes(action)) setConfirm(action); else void runCommand(action); }}>{t('actions.' + action)}</button>)}{role === 'admin' && capabilities.files && ['ready', 'done'].includes(machine.status) && <a className="button" href={'#machine/' + machine.id + '/files'}>{t('chooseFile')}</a>}</div>
       {role === 'admin' && <div className="stack"><button type="button" className="danger" disabled={emergencyBusy || stale || !emergencySupported} onClick={() => setConfirm('emergencyStop')}>{t('emergencyTitle')}</button><small>{t(emergencySupported ? 'emergencyLimitation' : 'emergencyUnavailable')}</small></div>}
       <div className="cockpit-job-notes">{machine.kind === 'bambu-cloud' && <p className="notice">{t('cloudReadOnly')}</p>}{machine.kind === 'xtool-m2' && <p>{t('preparedProject')}</p>}{machine.kind === 'longer-ray5' && <small>GRBL · {machine.nativeState || t('notReported')}{machine.firmware ? ' · ' + machine.firmware : ''}</small>}
@@ -104,11 +111,11 @@ function Cockpit({ machine, api, actor, role, samples, stale }: Props & { machin
       <div className="cockpit-row"><MaterialsPanel machine={machine} role={role} busy={busy || emergencyBusy} save={saveSpool} />
       <section className="panel stack" data-machine-block="quick"><div className="row between wrap"><h2>{t('quick')}</h2>{capabilities.controls && <button type="button" className="ghost" disabled={busy || controlsQuery.isFetching} onClick={() => { void controlsQuery.refetch(); }}>{t('refresh')}</button>}</div><div hidden={!controls}><QuickControls {...props} /></div>{!controls && <Unavailable message={t(capabilities.controls ? controlsQuery.isError ? 'controlsUnavailable' : ['offline', 'connecting'].includes(machine.status) ? 'offline' : 'readingControls' : 'controlsUnsupported')} />}</section></div>
     </div>
-    {confirm && <PrintConfirmation action={confirm} machineName={machine.name + ' · ' + (machine.serial || machine.origin || machine.id)} close={() => setConfirm(null)} submit={() => { if (confirm === 'emergencyStop') void runEmergency(); else void runCommand(confirm); }} />}
+    {confirm && <PrintConfirmation action={confirm} machineName={machine.name + ' · ' + (machine.serial || machine.origin || machine.id)} close={() => setConfirm(null)} submit={() => { if (confirm === 'emergencyStop') void runEmergency(); else if (confirm === 'firmwareRestart') void runFirmwareRestart(); else void runCommand(confirm); }} />}
   </>;
 }
 function PrintConfirmation({ action, machineName, close, submit }: { action: string; machineName: string; close(): void; submit(): void }) {
   const { t } = useTranslation('machine'); const ref = useRef<HTMLDialogElement>(null), title = useId();
   useEffect(() => { const dialog = ref.current; dialog?.showModal(); return () => dialog?.close(); }, []);
-  return <dialog ref={ref} aria-labelledby={title} onClose={close}><div className="stack"><h2 id={title}>{t(action === 'emergencyStop' ? 'emergencyTitle' : action === 'stop' ? 'confirmStopTitle' : 'confirmStartTitle')}</h2><p>{action === 'emergencyStop' ? t('confirmEmergency', { name: machineName }) : t(action === 'stop' ? 'confirmStop' : 'confirmStart')}</p><div className="row wrap"><button type="button" autoFocus onClick={close}>{t('cancel')}</button><button type="button" className={['stop', 'emergencyStop'].includes(action) ? 'danger' : 'primary'} onClick={submit}>{t('actions.' + action)}</button></div></div></dialog>;
+  return <dialog ref={ref} aria-labelledby={title} onClose={close}><div className="stack"><h2 id={title}>{t(action === 'firmwareRestart' ? 'confirmFirmwareTitle' : action === 'emergencyStop' ? 'emergencyTitle' : action === 'stop' ? 'confirmStopTitle' : 'confirmStartTitle')}</h2><p>{action === 'firmwareRestart' ? t('confirmFirmware', { name: machineName }) : action === 'emergencyStop' ? t('confirmEmergency', { name: machineName }) : t(action === 'stop' ? 'confirmStop' : 'confirmStart')}</p><div className="row wrap"><button type="button" autoFocus onClick={close}>{t('cancel')}</button><button type="button" className={['stop', 'emergencyStop'].includes(action) ? 'danger' : 'primary'} onClick={submit}>{t('actions.' + action)}</button></div></div></dialog>;
 }

@@ -81,7 +81,8 @@
     "resume": "Resume",
     "stop": "Stop",
     "start": "Start",
-    "emergencyStop": "Software emergency stop"
+    "emergencyStop": "Software emergency stop",
+    "firmwareRestart": "Restart firmware"
   },
   "outcomes": {
     "accepted": "Command accepted; execution still needs to be checked on the machine.",
@@ -100,7 +101,10 @@
     "rate": "Commands sent too quickly. Wait before retrying.",
     "forbidden": "Insufficient permission for this action.",
     "spool-invalid": "Invalid spool information.",
-    "storage-unavailable": "Storage unavailable. Retry later."
+    "storage-unavailable": "Storage unavailable. Retry later.",
+    "config-state": "Klipper is not stopped: firmware restart not needed.",
+    "command-busy": "Another operation is running on this machine.",
+    "config-unavailable": "Moonraker does not respond. Check the connection."
   },
   "machineSettings": "Machine settings",
   "cameraEnlarge": "Enlarge camera",
@@ -119,5 +123,14 @@
   },
   "nativeState": "Manufacturer state",
   "nativeExceptions": "Exceptions",
-  "configuration": "Configuration"
+  "configuration": "Configuration",
+  "klipperStoppedTitle": "Klipper is stopped (emergency stop or error)",
+  "klipperStoppedText": "No print or command is possible until the firmware is restarted. Check the machine first: hot end and bed cooled, work area clear.",
+  "confirmFirmwareTitle": "Restart Klipper firmware?",
+  "confirmFirmware": "Send FIRMWARE_RESTART to “{name}”? Klipper and its microcontrollers restart; heaters stay off and axes must be homed again.",
+  "firmwareOutcomes": {
+    "accepted": "Firmware restart accepted. Klipper will be ready in a few seconds.",
+    "rejected": "Moonraker refused the firmware restart.",
+    "unknown": "Unknown result; check the machine. No automatic resend."
+  }
 }

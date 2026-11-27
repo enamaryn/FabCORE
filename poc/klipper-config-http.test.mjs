@@ -55,3 +55,36 @@ test('HTTP Klipper cfg : droits, téléchargement, sauvegarde confirmée et rest
   const emergency = await call('/api/machines/' + id + '/command', { action: 'emergencyStop', confirm: true }, admin); assert.equal(emergency.body.outcome, 'accepted'); assert.equal(emergencies, 1);
   releaseBackup(); assert.equal((await pendingSave).status, 409, 'completed emergency invalidates the unsent write too'); assert.equal(contents, before); assert.equal(writes, 3, 'only the backup was uploaded');
 });
+
+test('HTTP Klipper : FIRMWARE_RESTART réservé à l’administrateur, confirmé, seulement si Klipper est arrêté', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'fabcore-firmware-http-')); t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = openStore(directory); store.save({ ...store.state, machines: [{ id, name: 'Klipper test', kind: 'klipper', origin: 'http://192.168.1.20:7125', apiKey: 'test-key' }] });
+  let klippy = 'ready', firmwareRestarts = 0, restarts = 0;
+  const native = async (url, options) => {
+    assert.equal(new Headers(options.headers).get('X-Api-Key'), 'test-key');
+    if (url.endsWith('/printer/info')) return Response.json({ result: { state: klippy } });
+    if (url.endsWith('/printer/firmware_restart')) { firmwareRestarts++; return Response.json({ result: 'ok' }); }
+    if (url.endsWith('/printer/restart')) { restarts++; return Response.json({ result: 'ok' }); }
+    throw new Error('unexpected fixture request');
+  };
+  const { server, token } = createFabCore({ store, directory, origin: 'http://fabcore.test', fetchFiles: native, readPrinter: async () => ({ status: 'error', file: '', progress: 0, issue: 'moonraker-shutdown', nozzle: null, bed: null }) });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
+  const call = (path, body, cookie) => new Promise((resolve, reject) => {
+    const req = request({ hostname: '127.0.0.1', port: server.address().port, path, method: 'POST', headers: { Host: 'fabcore.test', Origin: 'http://fabcore.test', 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) } }, async res => {
+      const chunks = []; for await (const chunk of res) chunks.push(chunk); const text = Buffer.concat(chunks).toString(); resolve({ status: res.statusCode, headers: res.headers, body: text ? JSON.parse(text) : null });
+    }); req.on('error', reject); req.end(JSON.stringify(body));
+  });
+  const admin = (await call('/api/setup', { username: 'admin', password: 'test-config-password', token })).headers['set-cookie'][0].split(';')[0];
+  await call('/api/observers', { username: 'viewer', password: 'config-viewer-password' }, admin);
+  const observer = (await call('/api/login', { username: 'viewer', password: 'config-viewer-password' })).headers['set-cookie'][0].split(';')[0];
+  const firmware = '/api/machines/' + id + '/klipper-firmware-restart';
+  assert.equal((await call(firmware, { confirm: true })).status, 401);
+  assert.equal((await call(firmware, { confirm: true }, observer)).status, 403);
+  assert.equal((await call(firmware, {}, admin)).status, 400, 'confirmation obligatoire');
+  assert.equal((await call(firmware, { confirm: true }, admin)).status, 409, 'Klipper prêt : refusé');
+  assert.equal(firmwareRestarts, 0);
+  klippy = 'shutdown';
+  const accepted = await call(firmware, { confirm: true }, admin);
+  assert.equal(accepted.status, 200); assert.equal(accepted.body.outcome, 'accepted');
+  assert.equal(firmwareRestarts, 1); assert.equal(restarts, 0, 'jamais confondu avec RESTART');
+});
