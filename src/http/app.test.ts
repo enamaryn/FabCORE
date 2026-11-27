@@ -23,7 +23,7 @@ function build(view: () => Record<string, unknown> = () => ({ events: [] })) {
     notifications: { view: () => ({ ntfy: { mode: 'off' }, smtp: { enabled: false }, internal: null }), save: () => { throw new Error('unused'); }, test: async () => ({ accepted: true as const }) },
     events: { stream: () => undefined },
     version: { status: async () => ({ current: null, latest: null, updateAvailable: false, checkedAt: null }) },
-    operations: { klipperConfig: () => undefined, cloudCertificates: () => undefined, cloudAction: () => undefined, camera: () => undefined, command: () => undefined, controls: () => undefined, terminal: () => undefined, files: () => undefined },
+    operations: { klipperConfig: () => undefined, tramming: () => undefined, cloudCertificates: () => undefined, cloudAction: () => undefined, camera: () => undefined, command: () => undefined, controls: () => undefined, terminal: () => undefined, files: () => undefined },
     pages: { asset: () => undefined, oidc: () => undefined },
     logs: { machine: () => null, machineLog: () => '', cloudAccounts: () => ({ providers: [], accounts: [] }), cloudLog: () => '', cloudFailure: () => { throw new Error('unused'); } },
   }));

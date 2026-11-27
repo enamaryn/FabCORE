@@ -870,5 +870,31 @@
     "docs": [
       "docs/protocols/HTTP-LAN.md"
     ]
+  },
+  {
+    "id": "klipper-tramming",
+    "title": "Nivellement 4 points Klipper et planéité du plateau",
+    "files": [
+      "connectors/moonraker/src/tramming.ts",
+      "poc/server.mjs",
+      "src/http/routes/operations.ts",
+      "web/src/components/tramming/TrammingPanel.tsx",
+      "web/src/components/machine/MachineDetail.tsx"
+    ],
+    "symbols": [
+      "createMoonrakerTramming",
+      "trammingPoints",
+      "trammingResult",
+      "storedTramming",
+      "handleTramming",
+      "TrammingPanel",
+      "flatnessLevel"
+    ],
+    "tests": [
+      "connectors/moonraker/test/tramming.test.ts",
+      "poc/tramming-http.test.mjs",
+      "web/test/tramming.test.mjs"
+    ],
+    "docs": []
   }
 ]

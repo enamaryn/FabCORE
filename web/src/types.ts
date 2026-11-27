@@ -33,6 +33,8 @@ export type MachineData = Static<typeof FleetMachine> & {
   nativeStatus?: number | null;
   /** Message texte remonté par la machine (Klipper : erreur d'impression ou arrêt). */
   nativeMessage?: string;
+  /** Dernier nivellement 4 points (Klipper avec sonde) : planéité = écart max entre coins, en mm. */
+  bedLevel?: { at: string; range: number } | null;
   nativeSubStatus?: number | null;
   exceptionCodes?: number[];
   nativeState?: string;

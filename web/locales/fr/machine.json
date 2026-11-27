@@ -133,5 +133,9 @@
     "rejected": "Moonraker a refusé le redémarrage du firmware.",
     "unknown": "Résultat inconnu ; vérifiez la machine. Aucun renvoi automatique."
   },
-  "nativeMessage": "Message de la machine :"
+  "nativeMessage": "Message de la machine :",
+  "tramming": "Nivellement",
+  "flatness": "Planéité du plateau",
+  "flatnessOpen": "Nivellement 4 points",
+  "flatnessNone": "Planéité non mesurée"
 }

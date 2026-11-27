@@ -25,7 +25,7 @@ function build(overrides: Partial<RouteDependencies> = {}) {
     notifications: { view: () => ({ ntfy: { mode: 'external', url: 'https://ntfy.example.test', topic: 'fabcore' }, smtp: { enabled: false }, internal: null }), save: () => { throw new Error('unused'); }, test: async () => ({ accepted: true as const }) },
     events: { stream: () => undefined },
     version: { status: async () => ({ current: null, latest: null, updateAvailable: false, checkedAt: null }) },
-    operations: { klipperConfig: () => undefined, cloudCertificates: () => undefined, cloudAction: () => undefined, camera: () => undefined, command: () => undefined, controls: () => undefined, terminal: () => undefined, files: () => undefined },
+    operations: { klipperConfig: () => undefined, tramming: () => undefined, cloudCertificates: () => undefined, cloudAction: () => undefined, camera: () => undefined, command: () => undefined, controls: () => undefined, terminal: () => undefined, files: () => undefined },
     pages: { asset: () => undefined, oidc: () => undefined },
     logs: {
       machine: machineId => machineId === id ? { id, name: 'P2S', kind: 'bambu' } : null,
