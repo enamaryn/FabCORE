@@ -1,0 +1,14 @@
+.tramming-layout{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px;align-items:start}
+.tramming-bed{position:relative;aspect-ratio:1;max-width:460px;width:100%;border:2px solid var(--line);border-radius:14px;background:repeating-linear-gradient(45deg,var(--raised) 0 12px,transparent 12px 24px);padding:12px}
+.tramming-back,.tramming-front{position:absolute;left:50%;transform:translateX(-50%);font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}.tramming-back{top:6px}.tramming-front{bottom:6px}
+.tramming-corner{position:absolute;width:44%;min-height:30%;display:grid;align-content:center;justify-items:center;gap:4px;padding:10px;border-radius:12px;border:2px solid var(--line);background:var(--card);text-align:center}
+.tramming-back-left{left:4%;top:9%}.tramming-back-right{right:4%;top:9%}.tramming-front-left{left:4%;bottom:9%}.tramming-front-right{right:4%;bottom:9%}
+.tramming-corner strong{font-size:13px}.tramming-corner .tramming-action{font-weight:700;font-size:15px}.tramming-corner small{color:var(--dim)}
+.tramming-corner[data-state=active]{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 30%,transparent)}
+.tramming-corner[data-state=ok],.tramming-corner[data-state=reference]{border-color:var(--accent)}
+.tramming-corner[data-state=adjust]{border-color:var(--amber,#e0a030)}
+.tramming-flatness{display:grid;gap:2px;padding:14px;border-radius:12px;border:1px solid var(--line);background:var(--raised)}.tramming-flatness strong{font-size:1.8rem;font-variant-numeric:tabular-nums}
+.tramming-flatness[data-level=excellent],.tramming-flatness[data-level=good]{border-color:var(--accent)}.tramming-flatness[data-level=improve]{border-color:var(--amber,#e0a030)}.tramming-flatness[data-level=out]{border-color:var(--red,#d33)}
+.machine-flatness{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}.machine-flatness[data-level=improve] strong{color:var(--amber,#e0a030)}.machine-flatness[data-level=out] strong{color:var(--red,#d33)}
+@media(max-width:800px){.tramming-layout{grid-template-columns:1fr}}
+.tramming .check{display:flex;gap:8px;align-items:flex-start}.tramming .check input{margin-top:3px}

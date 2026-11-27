@@ -9,6 +9,7 @@ import { errorResponses } from '../errors.ts';
  */
 export interface OperationHandlers {
   klipperConfig: RawHandler;
+  tramming: RawHandler;
   cloudAction: RawHandler;
   cloudCertificates: RawHandler;
   camera: RawHandler;
@@ -68,6 +69,12 @@ export const operationRoutes = (handlers: OperationHandlers): RouteModule => (ap
     app.route({ method, url: `/api/machines/${id}/${endpoint}`, config: { query: method === 'GET' },
       onRequest: guards.raw(handlers.klipperConfig, admin), schema: { summary: endpoint === 'moonraker-restart' ? 'Redémarrer le service Moonraker pour relire moonraker.conf (confirmation, hors impression)' : endpoint === 'klipper-firmware-restart' ? 'FIRMWARE_RESTART après arrêt d’urgence ou erreur Klipper (confirmation, état shutdown/error requis)' : endpoint === 'klipper-restart' ? 'Redémarrer Klipper uniquement (confirmation)' : method === 'GET' ? 'Lire les fichiers cfg Klipper et moonraker.conf (administrateur)' : 'Sauvegarder une configuration Klipper avec copie de secours et révision', tags: ['configuration Klipper'], security: session, params: Params,
         response: { 200: json('Lecture/configuration sauvegardée ; restart accepté, refusé ou inconnu.'), ...errorResponses(400, 401, 403, 404, 409, 415, 421, 429, 502) } }, handler: none });
+  }
+
+  for (const method of ['GET', 'POST'] as const) {
+    app.route({ method, url: `/api/machines/${id}/tramming`,
+      onRequest: guards.raw(handlers.tramming, admin), schema: { summary: method === 'GET' ? 'Nivellement 4 points : points de palpage (sonde décalée) et dernière planéité (administrateur)' : 'Palper un point du nivellement 4 points ({ point: 0..3, confirm }) ; le 4e enregistre la planéité', tags: ['configuration Klipper'], security: session, params: Params,
+        response: { 200: json('Géométrie ou mesure ; au 4e point, résultat avec écarts par coin et planéité.'), ...errorResponses(400, 401, 403, 404, 409, 415, 421, 429, 502) } }, handler: none });
   }
 
   // Commandes et contrôles : confirmations, état requis, verrou par machine, aucun rejeu (MIG-03.2.1).

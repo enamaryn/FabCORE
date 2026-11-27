@@ -1,4 +1,5 @@
 import { createMoonrakerConfig, configPath, configLimit } from '../connectors/moonraker/src/config.ts';
+import { createMoonrakerTramming, storedTramming, trammingResult } from '../connectors/moonraker/src/tramming.ts';
 import { encodePath, moonrakerOrigin, multipart, readResponse as readMoonrakerResponse } from './connector-http.mjs';
 import { createProjectService } from '../src/application/projects.ts';
 import { bambuCameraInfo } from '../src/domain/camera.ts';
@@ -161,6 +162,8 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     return telemetry;
   });
   const klipperConfig = createMoonrakerConfig({ encodePath, validOrigin: moonrakerOrigin, multipart, readResponse: readMoonrakerResponse }, fetchFiles ?? fetch);
+  const tramming = createMoonrakerTramming({ validOrigin: moonrakerOrigin, readResponse: readMoonrakerResponse }, fetchFiles ?? fetch);
+  const trammingCycles = new Map();
   const pendingCommands = new Set();
   const pendingEmergencies = new Set();
   const emergencyGenerations = new Map();
@@ -447,6 +450,50 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       const code = /^config-|^command-busy$/.test(failure.message) ? failure.message : 'config-unavailable';
       return error(res, ['config-conflict', 'config-state', 'command-busy'].includes(code) ? 409 : ['config-invalid', 'config-confirm'].includes(code) ? 400 : 502, code);
     } finally { pendingCommands.delete(machine.id); }
+  }
+
+  // Nivellement 4 points : GET géométrie + dernier résultat ; POST { point: 0..3, confirm } palpe un point.
+  // Le 4e point clôt la passe : buse remontée, planéité enregistrée sur la machine. Un point = un envoi, jamais rejoué.
+  async function handleTramming(req, res) {
+    const match = new URL(req.url, origin).pathname.match(/^\/api\/machines\/([a-f0-9-]{36})\/tramming$/);
+    const machine = store.state.machines.find(item => item.id === match?.[1]);
+    if (!machine || (machine.kind ?? 'klipper') !== 'klipper') return error(res, 404, 'missing');
+    if (req.method === 'GET') {
+      try {
+        const { available, reason, offset, points } = await tramming.geometry(machine);
+        return answer(res, 200, { available, ...(reason ? { reason } : {}), ...(offset ? { offset, points } : {}), last: storedTramming(machine.bedLevel) });
+      } catch { return error(res, 502, 'tramming-unavailable'); }
+    }
+    if (!requireJson(req, res)) return;
+    if (!withinLimit('tramming:' + machine.id)) return error(res, 429, 'rate');
+    let data; try { data = await readJson(req); } catch { return error(res, 400, 'tramming-invalid'); }
+    const index = data.point;
+    if (data.confirm !== true || !Number.isInteger(index) || index < 0 || index > 3) return error(res, 400, 'tramming-invalid');
+    if (pendingCommands.has(machine.id) || pendingUploads.has(machine.id) || pendingEmergencies.has(machine.id)) return error(res, 409, 'command-busy');
+    const emergencyGeneration = emergencyGenerations.get(machine.id) ?? 0;
+    pendingCommands.add(machine.id);
+    const canWrite = () => !res.destroyed && sessions.get(session(req))?.role === 'admin' && store.state.machines.includes(machine) && !pendingEmergencies.has(machine.id) && (emergencyGenerations.get(machine.id) ?? 0) === emergencyGeneration;
+    try {
+      if (index === 0) trammingCycles.set(machine.id, []);
+      const cycle = trammingCycles.get(machine.id) ?? [];
+      if (cycle.length !== index) return error(res, 409, 'tramming-sequence');
+      const measure = await tramming.measure(machine, index, canWrite);
+      cycle.push(measure); trammingCycles.set(machine.id, cycle);
+      diagnostics.record('tramming', 'point-' + (index + 1), machine.id);
+      if (index < 3) return answer(res, 200, { measure });
+      trammingCycles.delete(machine.id);
+      try { await tramming.finish(machine); } catch { /* Mesures acquises ; la remontée de buse n'est pas renvoyée. */ }
+      const result = trammingResult(cycle);
+      if (result && store.state.machines.includes(machine)) {
+        await persist({ ...store.state, machines: store.state.machines.map(item => item === machine ? { ...item, bedLevel: result } : item) });
+      }
+      return answer(res, 200, { measure, result });
+    } catch (failure) {
+      const code = /^tramming-|^command-busy$/.test(failure.message) ? failure.message : 'tramming-unavailable';
+      if (code !== 'command-busy') trammingCycles.delete(machine.id);
+      const status = ['tramming-state', 'command-busy'].includes(code) ? 409 : code === 'tramming-invalid' ? 400 : 502;
+      return failure.nativeMessage ? answer(res, status, { error: code, nativeMessage: failure.nativeMessage }) : error(res, status, code);
+    } finally { snapshot.forget(machine.id); pendingCommands.delete(machine.id); }
   }
 
   async function handleCommand(req, res) {
@@ -808,7 +855,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       const definition = connectorDefinition(kind);
       const connection = definition?.configure(data, existing);
       if (!name || !connection) throw new HttpError(400, 'machine-invalid');
-      const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection, ...(existing?.manualSpool ? { manualSpool: existing.manualSpool } : {}) };
+      const machine = { id: existing?.id ?? randomUUID(), name, kind, ...connection, ...(existing?.manualSpool ? { manualSpool: existing.manualSpool } : {}), ...(existing?.bedLevel && existing.origin === connection.origin ? { bedLevel: existing.bedLevel } : {}) };
       if (kind === 'bambu' && store.state.machines.some(item => item.id !== machine.id && ['bambu', 'bambu-cloud'].includes(item.kind) && item.serial === machine.serial)) throw new HttpError(409, 'cloud-machine-exists');
       const testing = action === 'test';
       const pairing = action === 'pair';
@@ -957,7 +1004,8 @@ export function createFabCore({ directory, store: storage = openStore(directory)
           ? { ...connectorCatalog[machine.kind], controls: false, commands: false, commandActions: [] }
           : connectorCatalog[machine.kind ?? 'klipper'],
         ...(machine.transport ? { transport: machine.transport } : {}),
-        manualSpool: supportsManualSpool(machine.kind ?? 'klipper') ? manualSpool(machine.manualSpool) : null
+        manualSpool: supportsManualSpool(machine.kind ?? 'klipper') ? manualSpool(machine.manualSpool) : null,
+        ...((machine.kind ?? 'klipper') === 'klipper' && storedTramming(machine.bedLevel) ? { bedLevel: storedTramming(machine.bedLevel) } : {})
       };
     }));
     return machines.filter(Boolean);
@@ -997,7 +1045,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     },
     events: { stream: handleEvents },
     version: { status: () => versionService.status() },
-    operations: { klipperConfig: handleKlipperConfig, cloudAction: handleCloudAction, cloudCertificates: handleBambuCertificates, camera: handleCamera, command: handleCommand, controls: handleControls, terminal: handleTerminal, files: handleFiles },
+    operations: { klipperConfig: handleKlipperConfig, tramming: handleTramming, cloudAction: handleCloudAction, cloudCertificates: handleBambuCertificates, camera: handleCamera, command: handleCommand, controls: handleControls, terminal: handleTerminal, files: handleFiles },
     pages: { asset: handleAsset, oidc: handleOidc }
   }));
   const server = createServer({ requestTimeout: 10_000, headersTimeout: 5_000 }, (req, res) => http.dispatch(req, res));

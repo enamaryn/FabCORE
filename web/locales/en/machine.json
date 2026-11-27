@@ -133,5 +133,9 @@
     "rejected": "Moonraker refused the firmware restart.",
     "unknown": "Unknown result; check the machine. No automatic resend."
   },
-  "nativeMessage": "Machine message:"
+  "nativeMessage": "Machine message:",
+  "tramming": "Tramming",
+  "flatness": "Bed flatness",
+  "flatnessOpen": "4-point tramming",
+  "flatnessNone": "Flatness not measured"
 }

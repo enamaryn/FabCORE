@@ -23,8 +23,14 @@ export type VersionStatus = { current: string | null; latest: string | null; upd
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
-  constructor(code: string, status: number) { super(code); this.code = code; this.status = status; }
+  /** Message natif de la machine joint à l'erreur (texte brut), s'il existe. */
+  readonly detail: string | undefined;
+  constructor(code: string, status: number, detail?: string) { super(code); this.code = code; this.status = status; this.detail = detail; }
 }
+export type TrammingCorner = 'front-left' | 'front-right' | 'back-right' | 'back-left';
+export type TrammingMeasure = { corner: TrammingCorner; x: number; y: number; z: number };
+export type TrammingResult = { at: string; points: TrammingMeasure[]; range: number; deviations: { corner: TrammingCorner; delta: number }[] };
+export type TrammingGeometry = { available: boolean; reason?: string; offset?: { x: number; y: number }; points?: { corner: TrammingCorner; x: number; y: number }[]; last: TrammingResult | null };
 export interface KlipperConfigFile { path: string; content: string; revision: string | null }
 export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void = () => {}, makeXhr: () => XMLHttpRequest = () => new XMLHttpRequest()) {
   async function request(path: string, data?: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number): Promise<unknown> {
@@ -35,10 +41,14 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
     });
     if (response.status === 401) signedOut();
     const payload: unknown = await response.json();
-    if (!response.ok) throw new ApiError(typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string' ? payload.error : 'internal', response.status);
+    if (!response.ok) throw new ApiError(typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string' ? payload.error : 'internal', response.status,
+      typeof payload === 'object' && payload !== null && 'nativeMessage' in payload && typeof payload.nativeMessage === 'string' ? payload.nativeMessage.slice(0, 300) : undefined);
     return payload;
   }
   return {
+    async tramming(id: string, signal?: AbortSignal): Promise<TrammingGeometry> { return await request('machines/' + encodeURIComponent(id) + '/tramming', undefined, signal, 15000) as TrammingGeometry; },
+    /** Un point de palpage (origine éventuelle comprise) : jusqu'à 3 minutes, jamais renvoyé automatiquement. */
+    async trammingPoint(id: string, point: number, signal?: AbortSignal): Promise<{ measure: TrammingMeasure; result?: TrammingResult | null }> { return await request('machines/' + encodeURIComponent(id) + '/tramming', { point, confirm: true }, signal, 200000) as { measure: TrammingMeasure; result?: TrammingResult | null }; },
     klipperConfigDownload(id: string, path: string) { return '/api/machines/' + encodeURIComponent(id) + '/klipper-config?path=' + encodeURIComponent(path) + '&download=1'; },
     async klipperConfigList(id: string): Promise<{ files: { path: string; writable: boolean }[] }> { return await request('machines/' + encodeURIComponent(id) + '/klipper-config') as { files: { path: string; writable: boolean }[] }; },
     async klipperConfigRead(id: string, path: string): Promise<KlipperConfigFile> { return await request('machines/' + encodeURIComponent(id) + '/klipper-config?path=' + encodeURIComponent(path)) as KlipperConfigFile; },
