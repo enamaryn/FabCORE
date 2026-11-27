@@ -254,12 +254,12 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       ['cloud', 'diagnostics', 'notifications', 'observer', 'add'].includes(url.searchParams.get('screen'))));
     // One fleet/cockpit UI. Keep only unmigrated administration and console on the legacy shell.
     let destination = path === '/' ? '/app' : path === '/?auth=oidc-failed' ? '/app#oidc-failed' : null;
-    if (deepLink && machineLink && !['console', 'settings'].includes(url.searchParams.get('tab'))) {
+    if (deepLink && machineLink && url.searchParams.get('tab') !== 'console') {
       destination = '/app#machine/' + url.searchParams.get('machine');
       if (url.searchParams.has('view')) destination += '/view/' + encodeURIComponent(url.searchParams.get('view')) + (url.searchParams.get('follow') === '1' ? '/follow' : '');
       else if (url.searchParams.has('tab')) destination += '/' + url.searchParams.get('tab');
     }
-    if (deepLink && !machineLink) destination = { diagnostics: '/app#diagnostics', notifications: '/app#notifications', observer: '/app#access' }[url.searchParams.get('screen')] ?? null;
+    if (deepLink && !machineLink) destination = { diagnostics: '/app#diagnostics', notifications: '/app#notifications', observer: '/app#access', add: '/app#machines/add' }[url.searchParams.get('screen')] ?? null;
     if (destination) { res.writeHead(303, { Location: destination }); return res.end(); }
     const asset = deepLink ? '/' : path;
     if (req.method === 'GET' && assets.has(asset)) {
@@ -1004,6 +1004,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
           ? { ...connectorCatalog[machine.kind], controls: false, commands: false, commandActions: [] }
           : connectorCatalog[machine.kind ?? 'klipper'],
         ...(machine.transport ? { transport: machine.transport } : {}),
+        ...(machine.kind === 'longer-ray5' ? { httpPort: machine.httpPort, wsPort: machine.wsPort } : {}),
         manualSpool: supportsManualSpool(machine.kind ?? 'klipper') ? manualSpool(machine.manualSpool) : null,
         ...((machine.kind ?? 'klipper') === 'klipper' && storedTramming(machine.bedLevel) ? { bedLevel: storedTramming(machine.bedLevel) } : {})
       };
@@ -1033,6 +1034,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
         return result;
       },
       networks: () => machineAdmin.networks(),
+      catalog: () => ({ connectors: Object.entries(connectorCatalog).filter(([, entry]) => entry.form !== 'cloud').map(([kind, entry]) => ({ kind, model: entry.model, form: entry.form, port: entry.port ?? null, required: entry.required === true })) }),
       discover: (data, signal) => machineAdmin.discover(data, signal)
     },
     notifications: notificationService,

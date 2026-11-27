@@ -19,7 +19,7 @@ function build(view: () => Record<string, unknown> = () => ({ events: [] })) {
     session: { installed: () => true, oidcEnabled: () => false, viewer },
     diagnostics: { view, fleet: () => [{ id: 'm1', name: 'P2S' }] },
     fleet: { list: async () => [] },
-    machines: { write: async () => null, spool: () => ({ manualSpool: null }), networks: () => ({ networks: [] }), discover: async () => null },
+    machines: { write: async () => null, spool: () => ({ manualSpool: null }), networks: () => ({ networks: [] }), catalog: () => ({ connectors: [] }), discover: async () => null },
     notifications: { view: () => ({ ntfy: { mode: 'off' }, smtp: { enabled: false }, internal: null }), save: () => { throw new Error('unused'); }, test: async () => ({ accepted: true as const }) },
     events: { stream: () => undefined },
     version: { status: async () => ({ current: null, latest: null, updateAvailable: false, checkedAt: null }) },

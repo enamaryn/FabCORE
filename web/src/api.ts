@@ -31,6 +31,9 @@ export type TrammingCorner = 'front-left' | 'front-right' | 'back-right' | 'back
 export type TrammingMeasure = { corner: TrammingCorner; x: number; y: number; z: number };
 export type TrammingResult = { at: string; points: TrammingMeasure[]; range: number; deviations: { corner: TrammingCorner; delta: number }[] };
 export type TrammingGeometry = { available: boolean; reason?: string; offset?: { x: number; y: number }; points?: { corner: TrammingCorner; x: number; y: number }[]; last: TrammingResult | null };
+export type ConnectorKind = { kind: string; model: string; form: string; port: number | null; required: boolean };
+export type DiscoveredDevice = { kind: string; host: string; origin?: string; serial?: string; name?: string; transport?: string; httpPort?: number; wsPort?: number; registered?: boolean; candidate?: boolean; detected?: boolean };
+export type MachineWrite = 'add' | 'edit' | 'test' | 'pair' | 'delete';
 export interface KlipperConfigFile { path: string; content: string; revision: string | null }
 export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void = () => {}, makeXhr: () => XMLHttpRequest = () => new XMLHttpRequest()) {
   async function request(path: string, data?: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number): Promise<unknown> {
@@ -46,6 +49,15 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
     return payload;
   }
   return {
+    async connectors(signal?: AbortSignal): Promise<ConnectorKind[]> { return ((await request('connectors', undefined, signal)) as { connectors: ConnectorKind[] }).connectors; },
+    async networks(signal?: AbortSignal): Promise<string[]> { return ((await request('discovery', undefined, signal)) as { networks: string[] }).networks; },
+    /** Scan d'un réseau local : jusqu'à deux minutes. */
+    async discover(network: string, signal?: AbortSignal): Promise<DiscoveredDevice[]> { return ((await request('discovery', { network }, signal, 120000)) as { devices: DiscoveredDevice[] }).devices; },
+    /** Ajout, test, appairage (45 s côté M2), modification ou suppression ; aucune nouvelle tentative automatique. */
+    async machineWrite(action: MachineWrite, data: Record<string, unknown>, signal?: AbortSignal): Promise<{ id?: string; ok?: boolean; issue?: string | null; serial?: string }> {
+      const path = { add: 'machines', edit: 'machines/edit', test: 'machines/test', pair: 'machines/pair', delete: 'machines/delete' }[action];
+      return await request(path, data, signal, action === 'pair' ? 90000 : 60000) as { id?: string; ok?: boolean; issue?: string | null; serial?: string };
+    },
     async tramming(id: string, signal?: AbortSignal): Promise<TrammingGeometry> { return await request('machines/' + encodeURIComponent(id) + '/tramming', undefined, signal, 15000) as TrammingGeometry; },
     /** Un point de palpage (origine éventuelle comprise) : jusqu'à 3 minutes, jamais renvoyé automatiquement. */
     async trammingPoint(id: string, point: number, signal?: AbortSignal): Promise<{ measure: TrammingMeasure; result?: TrammingResult | null }> { return await request('machines/' + encodeURIComponent(id) + '/tramming', { point, confirm: true }, signal, 200000) as { measure: TrammingMeasure; result?: TrammingResult | null }; },
