@@ -1,12 +1,12 @@
 {
   "heading": "Klipper configuration",
-  "description": "Read and edit this machine’s .cfg files through Moonraker.",
+  "description": "Read and edit Klipper .cfg files and moonraker.conf of this machine through Moonraker.",
   "file": "File",
   "choose": "Choose a file",
   "readOnly": "Read only",
   "refresh": "Refresh list",
   "download": "Download saved file",
-  "upload": "Import a .cfg file",
+  "upload": "Import a .cfg file or moonraker.conf",
   "content": "Configuration contents",
   "unsaved": "Unsaved changes",
   "upToDate": "Saved version",
@@ -32,10 +32,10 @@
   "destination": "Destination path (e.g. macros/custom.cfg)",
   "loadDraft": "Load in editor",
   "errors": {
-    "config-invalid": "Invalid path or content: relative .cfg file, no traversal, 1 MiB maximum.",
+    "config-invalid": "Invalid path or content: relative .cfg file or moonraker.conf, no parent folders, 1 MiB maximum.",
     "config-unavailable": "Configuration unavailable through Moonraker.",
     "config-missing": "This file does not exist.",
-    "config-size": "Choose a UTF-8 .cfg file of 1 MiB maximum.",
+    "config-size": "Select a UTF-8 .cfg file or moonraker.conf of 1 MiB maximum.",
     "config-encoding": "Only UTF-8 text files are accepted.",
     "config-state": "Machine busy or state cannot be verified. No changes sent.",
     "config-conflict": "This file changed elsewhere. Your draft is retained; reload and compare before saving again.",
@@ -48,5 +48,14 @@
     "rate": "Too many requests. Please wait."
   },
   "restartButton": "Restart Klipper",
-  "reload": "Reload file"
+  "reload": "Reload file",
+  "restartMoonrakerButton": "Restart Moonraker",
+  "confirmRestartMoonraker": "Confirm Moonraker restart",
+  "restartMoonrakerDetail": "Restart Moonraker on “{machine}” to reload moonraker.conf? The machine is unreachable for a few seconds. Klipper and prints are not affected.",
+  "moonrakerWarning": "moonraker.conf: [authorization] section → trusted_clients to allow an address (e.g. 192.168.1.20) or a network (192.168.1.0/24). Keep the FabCore server address (unless an API key is configured), otherwise FabCore loses access. Save, then restart Moonraker.",
+  "moonrakerRestart": {
+    "accepted": "Moonraker restart accepted. The machine will be back in a few seconds.",
+    "rejected": "Moonraker refused the restart.",
+    "unknown": "Connection dropped during restart (usual). Check the machine is back online before any new request."
+  }
 }

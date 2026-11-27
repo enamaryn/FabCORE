@@ -2,7 +2,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { HttpFilePorts } from '../../../packages/connector-sdk/src/index.ts';
 import type { MoonrakerConnection, MoonrakerFetch, MoonrakerRequest } from './types.ts';
 export const configLimit = 1024 * 1024;
+/** Fichiers .cfg de Klipper, plus moonraker.conf à la racine du dossier config (adresses autorisées, CORS…). */
+export const moonrakerConfigFile = 'moonraker.conf';
 export function configPath(value: unknown): string | null {
+  if (value === moonrakerConfigFile) return value;
   if (typeof value !== 'string' || value.length > 255 || !value.endsWith('.cfg') || !/^[a-zA-Z0-9_ ./-]+$/.test(value)) return null;
   if (value.split('/').some(part => !part || part === '.' || part === '..' || part.startsWith('.') || part.length > 120 || part.trim() !== part)) return null;
   return value;
@@ -78,6 +81,17 @@ export function createMoonrakerConfig({ encodePath, validOrigin, multipart, read
         if (saved.revision !== digest(Buffer.from(content))) throw new Error('config-save-unknown');
         return { ...saved, backupPath };
       } catch { throw new Error('config-save-unknown'); }
+    },
+    /** Redémarre le service Moonraker (relecture de moonraker.conf). Refusé pendant une impression ; un seul envoi.
+     * La connexion peut se couper pendant le redémarrage : la réponse est alors « inconnue », jamais renvoyée. */
+    async restartMoonraker(machine: MoonrakerConnection, canWrite = () => true) {
+      await idle(machine); if (!canWrite()) throw new Error('command-busy');
+      try {
+        const response = await call(machine, '/server/restart', { method: 'POST' });
+        if (!response.ok) { await response.body?.cancel(); return { outcome: response.status >= 500 ? 'unknown' : 'rejected' }; }
+        const body = await readResponse(response) as { result?: unknown };
+        return { outcome: body.result === 'ok' ? 'accepted' : 'unknown' };
+      } catch { return { outcome: 'unknown' }; }
     },
     /** FIRMWARE_RESTART natif après un arrêt d'urgence (M112) ou une erreur Klipper : seul moyen de remettre les
      * microcontrôleurs en service. Refusé si Klipper est prêt ou démarre ; un seul envoi, jamais rejoué. */

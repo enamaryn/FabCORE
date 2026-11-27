@@ -418,7 +418,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
 
   async function handleKlipperConfig(req, res) {
     const url = new URL(req.url, origin);
-    const match = url.pathname.match(/^\/api\/machines\/([a-f0-9-]{36})\/(klipper-config|klipper-restart|klipper-firmware-restart)$/);
+    const match = url.pathname.match(/^\/api\/machines\/([a-f0-9-]{36})\/(klipper-config|klipper-restart|klipper-firmware-restart|moonraker-restart)$/);
     const machine = store.state.machines.find(item => item.id === match?.[1]);
     if (!machine || (machine.kind ?? 'klipper') !== 'klipper') return error(res, 404, 'missing');
     if (req.method === 'GET') {
@@ -440,7 +440,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     pendingCommands.add(machine.id);
     const canWrite = () => !res.destroyed && sessions.get(session(req))?.role === 'admin' && store.state.machines.includes(machine) && !pendingEmergencies.has(machine.id) && (emergencyGenerations.get(machine.id) ?? 0) === emergencyGeneration;
     try {
-      const result = match[2] === 'klipper-firmware-restart' ? await klipperConfig.firmwareRestart(machine, canWrite) : match[2] === 'klipper-restart' ? await klipperConfig.restart(machine, canWrite) : await klipperConfig.save(machine, data.path, data.content, data.expectedRevision, canWrite);
+      const result = match[2] === 'moonraker-restart' ? await klipperConfig.restartMoonraker(machine, canWrite) : match[2] === 'klipper-firmware-restart' ? await klipperConfig.firmwareRestart(machine, canWrite) : match[2] === 'klipper-restart' ? await klipperConfig.restart(machine, canWrite) : await klipperConfig.save(machine, data.path, data.content, data.expectedRevision, canWrite);
       snapshot.forget(machine.id);
       return answer(res, 200, result);
     } catch (failure) {

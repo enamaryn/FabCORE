@@ -30,13 +30,13 @@ function fixture() {
       files.set(path, content); if (conflict && path.startsWith('.fabcore-backups/')) files.set('printer.cfg', '[changed externally]');
       return Response.json({ item: { path, root: 'config' } }, { status: 201 });
     }
-    if (url.endsWith('/printer/restart') || url.endsWith('/printer/firmware_restart')) return Response.json({ result: 'ok' });
+    if (url.endsWith('/printer/restart') || url.endsWith('/printer/firmware_restart') || url.endsWith('/server/restart')) return Response.json({ result: 'ok' });
     throw new Error('unexpected ' + url);
   };
   return { files, calls, service: createMoonrakerConfig(ports, fetcher), state(value: string) { state = value; }, klippy(value: string) { klippy = value; }, failBackup() { backupFailed = true; }, failWrite() { failedWrite = true; }, conflict() { conflict = true; } };
 }
-test('Klipper configuration : paths, cfg-only listing and UTF-8 original preserved in backup before verified save', async () => {
-  for (const path of ['../printer.cfg', '/printer.cfg', 'a//b.cfg', 'a/../printer.cfg', '.secret.cfg', 'printer.cfg%00', 'printer.cfg?x', 'moonraker.conf', 'a\\printer.cfg']) assert.equal(configPath(path), null);
+test('Klipper configuration : paths, cfg + moonraker.conf listing and UTF-8 original preserved in backup before verified save', async () => {
+  for (const path of ['../printer.cfg', '/printer.cfg', 'a//b.cfg', 'a/../printer.cfg', '.secret.cfg', 'printer.cfg%00', 'printer.cfg?x', 'other.conf', 'sub/moonraker.conf', 'a\\printer.cfg']) assert.equal(configPath(path), null);
   const h = fixture(); assert.deepEqual((await h.service.list(machine)).map(item => item.path), ['printer.cfg']);
   const original = await h.service.read(machine, 'printer.cfg'); assert.ok(original.content.startsWith('\uFEFF'));
   const saved = await h.service.save(machine, 'printer.cfg', '[printer]\nmax_velocity: 220\n', original.revision);
@@ -85,4 +85,18 @@ test('Klipper : FIRMWARE_RESTART uniquement après arrêt d’urgence ou erreur,
   const busy = fixture(); busy.klippy('shutdown');
   await assert.rejects(busy.service.firmwareRestart(machine, () => false), /command-busy/);
   assert.ok(!busy.calls.some(value => value.startsWith('POST')));
+});
+
+test('moonraker.conf : seul fichier .conf accepté, à la racine ; redémarrage Moonraker unique et refusé en impression', async () => {
+  assert.equal(configPath('moonraker.conf'), 'moonraker.conf');
+  for (const path of ['sub/moonraker.conf', 'other.conf', '../moonraker.conf', 'moonraker.conf.bak', 'Moonraker.conf']) assert.equal(configPath(path), null, path);
+  const h = fixture(); h.files.set('moonraker.conf', '[authorization]\ntrusted_clients:\n    192.168.1.0/24\n');
+  const original = await h.service.read(machine, 'moonraker.conf');
+  const saved = await h.service.save(machine, 'moonraker.conf', original.content + '    192.168.1.20\n', original.revision);
+  assert.match(h.files.get('moonraker.conf')!, /192\.168\.1\.20/); assert.match(saved.backupPath!, /moonraker\.conf\.bak$/);
+  assert.deepEqual(await h.service.restartMoonraker(machine), { outcome: 'accepted' });
+  assert.equal(h.calls.filter(value => value === 'POST /server/restart').length, 1);
+  const printing = fixture(); printing.state('printing');
+  await assert.rejects(printing.service.restartMoonraker(machine), /config-state/);
+  assert.ok(!printing.calls.some(value => value === 'POST /server/restart'));
 });

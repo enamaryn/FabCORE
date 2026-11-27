@@ -59,11 +59,13 @@ test('HTTP Klipper cfg : droits, téléchargement, sauvegarde confirmée et rest
 test('HTTP Klipper : FIRMWARE_RESTART réservé à l’administrateur, confirmé, seulement si Klipper est arrêté', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'fabcore-firmware-http-')); t.after(() => rm(directory, { recursive: true, force: true }));
   const store = openStore(directory); store.save({ ...store.state, machines: [{ id, name: 'Klipper test', kind: 'klipper', origin: 'http://192.168.1.20:7125', apiKey: 'test-key' }] });
-  let klippy = 'ready', firmwareRestarts = 0, restarts = 0;
+  let klippy = 'ready', firmwareRestarts = 0, restarts = 0, moonrakerRestarts = 0;
   const native = async (url, options) => {
     assert.equal(new Headers(options.headers).get('X-Api-Key'), 'test-key');
     if (url.endsWith('/printer/info')) return Response.json({ result: { state: klippy } });
     if (url.endsWith('/printer/firmware_restart')) { firmwareRestarts++; return Response.json({ result: 'ok' }); }
+    if (url.endsWith('/server/restart')) { moonrakerRestarts++; return Response.json({ result: 'ok' }); }
+    if (url.includes('/printer/objects/query')) return Response.json({ result: { status: { print_stats: { state: 'standby' }, virtual_sdcard: { is_active: false } } } });
     if (url.endsWith('/printer/restart')) { restarts++; return Response.json({ result: 'ok' }); }
     throw new Error('unexpected fixture request');
   };
@@ -87,4 +89,11 @@ test('HTTP Klipper : FIRMWARE_RESTART réservé à l’administrateur, confirmé
   const accepted = await call(firmware, { confirm: true }, admin);
   assert.equal(accepted.status, 200); assert.equal(accepted.body.outcome, 'accepted');
   assert.equal(firmwareRestarts, 1); assert.equal(restarts, 0, 'jamais confondu avec RESTART');
+  // Redémarrage Moonraker (relecture de moonraker.conf) : administrateur et confirmation, distinct des redémarrages Klipper.
+  klippy = 'ready';
+  const moonraker = '/api/machines/' + id + '/moonraker-restart';
+  assert.equal((await call(moonraker, { confirm: true }, observer)).status, 403);
+  assert.equal((await call(moonraker, {}, admin)).status, 400);
+  assert.equal((await call(moonraker, { confirm: true }, admin)).body.outcome, 'accepted');
+  assert.equal(moonrakerRestarts, 1); assert.equal(firmwareRestarts, 1); assert.equal(restarts, 0);
 });

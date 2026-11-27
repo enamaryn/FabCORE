@@ -1,12 +1,12 @@
 {
   "heading": "Configuration Klipper",
-  "description": "Lire et modifier les fichiers .cfg de cette machine via Moonraker.",
+  "description": "Lire et modifier les fichiers .cfg de Klipper et moonraker.conf de cette machine via Moonraker.",
   "file": "Fichier",
   "choose": "Choisir un fichier",
   "readOnly": "Lecture seule",
   "refresh": "Actualiser la liste",
   "download": "Télécharger le fichier enregistré",
-  "upload": "Importer un fichier .cfg",
+  "upload": "Importer un fichier .cfg ou moonraker.conf",
   "content": "Contenu de configuration",
   "unsaved": "Modifications non enregistrées",
   "upToDate": "Version enregistrée",
@@ -32,10 +32,10 @@
   "destination": "Chemin de destination (ex. macros/mes_macros.cfg)",
   "loadDraft": "Charger dans l’éditeur",
   "errors": {
-    "config-invalid": "Chemin ou contenu invalide : fichier .cfg relatif, sans remontée de dossier, 1 Mio maximum.",
+    "config-invalid": "Chemin ou contenu invalide : fichier .cfg relatif ou moonraker.conf, sans remontée de dossier, 1 Mio maximum.",
     "config-unavailable": "Configuration inaccessible via Moonraker.",
     "config-missing": "Ce fichier n’existe pas.",
-    "config-size": "Sélectionnez un fichier .cfg UTF-8 de 1 Mio maximum.",
+    "config-size": "Sélectionnez un fichier .cfg ou moonraker.conf UTF-8 de 1 Mio maximum.",
     "config-encoding": "Seuls les fichiers texte UTF-8 sont acceptés.",
     "config-state": "Machine occupée ou état non vérifiable. Aucune modification envoyée.",
     "config-conflict": "Ce fichier a changé ailleurs. Votre saisie est conservée ; rechargez le fichier pour comparer avant de recommencer.",
@@ -48,5 +48,14 @@
     "rate": "Trop de demandes. Patientez un instant."
   },
   "restartButton": "Redémarrer Klipper",
-  "reload": "Recharger le fichier"
+  "reload": "Recharger le fichier",
+  "restartMoonrakerButton": "Redémarrer Moonraker",
+  "confirmRestartMoonraker": "Confirmer le redémarrage de Moonraker",
+  "restartMoonrakerDetail": "Redémarrer Moonraker sur « {machine} » pour relire moonraker.conf ? La machine est injoignable quelques secondes. Klipper et les impressions ne sont pas concernés.",
+  "moonrakerWarning": "moonraker.conf : section [authorization] → trusted_clients pour autoriser une adresse (ex. 192.168.1.20) ou un réseau (192.168.1.0/24). Gardez l’adresse du serveur FabCore (sauf clé API configurée), sinon FabCore perdra l’accès. Enregistrez puis redémarrez Moonraker.",
+  "moonrakerRestart": {
+    "accepted": "Redémarrage de Moonraker accepté. La machine revient dans quelques secondes.",
+    "rejected": "Redémarrage refusé par Moonraker.",
+    "unknown": "Connexion coupée pendant le redémarrage (habituel). Vérifiez que la machine revient en ligne avant toute nouvelle demande."
+  }
 }
