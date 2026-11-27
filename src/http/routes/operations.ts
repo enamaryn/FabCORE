@@ -64,9 +64,9 @@ export const operationRoutes = (handlers: OperationHandlers): RouteModule => (ap
     }, none);
   }
 
-  for (const [method, endpoint] of [['GET', 'klipper-config'], ['POST', 'klipper-config'], ['POST', 'klipper-restart'], ['POST', 'klipper-firmware-restart']] as const) {
+  for (const [method, endpoint] of [['GET', 'klipper-config'], ['POST', 'klipper-config'], ['POST', 'klipper-restart'], ['POST', 'klipper-firmware-restart'], ['POST', 'moonraker-restart']] as const) {
     app.route({ method, url: `/api/machines/${id}/${endpoint}`, config: { query: method === 'GET' },
-      onRequest: guards.raw(handlers.klipperConfig, admin), schema: { summary: endpoint === 'klipper-firmware-restart' ? 'FIRMWARE_RESTART après arrêt d’urgence ou erreur Klipper (confirmation, état shutdown/error requis)' : endpoint === 'klipper-restart' ? 'Redémarrer Klipper uniquement (confirmation)' : method === 'GET' ? 'Lire les fichiers cfg Klipper (administrateur)' : 'Sauvegarder une configuration Klipper avec copie de secours et révision', tags: ['configuration Klipper'], security: session, params: Params,
+      onRequest: guards.raw(handlers.klipperConfig, admin), schema: { summary: endpoint === 'moonraker-restart' ? 'Redémarrer le service Moonraker pour relire moonraker.conf (confirmation, hors impression)' : endpoint === 'klipper-firmware-restart' ? 'FIRMWARE_RESTART après arrêt d’urgence ou erreur Klipper (confirmation, état shutdown/error requis)' : endpoint === 'klipper-restart' ? 'Redémarrer Klipper uniquement (confirmation)' : method === 'GET' ? 'Lire les fichiers cfg Klipper et moonraker.conf (administrateur)' : 'Sauvegarder une configuration Klipper avec copie de secours et révision', tags: ['configuration Klipper'], security: session, params: Params,
         response: { 200: json('Lecture/configuration sauvegardée ; restart accepté, refusé ou inconnu.'), ...errorResponses(400, 401, 403, 404, 409, 415, 421, 429, 502) } }, handler: none });
   }
 

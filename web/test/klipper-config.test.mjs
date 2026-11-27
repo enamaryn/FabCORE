@@ -24,7 +24,7 @@ test('Klipper config : entrée administrateur seulement et route ciblée', () =>
 });
 test('Klipper config : import, sauvegarde et restart distincts sans action au rendu', () => {
   const html = render(createElement(KlipperConfigPanel, { machine, stale: false, api: {} }));
-  assert.match(html, /Importer un fichier/); assert.match(html, /Enregistrer/); assert.match(html, /Redémarrer Klipper/); assert.match(html, /accept=".cfg"/);
+  assert.match(html, /Importer un fichier/); assert.match(html, /Enregistrer/); assert.match(html, /Redémarrer Klipper/); assert.match(html, /accept=".cfg,.conf"/);
   const blocked = render(createElement(KlipperConfigPanel, { machine: { ...machine, status: 'printing' }, stale: false, api: {} }));
   assert.match(blocked, /pendant une impression/); assert.match(blocked, /disabled=""[^>]*>Redémarrer Klipper/);
 });
