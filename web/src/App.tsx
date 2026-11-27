@@ -12,6 +12,7 @@ import { subscribeFleet } from './events.ts';
 import { MachineDetail } from './components/machine/MachineDetail.tsx';
 import { ViewerPage } from './components/viewer/ViewerPage.tsx';
 import { NotificationsPage } from './components/admin/NotificationsPage.tsx';
+import { CloudAccountsPage } from './components/cloud/CloudAccountsPage.tsx';
 import { DiagnosticsPage } from './components/admin/DiagnosticsPage.tsx';
 import { AccessPage } from './components/admin/AccessPage.tsx';
 import { parseRoute } from './route.ts';
@@ -57,7 +58,7 @@ export function App() {
       <div className="row auth-preferences"><button type="button" className="ghost" onClick={toggleLanguage}>{i18n.resolvedLanguage?.startsWith('fr') ? 'English' : 'Français'}</button><button type="button" className="ghost" onClick={toggleTheme}>{i18n.t('themeLabel', { ns: 'common', theme: i18n.t('theme.' + theme, { ns: 'common' }) })}</button></div>
     </div>
   </main>;
-  return <Shell username={session.data.username} role={session.data.role} page={page.kind === 'machine' || page.kind === 'viewer' ? 'machines' : ['notifications', 'diagnostics', 'access'].includes(page.kind) ? 'home' : page.kind as 'home' | 'machines' | 'history' | 'projects' | 'production'} language={i18n.resolvedLanguage ?? 'fr'} theme={theme} onLanguage={toggleLanguage} onTheme={toggleTheme} onLogout={() => { if (!logout.isPending) logout.mutate(); }} version={version.data} onUpdate={() => setPrompt(true)}>
+  return <Shell username={session.data.username} role={session.data.role} page={page.kind === 'machine' || page.kind === 'viewer' ? 'machines' : ['notifications', 'diagnostics', 'access', 'cloud'].includes(page.kind) ? 'home' : page.kind as 'home' | 'machines' | 'history' | 'projects' | 'production'} language={i18n.resolvedLanguage ?? 'fr'} theme={theme} onLanguage={toggleLanguage} onTheme={toggleTheme} onLogout={() => { if (!logout.isPending) logout.mutate(); }} version={version.data} onUpdate={() => setPrompt(true)}>
     {session.data.role === 'admin' && version.data?.updateAvailable && <UpdatePrompt version={version.data} open={prompt} onClose={() => setPrompt(false)} />}
     {logout.isError && <p className="notice" role="alert">{t('error.internal')}</p>}
     {logout.isPending ? <p role="status">{t('loggingOut')}</p> : page.kind === 'production' ? <ProductionPage key={session.data.username + ':' + session.data.role} api={api} actor={session.data.username} role={session.data.role} /> : page.kind === 'projects' ? <ProjectsPage key={session.data.username + ':' + session.data.role} api={api} actor={session.data.username} role={session.data.role} /> : <Workshop key={session.data.username + ':' + session.data.role} api={api} username={session.data.username} role={session.data.role} page={page} />}
@@ -132,6 +133,7 @@ function Workshop({ api, username, role, page }: { api: ReturnType<typeof create
     if (role !== 'admin') return <FleetPage machines={fleet.data} overview role={role} events={events} />;
     return page.kind === 'notifications' ? <NotificationsPage api={api} /> : page.kind === 'diagnostics' ? <DiagnosticsPage api={api} /> : <AccessPage api={api} />;
   }
+  if (page.kind === 'cloud') return role === 'admin' ? <CloudAccountsPage api={api} machines={fleet.data} /> : <FleetPage machines={fleet.data} overview role={role} events={events} />;
   if (page.kind === 'viewer') {
     const machine = fleet.data.find(item => item.id === page.id);
     // Clé : changer de fichier ou de session démonte le visualiseur et libère lecture, animation et écouteurs.

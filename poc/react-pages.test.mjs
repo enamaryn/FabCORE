@@ -42,7 +42,8 @@ test('React HTTP : build servi sans CDN, assets confinés, shell public et API a
   assert.equal((await get(server, '/?machine=' + id + '&view=part.gcode&follow=invalid')).status, 404);
   for (const view of ['../part.gcode', '<script>', 'a.png', 'a\\part.gcode']) assert.equal((await get(server, '/?machine=' + id + '&view=' + encodeURIComponent(view))).status, 404);
   // Unmigrated tools remain reachable; they must not be caught in a redirect loop.
-  for (const path of ['/?screen=add', '/?screen=cloud', '/?machine=' + id + '&tab=console', '/?machine=' + id + '&tab=settings']) {
+  await redirect('/?screen=cloud', '/app#cloud');
+  for (const path of ['/?screen=add', '/?machine=' + id + '&tab=console', '/?machine=' + id + '&tab=settings']) {
     const result = await get(server, path); assert.equal(result.status, 200, path); assert.match(result.body, /live.js/); assert.equal(result.headers.location, undefined);
   }
 });

@@ -31,6 +31,12 @@ export type TrammingCorner = 'front-left' | 'front-right' | 'back-right' | 'back
 export type TrammingMeasure = { corner: TrammingCorner; x: number; y: number; z: number };
 export type TrammingResult = { at: string; points: TrammingMeasure[]; range: number; deviations: { corner: TrammingCorner; delta: number }[] };
 export type TrammingGeometry = { available: boolean; reason?: string; offset?: { x: number; y: number }; points?: { corner: TrammingCorner; x: number; y: number }[]; last: TrammingResult | null };
+export type CloudDevice = { serial: string; name: string; model?: string; status?: string; online?: boolean; fleetId?: string; fleetMode?: string };
+export type CloudTelemetry = { status?: string; issue?: string; devices?: { serial: string; stale?: boolean; checkedAt?: string; heaters: { id: string; current: number | null; target: number | null }[]; filaments: { id: number; humidity?: number; temperature?: number; slots: { id: number; color?: string | null; material?: string | null; occupied?: boolean }[] }[]; modules: { model?: string; name?: string; serial?: string; firmware?: string }[] }[] };
+export type CloudAccount = { id: string; name: string; provider: string; email?: string; region?: string; status: 'connected' | 'reauth' | 'disconnected' | string; challenge?: string | null; issue?: string | null; checkedAt?: string | null; devices: CloudDevice[]; truncated?: boolean; telemetryEnabled?: boolean; telemetry?: CloudTelemetry | null };
+export type CloudOverview = { providers: { id: string; name: string; available: boolean }[]; accounts: CloudAccount[] };
+export type CloudCertificates = { configured?: boolean; fingerprint?: string; certificateExpiresAt?: string | null; crlExpiresAt?: string | null; refreshConfigured?: boolean; renewal?: { nextAttemptAt?: string | null; lastSuccessAt?: string | null; lastError?: string | null } };
+export type CloudLogLine = { at: string; event: string; method?: string; path?: string; status?: number; count?: number; [key: string]: unknown };
 export interface KlipperConfigFile { path: string; content: string; revision: string | null }
 export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void = () => {}, makeXhr: () => XMLHttpRequest = () => new XMLHttpRequest()) {
   async function request(path: string, data?: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number): Promise<unknown> {
@@ -46,6 +52,15 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
     return payload;
   }
   return {
+    async cloudAccounts(signal?: AbortSignal): Promise<CloudOverview> { return await request('cloud-accounts', undefined, signal, 15000) as CloudOverview; },
+    async cloudCertificates(signal?: AbortSignal): Promise<CloudCertificates> { return await request('cloud-certificates', undefined, signal, 15000) as CloudCertificates; },
+    /** Import des PEM, URL de renouvellement ou renouvellement immédiat ; jamais de commande machine. */
+    async cloudCertificatesWrite(data: Record<string, unknown>): Promise<CloudCertificates> { return await request('cloud-certificates', data, undefined, 60000) as CloudCertificates; },
+    async cloudAccountAdd(data: { name: string; provider: string; region: string; email: string }): Promise<CloudAccount> { return await request('cloud-accounts', data, undefined, 30000) as CloudAccount; },
+    /** Connexion, code, inventaire, suivi, import, déconnexion ou suppression ; identifiants jamais conservés côté navigateur. */
+    async cloudAction(id: string, action: 'login' | 'verify' | 'devices' | 'disconnect' | 'delete' | 'telemetry-start' | 'telemetry-stop' | 'import', data: Record<string, unknown> = {}): Promise<CloudAccount & Record<string, unknown>> { return await request('cloud-accounts/' + encodeURIComponent(id) + '/' + action, data, undefined, 60000) as CloudAccount & Record<string, unknown>; },
+    async machineDelete(id: string): Promise<{ id: string }> { return await request('machines/delete', { id }, undefined, 30000) as { id: string }; },
+    async cloudLogs(id: string, signal?: AbortSignal): Promise<{ lines: CloudLogLine[] }> { return await request('cloud-accounts/' + encodeURIComponent(id) + '/logs', undefined, signal, 15000) as { lines: CloudLogLine[] }; },
     async tramming(id: string, signal?: AbortSignal): Promise<TrammingGeometry> { return await request('machines/' + encodeURIComponent(id) + '/tramming', undefined, signal, 15000) as TrammingGeometry; },
     /** Un point de palpage (origine éventuelle comprise) : jusqu'à 3 minutes, jamais renvoyé automatiquement. */
     async trammingPoint(id: string, point: number, signal?: AbortSignal): Promise<{ measure: TrammingMeasure; result?: TrammingResult | null }> { return await request('machines/' + encodeURIComponent(id) + '/tramming', { point, confirm: true }, signal, 200000) as { measure: TrammingMeasure; result?: TrammingResult | null }; },

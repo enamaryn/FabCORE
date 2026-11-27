@@ -1,0 +1,5 @@
+.cloud-account{min-width:0}.cloud-account h2{overflow-wrap:anywhere}
+.cloud-scroll{overflow:auto}.cloud-scroll table{width:100%;border-collapse:collapse}.cloud-scroll th,.cloud-scroll td{text-align:left;padding:8px;border-bottom:1px solid var(--line);overflow-wrap:anywhere;vertical-align:middle}
+.cloud-log{white-space:pre-wrap;overflow-wrap:anywhere;max-height:55vh;overflow:auto;font-size:12px;background:var(--raised);padding:10px;border-radius:8px}
+.cloud-status[data-status=connected]{color:var(--accent)}.cloud-status[data-status=reauth],.cloud-status[data-status=challenge]{color:var(--amber,#e0a030)}
+.cloud-slot{display:inline-flex;align-items:center;gap:6px}.cloud-slot i{width:18px;height:18px;border:1px solid #888;border-radius:50%}

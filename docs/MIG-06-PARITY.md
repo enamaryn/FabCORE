@@ -95,3 +95,9 @@ Recette après fusion : liste native CC2/P2S, envoi puis relecture et téléchar
 - Réglages en lignes alignées (nom | état | commande) ; éclairage en interrupteur, vert quand allumé ; libellés de saisie portés par `aria-label`. Chauffes : mesure, consigne remontée et saisie sur la même ligne.
 - Caméra : clic sur l'image pour agrandir/réduire dans la page ; « Pleine page » occupe la fenêtre du navigateur (pas le plein écran système), Échap pour revenir. Un seul flux à la fois.
 - Correctif : la politique de sécurité autorise désormais les images `blob:` (`img-src 'self' blob:`), nécessaires à l'aperçu caméra React, qui échouait jusque-là.
+
+## Comptes cloud (MIG-06.2.3 lot B)
+
+- `#cloud` (menu Compte, administrateur) : certificats applicatifs Bambu (import des 3 PEM, URL de renouvellement, renouvellement immédiat, échéances), comptes constructeur (ajout, connexion mot de passe puis code, déconnexion, suppression confirmée), inventaire des machines (ajout automatique au parc, retrait confirmé), suivi cloud (températures, AMS, modules ; relecture locale toutes les 5 s, jamais de requête Bambu) et journal du compte (300 lignes, téléchargement).
+- Les secrets (mot de passe, code, URL de renouvellement) sont lus une fois dans le champ puis effacés ; jamais placés dans l'état React ni le stockage du navigateur.
+- L'ancien lien `/?screen=cloud` redirige vers cet écran.

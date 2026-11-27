@@ -259,7 +259,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       if (url.searchParams.has('view')) destination += '/view/' + encodeURIComponent(url.searchParams.get('view')) + (url.searchParams.get('follow') === '1' ? '/follow' : '');
       else if (url.searchParams.has('tab')) destination += '/' + url.searchParams.get('tab');
     }
-    if (deepLink && !machineLink) destination = { diagnostics: '/app#diagnostics', notifications: '/app#notifications', observer: '/app#access' }[url.searchParams.get('screen')] ?? null;
+    if (deepLink && !machineLink) destination = { diagnostics: '/app#diagnostics', notifications: '/app#notifications', observer: '/app#access', cloud: '/app#cloud' }[url.searchParams.get('screen')] ?? null;
     if (destination) { res.writeHead(303, { Location: destination }); return res.end(); }
     const asset = deepLink ? '/' : path;
     if (req.method === 'GET' && assets.has(asset)) {
