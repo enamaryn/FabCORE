@@ -57,7 +57,7 @@ export function createProjectService({ store, persist, changed = () => {}, readM
       }
       return serial(async () => {
         const current = board(), work = findWork(current, id); revision(input.expectedRevision, work);
-        if (work.machineId !== machine.id || work.state !== 'todo') return fail(409, 'execution-state');
+        if (!store.state.machines.includes(machine) || work.machineId !== machine.id || work.state !== 'todo') return fail(409, 'execution-state');
         if (current.work.some(item => active(item)?.machineId === machine.id) || active(work)) return fail(409, 'execution-busy');
         if ((work.executions?.length ?? 0) >= 20) return fail(409, 'execution-limit');
         const at = now(), startedAt = input.startedAt ?? null;

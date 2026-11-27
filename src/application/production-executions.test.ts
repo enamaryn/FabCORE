@@ -89,3 +89,16 @@ test('proposition invalidée si le planning change ; persistance échouée sans 
   await assert.rejects(h.service.applyReplan({ token: retry.token, confirm: true }, 'atelier'), /storage-unavailable/);
   assert.deepEqual(h.service.list(), before); assert.equal(h.events(), events);
 });
+
+
+test('association refusée si la connexion machine change pendant la lecture native', async () => {
+  let state: FabCoreState = { version: 1, admin: null, machines: [{ id: machineId, name: 'Machine', origin: 'http://old.invalid' }] };
+  const store = { get state() { return state; }, save(next: FabCoreState) { state = next; } };
+  const service = createProjectService({ store, persist: async next => { store.save(next); }, readMachine: async () => {
+    store.save({ ...state, machines: state.machines.map(item => ({ ...item, origin: 'http://new.invalid' })) });
+    return { status: 'printing', file: 'same.gcode' };
+  } });
+  const work = await service.saveWork(null, null, { title: 'Cible explicite', machineId }, 'atelier');
+  await assert.rejects(service.beginExecution(work.id, { expectedRevision: 1, mode: 'observed', file: 'same.gcode', confirm: true }, 'atelier'), /execution-state/);
+  assert.equal(service.list().work[0]?.executions, undefined);
+});
