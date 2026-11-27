@@ -1,0 +1,30 @@
+import test, { after } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createInstance } from 'i18next';
+import ICU from 'i18next-icu';
+import { I18nextProvider } from 'react-i18next';
+import { createServer } from 'vite';
+import { parseRoute } from '../src/route.ts';
+const resources = { fr: Object.fromEntries(readdirSync(new URL('../locales/fr/', import.meta.url)).filter(name => name.endsWith('.json')).map(name => [name.slice(0, -5), JSON.parse(readFileSync(new URL('../locales/fr/' + name, import.meta.url), 'utf8'))])) };
+const i18n = createInstance(); await i18n.use(ICU).init({ resources, lng: 'fr', interpolation: { escapeValue: false } });
+const vite = await createServer({ configFile: new URL('../vite.config.ts', import.meta.url).pathname, server: { middlewareMode: true, hmr: false, ws: false }, optimizeDeps: { noDiscovery: true }, logLevel: 'error' }); after(() => vite.close());
+const { KlipperConfigPanel } = await vite.ssrLoadModule('/src/components/config/KlipperConfigPanel.tsx');
+const { MachineHeader } = await vite.ssrLoadModule('/src/components/machine/MachineHeader.tsx');
+const machine = { id: '11111111-1111-4111-8111-111111111111', name: '<Klipper>', model: 'Klipper', kind: 'klipper', status: 'ready', capabilities: { configuration: true }, cameraOpen: false };
+const render = component => renderToStaticMarkup(createElement(QueryClientProvider, { client: new QueryClient() }, createElement(I18nextProvider, { i18n }, component)));
+test('Klipper config : entrée administrateur seulement et route ciblée', () => {
+  assert.match(render(createElement(MachineHeader, { machine, role: 'admin' })), /\/config/);
+  assert.doesNotMatch(render(createElement(MachineHeader, { machine, role: 'observer' })), /\/config/);
+  assert.doesNotMatch(render(createElement(MachineHeader, { machine: { ...machine, kind: 'bambu' }, role: 'admin' })), /\/config/);
+  assert.deepEqual(parseRoute('#machine/' + machine.id + '/config'), { kind: 'machine', id: machine.id, tab: 'config' });
+});
+test('Klipper config : import, sauvegarde et restart distincts sans action au rendu', () => {
+  const html = render(createElement(KlipperConfigPanel, { machine, stale: false, api: {} }));
+  assert.match(html, /Importer un fichier/); assert.match(html, /Enregistrer/); assert.match(html, /Redémarrer Klipper/); assert.match(html, /accept=".cfg"/);
+  const blocked = render(createElement(KlipperConfigPanel, { machine: { ...machine, status: 'printing' }, stale: false, api: {} }));
+  assert.match(blocked, /pendant une impression/); assert.match(blocked, /disabled=""[^>]*>Redémarrer Klipper/);
+});

@@ -15,7 +15,7 @@ export async function openApiDocument(): Promise<unknown> {
     logs: { machine: unused, machineLog: unused, cloudAccounts: unused, cloudLog: unused, cloudFailure: unused },
     events: { stream: unused },
     version: { status: async () => ({ current: null, latest: null, updateAvailable: false, checkedAt: null }) },
-    operations: { cloudCertificates: unused, cloudAction: unused, camera: unused, command: unused, controls: unused, terminal: unused, files: unused },
+    operations: { klipperConfig: unused, cloudCertificates: unused, cloudAction: unused, camera: unused, command: unused, controls: unused, terminal: unused, files: unused },
     pages: { asset: unused, oidc: unused },
   }));
   await http.ready;

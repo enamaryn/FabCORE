@@ -118,5 +118,6 @@
     "unknown": "Outcome unknown; check the machine. No automatic resend."
   },
   "nativeState": "Manufacturer state",
-  "nativeExceptions": "Exceptions"
+  "nativeExceptions": "Exceptions",
+  "configuration": "Configuration"
 }

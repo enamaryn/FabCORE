@@ -89,7 +89,7 @@ const definitions = {
     return { read: machine => read(machine), probe: probeStatus(machine => read(machine), ['print']), command: sendCommand ?? mod.commandMoonraker, emergencyStop: machine => mod.emergencyStopMoonraker(machine, fetchFiles),
       files: mod.createMoonrakerFiles(fetchFiles), gcode: sendGcode ?? mod.sendMoonrakerGcode,
       camera: (machine, output, signal, frame) => declaredCamera(mod.moonrakerWebcam(machine, fetchFiles), output, signal, frame) };
-  }, { camera: true, commands: true, commandActions: ['pause', 'resume', 'stop', 'emergencyStop'], files: true, terminal: true, controls: true }),
+  }, { camera: true, commands: true, commandActions: ['pause', 'resume', 'stop', 'emergencyStop'], configuration: true, files: true, terminal: true, controls: true }),
   octoprint: httpConnector('OctoPrint', 5000, true, async ({ readOcto, sendGcode, fetchFiles, sendCommand }) => {
     const mod = await import('./octoprint.mjs');
     const read = readOcto ?? mod.readOctoPrint;

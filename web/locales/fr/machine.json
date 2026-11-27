@@ -118,5 +118,6 @@
     "unknown": "Résultat inconnu ; vérifier la machine. Aucun renvoi automatique."
   },
   "nativeState": "État constructeur",
-  "nativeExceptions": "Exceptions"
+  "nativeExceptions": "Exceptions",
+  "configuration": "Configuration"
 }

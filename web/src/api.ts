@@ -24,6 +24,7 @@ export class ApiError extends Error {
   readonly status: number;
   constructor(code: string, status: number) { super(code); this.code = code; this.status = status; }
 }
+export interface KlipperConfigFile { path: string; content: string; revision: string | null }
 export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void = () => {}, makeXhr: () => XMLHttpRequest = () => new XMLHttpRequest()) {
   async function request(path: string, data?: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number): Promise<unknown> {
     const timeout = AbortSignal.timeout(timeoutMs ?? (path.endsWith('/controls') ? 30000 : path.startsWith('machines') ? 18000 : 5000));
@@ -37,6 +38,11 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
     return payload;
   }
   return {
+    klipperConfigDownload(id: string, path: string) { return '/api/machines/' + encodeURIComponent(id) + '/klipper-config?path=' + encodeURIComponent(path) + '&download=1'; },
+    async klipperConfigList(id: string): Promise<{ files: { path: string; writable: boolean }[] }> { return await request('machines/' + encodeURIComponent(id) + '/klipper-config') as { files: { path: string; writable: boolean }[] }; },
+    async klipperConfigRead(id: string, path: string): Promise<KlipperConfigFile> { return await request('machines/' + encodeURIComponent(id) + '/klipper-config?path=' + encodeURIComponent(path)) as KlipperConfigFile; },
+    async klipperConfigSave(id: string, data: Record<string, unknown>): Promise<KlipperConfigFile & { backupPath: string | null }> { return await request('machines/' + encodeURIComponent(id) + '/klipper-config', data) as KlipperConfigFile & { backupPath: string | null }; },
+    async klipperRestart(id: string): Promise<{ outcome: string }> { return await request('machines/' + encodeURIComponent(id) + '/klipper-restart', { confirm: true }) as { outcome: string }; },
     async production(signal?: AbortSignal): Promise<ProjectBoard> {
       const value = await request('production', undefined, signal);
       if (!value || typeof value !== 'object' || !('version' in value) || value.version !== 1 || !('projects' in value) || !Array.isArray(value.projects) || value.projects.length > 250 || !('work' in value) || !Array.isArray(value.work) || value.work.length > 1000) throw new ApiError('response', 502);
