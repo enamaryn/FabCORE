@@ -120,3 +120,22 @@ test('projets créatifs : Kanban et travaux persistants après fermeture/réouve
   assert.deepEqual(reopened.state.projectBoard, expected);
   assert.equal(reopened.state.machines.length, 0, 'le projet n’a créé ni commandé de machine');
 });
+
+
+test('production réelle : tentatives, heures confirmées et lien autonome persistants après redémarrage PostgreSQL', { skip }, async t => {
+  const { createProjectService } = await import('../application/projects.ts');
+  const { url, directory } = await isolated(t);
+  const store = await openPostgresStore({ url, directory });
+  const machineId = '11111111-1111-4111-8111-111111111111';
+  await store.save({ ...store.state, machines: [{ id: machineId, name: 'Machine de test', kind: 'klipper', origin: 'http://printer.invalid' }] });
+  let at = '2026-11-27T08:00:00.000Z';
+  const service = createProjectService({ store, persist: next => store.save(next), now: () => at });
+  const work = await service.saveWork(null, null, { title: 'Production réelle', machineId, estimatedMinutes: 20, scheduledStart: at }, 'atelier');
+  const linked = await service.beginExecution(work.id, { expectedRevision: 1, confirm: true, mode: 'manual', startedAt: at }, 'atelier');
+  at = '2026-11-27T08:30:00.000Z';
+  await service.finishExecution(work.id, linked.executions![0]!.id, { expectedRevision: 2, confirm: true, outcome: 'done', endedAt: at }, 'atelier');
+  const expected = service.list(); await store.close();
+  const reopened = await openPostgresStore({ url, directory }); t.after(() => reopened.close());
+  assert.deepEqual(reopened.state.projectBoard, expected);
+  assert.equal(reopened.state.projectBoard?.work[0]?.executions?.[0]?.plannedMinutes, 20);
+});

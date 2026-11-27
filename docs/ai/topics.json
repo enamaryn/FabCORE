@@ -818,7 +818,9 @@
       "src/http/routes/projects.ts",
       "web/src/components/production/ProductionPage.tsx",
       "web/src/components/projects/ProjectEditor.tsx",
-      "web/src/production.ts"
+      "web/src/production.ts",
+      "web/src/components/production/ProductionDetails.tsx",
+      "web/src/production-actuals.ts"
     ],
     "symbols": [
       "createProjectService",
@@ -826,14 +828,20 @@
       "ProductionBoard",
       "productionWarnings",
       "instantFromLocal",
-      "dropInstant"
+      "dropInstant",
+      "ProductionDetails",
+      "executionMetrics",
+      "executionPhase"
     ],
     "tests": [
       "src/application/production.test.ts",
       "poc/production-http.test.mjs",
       "web/test/production.test.ts",
       "web/test/production-page.test.mjs",
-      "src/persistence/postgres.test.ts"
+      "src/persistence/postgres.test.ts",
+      "src/application/production-executions.test.ts",
+      "poc/production-executions-http.test.mjs",
+      "web/test/production-actuals.test.ts"
     ],
     "docs": [
       "docs/protocols/PRODUCTION-PLANNING.md"

@@ -31,3 +31,33 @@ Le serveur exige un instant UTC réel (format ISO avec `Z`) et, lorsqu’un déb
 Tests service : création sans projet, client, planification/déplanification, dates impossibles, durée et machine requises, lien facultatif préservé, frontières projet, anciennes sauvegardes, concurrence, stockage défaillant et mapping PostgreSQL. Tests HTTP sur boucle locale : rôles, origine, lecture commune, révisions, persistance JSON et absence d’appel machine. La recette PostgreSQL ferme/réouvre le magasin avec un travail autonome et un travail de projet. Tests purs de calendrier et rendu React complètent le parcours de l’interface.
 
 Recette utilisateur restante : création directe, placement/déplacement/édition d’un créneau, alerte de collision, changement jour/semaine et affichage téléphone/bureau. Aucun test matériel n’est requis pour la planification de métadonnées.
+
+## Suivi prévu/réalisé — association explicite
+
+Un administrateur ouvre le travail et choisit « Associer une fabrication ». Deux sources sont distinguées :
+
+- Observation de la fabrication en cours : nouvelle lecture du connecteur existant, état printing/paused et fichier identique à celui confirmé dans le formulaire. Une télémétrie explicitement datée de plus de 15 secondes est refusée. Une seule exécution active par travail et par machine.
+- Déclaration opérateur : permet le suivi sans identifiant natif de fabrication, y compris pour un connecteur qui ne fournit pas ces événements. Elle ne commande pas la machine et ne suppose pas un départ effectif à l’ouverture du formulaire.
+
+Le nom de fichier n’est pas un identifiant de fabrication universel. Le suivi natif actuel ne permet pas de distinguer deux fabrications successives du même fichier sur tous les fabricants. Il ne clôture donc jamais automatiquement un travail. Pause, état inconnu, autre fichier et fin native signalée sont des observations distinctes ; une perte de liaison n’est ni un échec ni une réussite. La reprise après redémarrage affiche un état non vérifié jusqu’à une nouvelle observation. Sans relevé depuis plus de 90 secondes, l’affichage redevient inconnu. Les lectures existantes du parc mettent à jour l’observation ; aucune nouvelle commande ou boucle de pilotage n’est créée.
+
+L’opérateur confirme le résultat terminé/échec/annulé et l’heure de fin. Le début peut être renseigné s’il est connu ; associer une impression déjà lancée ne déduit pas son heure de départ. Une heure inconnue reste `null`, affichée « — ». La durée réelle et l’écart au prévu ne sont calculés que si début et fin sont connus. Il s’agit de la durée écoulée, pauses comprises, pas d’un compteur moteur/chauffe. Les dates non modifiées conservent leurs secondes et millisecondes, y compris lors d’une heure répétée en automne.
+
+Chaque tentative conserve la machine, le fichier, l’opérateur, l’heure d’association, les heures confirmées, son résultat et le cliché du début/durée prévus. Vingt tentatives au maximum sont conservées par travail. Le formulaire de métadonnées ne peut ni injecter ni effacer ces données. Pendant une tentative active, machine, créneau, estimation et état sont verrouillés ; les notes restent modifiables. Un échec conserve le travail à produire et permet une nouvelle tentative. Terminer ou annuler ne déclenche aucune action matérielle. Les anciennes sauvegardes sans `executions` restent lisibles.
+
+L’observation native actualise son état sans changer la révision éditoriale du travail ; les autres mutations relisent les données courantes dans la même file sérialisée et conservent ces observations. L’horodatage d’observation est sauvegardé sur changement ou au plus une fois par minute. La clôture et l’association incrémentent la révision et gardent l’audit du projet éventuel. Une erreur de stockage du suivi ne doit pas masquer la supervision de la machine.
+
+### Recalage à confirmer
+
+Après une fin confirmée au-delà du créneau prévu, l’administrateur peut demander une proposition de recalage. Elle concerne les travaux suivants à produire sur cette machine, à partir du début prévu de la fabrication source. Les intervalles libres absorbent le dépassement ; seuls les travaux qui doivent avancer vers une date ultérieure sont déplacés. Les travaux réalisés/annulés restent inchangés. La proposition est indisponible tant qu’une autre fabrication est active sur cette machine : son heure de fin n’est pas inventée.
+
+L’aperçu montre machine, travail, ancien et nouveau début. Rien n’est écrit avant la confirmation séparée. Le jeton de proposition expire après cinq minutes, ne survit pas au redémarrage et n’est utilisable qu’une fois. Tout changement concurrent du planning de la machine, y compris l’ajout d’un travail ou une nouvelle tentative, impose un nouveau calcul. La confirmation sauvegarde tous les déplacements en une fois ; un échec ne publie aucun succès.
+
+API administrateur, gardes JSON/origine/débit et révisions existantes :
+
+- `POST /api/production/work/:id/execution` : association native vérifiée ou déclaration opérateur, confirmation de la cible.
+- `POST /api/production/work/:id/execution/:executionId/finish` : résultat et heures confirmés.
+- `POST /api/production/work/:id/replan-preview` : proposition sans déplacement.
+- `POST /api/production/replan-apply` : application atomique du jeton confirmé.
+
+La recette reste à effectuer avec des fabrications réelles surveillées : début inconnu, pause, déconnexion, même fichier relancé, échec puis nouvelle tentative, fin déclarée et recalage. Les tests automatisés utilisent des transports simulés et ne démarrent aucune machine.
