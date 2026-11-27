@@ -129,3 +129,19 @@ test('Moonraker : flux caméra déclaré, MJPEG d’abord, même hôte uniquemen
   }
   assert.equal(await api.moonrakerWebcam(one, async () => new Response('', { status: 404 })), null);
 });
+
+test('Moonraker typé : message Klipper remonté en texte court pour l’arrêt et l’erreur d’impression', async () => {
+  const api = createMoonrakerServices(ports());
+  const reply = (status: unknown) => () => Promise.resolve(Response.json({ result: { status } }));
+  const shutdown = await api.readMoonraker(one, reply({ webhooks: { state: 'shutdown', state_message: 'Shutdown due to M112 command\nOnce the underlying issue is corrected, use the "FIRMWARE_RESTART" command' } }));
+  assert.equal(shutdown.issue, 'moonraker-shutdown');
+  assert.equal(shutdown.nativeMessage, 'Shutdown due to M112 command Once the underlying issue is corrected, use the "FIRMWARE_RESTART" command');
+  const failed = await api.readMoonraker(one, reply({ webhooks: { state: 'ready' }, print_stats: { state: 'error', filename: 'a.gcode', message: 'Unknown command:"PRINT_START"' } }));
+  assert.equal(failed.status, 'error'); assert.equal(failed.nativeMessage, 'Unknown command:"PRINT_START"');
+  const long = await api.readMoonraker(one, reply({ webhooks: { state: 'error', state_message: 'x'.repeat(1000) } }));
+  assert.equal(long.nativeMessage?.length, 300);
+  const ready = await api.readMoonraker(one, reply({ webhooks: { state: 'ready' }, print_stats: { state: 'standby', message: 'old' } }));
+  assert.equal(ready.nativeMessage, undefined, 'aucun message hors erreur');
+  const odd = await api.readMoonraker(one, reply({ webhooks: { state: 'shutdown', state_message: { html: '<b>' } } }));
+  assert.equal(odd.nativeMessage, undefined);
+});

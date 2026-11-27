@@ -27,7 +27,7 @@ export function PrintFileDialog({ machine, path, role, stale, api, close, change
     <h2 id={title}>{t('printTitle')}</h2><p>{machine.name} · <strong>{path}</strong></p>
     {machine.capabilities?.externalFilament && <p className="notice">{t('external')}</p>}
     {!done && <label className="check"><input type="checkbox" required checked={confirmed} disabled={busy} onChange={event => setConfirmation(event.target.checked ? signature : '')} />{t(machine.kind === 'longer-ray5' ? 'confirmLaser' : 'confirmPrint')}</label>}
-    {!allowed && !done && <p className="notice">{t('notReady')}</p>}{busy && <p role="status">{t('starting')}</p>}{error && <p className="error" role="alert">{t('errors.' + error)}</p>}{done && !error && <p className="notice" role="status">{t('started')}</p>}
+    {!allowed && !done && <p className="notice">{t('notReady')}</p>}{busy && <p role="status">{t('starting')}</p>}{error && <p className="error" role="alert">{t('errors.' + error)}</p>}{done && machine.status === 'error' && machine.nativeMessage && <p className="error">{t('machineMessage')} <code>{machine.nativeMessage}</code></p>}{done && !error && <p className="notice" role="status">{t('started')}</p>}
     <div className="row wrap"><button type="button" autoFocus disabled={busy} onClick={() => { if (!pending.current) close(); }}>{t(done ? 'close' : 'cancel')}</button>{!done && <button type="submit" className="primary" disabled={!allowed || !confirmed || busy}>{t('start')}</button>}</div>
   </form></dialog>;
 }

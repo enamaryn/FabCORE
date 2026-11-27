@@ -10,12 +10,14 @@ export interface MoonrakerSnapshot {
   file: string;
   filePath?: string;
   filePosition?: number;
+  /** Message texte de Klipper (erreur d'impression ou arrêt), tronqué ; jamais interprété comme HTML. */
+  nativeMessage?: string;
 }
 export type MoonrakerRequest = RequestInit & { duplex?: 'half' };
 export type MoonrakerFetch = (url: string, options: MoonrakerRequest) => Promise<Response>;
 export interface MoonrakerObjects {
-  webhooks?: { state?: unknown };
-  print_stats?: { state?: string; filename?: unknown };
+  webhooks?: { state?: unknown; state_message?: unknown };
+  print_stats?: { state?: string; filename?: unknown; message?: unknown };
   virtual_sdcard?: { progress?: unknown; file_position?: unknown };
   extruder?: { temperature?: unknown };
   heater_bed?: { temperature?: unknown };

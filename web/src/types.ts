@@ -31,6 +31,8 @@ export type MachineData = Static<typeof FleetMachine> & {
   capabilities?: MachineCapabilities;
   transport?: string;
   nativeStatus?: number | null;
+  /** Message texte remonté par la machine (Klipper : erreur d'impression ou arrêt). */
+  nativeMessage?: string;
   nativeSubStatus?: number | null;
   exceptionCodes?: number[];
   nativeState?: string;

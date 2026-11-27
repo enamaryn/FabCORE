@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, statSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createMachineLogs, instrumentConnector } from './machine-logs.mjs';
+import { createMachineLogs, instrumentConnector, safeMachineDetails } from './machine-logs.mjs';
 import { safeCloudPayload } from './cloud-accounts.mjs';
 
 const id = '12345678-1234-1234-1234-123456789012';
@@ -48,4 +48,9 @@ test('cloud verbose : conserve les champs inconnus et identités, expurge les se
   assert.equal(safe.new_field.firmware_flag, 19); assert.equal(safe.new_field.error.code, 803);
   assert.equal(safe.new_field.dev_id, 'SERIAL'); assert.equal(safe.new_field.print_status, 'FAIL');
   assert.doesNotMatch(JSON.stringify(safe), /PRIVATE|123456/);
+});
+test('journal machine : le message Klipper (nativeMessage) est conservé, les secrets restent masqués', () => {
+  const safe = safeMachineDetails({ operation: 'read', status: 'error', issue: 'print', nativeMessage: 'Unknown command:"PRINT_START" api_key=PRIVATE', apiKey: 'PRIVATE' });
+  assert.match(safe.nativeMessage, /Unknown command:"PRINT_START"/);
+  assert.doesNotMatch(JSON.stringify(safe), /PRIVATE/);
 });

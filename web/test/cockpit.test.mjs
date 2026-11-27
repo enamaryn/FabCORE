@@ -83,3 +83,8 @@ test('Cockpit Klipper : après arrêt d’urgence, bouton « Redémarrer le firm
   assert.match(observer, /Klipper est à l’arrêt/); assert.doesNotMatch(observer, />Redémarrer le firmware<\/button>/);
   for (const other of [{ ...stopped, status: 'ready', issue: null }, { ...stopped, kind: 'bambu' }]) assert.doesNotMatch(render(other), /Redémarrer le firmware/);
 });
+
+test('Cockpit : message natif de la machine affiché en texte, jamais en HTML', () => {
+  const html = render({ ...machine, kind: 'klipper', status: 'error', issue: 'print', nativeMessage: 'Unknown command:"PRINT_START" <b>x</b>' });
+  assert.match(html, /Message de la machine :/); assert.match(html, /Unknown command:&quot;PRINT_START&quot; &lt;b&gt;x&lt;\/b&gt;/);
+});
