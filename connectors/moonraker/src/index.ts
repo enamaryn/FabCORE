@@ -16,8 +16,14 @@ export function createMoonrakerServices({ encodePath, filePath, validOrigin: moo
     return finite(value) ? Math.round(value * 10) / 10 : null;
   }
 
-  function unavailable(status: MoonrakerStatus, issue: string): MoonrakerSnapshot {
-    return { status, issue, nozzle: null, bed: null, progress: 0, file: '' };
+  function unavailable(status: MoonrakerStatus, issue: string, message?: unknown): MoonrakerSnapshot {
+    const nativeMessage = text(message);
+    return { status, issue, nozzle: null, bed: null, progress: 0, file: '', ...(nativeMessage ? { nativeMessage } : {}) };
+  }
+  // Message Klipper affiché tel quel (texte brut) : une ligne, 300 caractères au plus.
+  function text(value: unknown) {
+    if (typeof value !== 'string') return '';
+    return [...value].map(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? ' ' : char).join('').replace(/\s+/g, ' ').trim().slice(0, 300);
   }
 
   async function readMoonraker(machine: MoonrakerConnection, fetcher: MoonrakerFetch = fetch): Promise<MoonrakerSnapshot> {
@@ -36,8 +42,8 @@ export function createMoonrakerServices({ encodePath, filePath, validOrigin: moo
 
       const objects = (await decode<{ status?: MoonrakerObjects }>(response))?.result?.status;
       if (objects?.webhooks?.state === 'startup') return unavailable('connecting', 'klippy');
-      if (objects?.webhooks?.state === 'shutdown') return unavailable('error', 'moonraker-shutdown');
-      if (objects?.webhooks?.state !== 'ready') return unavailable('error', 'klippy');
+      if (objects?.webhooks?.state === 'shutdown') return unavailable('error', 'moonraker-shutdown', objects.webhooks.state_message);
+      if (objects?.webhooks?.state !== 'ready') return unavailable('error', 'klippy', objects?.webhooks?.state_message);
       const print = objects.print_stats ?? {};
       const status = statuses.get(print?.state);
       if (!status) return unavailable('error', 'print_stats');
@@ -54,6 +60,7 @@ export function createMoonrakerServices({ encodePath, filePath, validOrigin: moo
         bed: temperature(objects.heater_bed?.temperature),
         progress: status === 'done' ? 100 : finite(progress) ? Math.round(Math.max(0, Math.min(1, progress)) * 100) : 0,
         file: typeof print.filename === 'string' ? print.filename.slice(0, 200) : '',
+        ...(status === 'error' && text(print.message) ? { nativeMessage: text(print.message) } : {}),
         ...live
       };
     } catch (error) {

@@ -74,5 +74,6 @@
     "missing": "Fichier ou machine introuvable.",
     "invalid": "Le serveur a refusé les paramètres de la demande.",
     "invalid-name": "Nom invalide : ASCII, sans dossier, 200 caractères au plus et extension prise en charge."
-  }
+  },
+  "machineMessage": "La machine a signalé :"
 }

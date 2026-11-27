@@ -132,5 +132,6 @@
     "accepted": "Redémarrage du firmware accepté. Klipper sera prêt dans quelques secondes.",
     "rejected": "Moonraker a refusé le redémarrage du firmware.",
     "unknown": "Résultat inconnu ; vérifiez la machine. Aucun renvoi automatique."
-  }
+  },
+  "nativeMessage": "Message de la machine :"
 }

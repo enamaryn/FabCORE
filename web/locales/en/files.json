@@ -74,5 +74,6 @@
     "missing": "File or machine not found.",
     "invalid": "The server rejected the request parameters.",
     "invalid-name": "Invalid name: ASCII, no folders, at most 200 characters and a supported extension."
-  }
+  },
+  "machineMessage": "The machine reported:"
 }
