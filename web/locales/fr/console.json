@@ -1,0 +1,38 @@
+{
+  "title": "Console G-code",
+  "target": "Cible :",
+  "log": "Journal de la console",
+  "empty": "Aucune commande envoyée depuis l’ouverture de la session.",
+  "command": "Commande G-code",
+  "send": "Envoyer",
+  "sending": "Envoi…",
+  "quick": "Lecture rapide :",
+  "clear": "Effacer le journal",
+  "help": "Une commande par envoi, réponses affichées en entier. Pendant une impression, toute commande autre qu’une lecture d’état demande une confirmation. Un résultat inconnu n’est jamais renvoyé automatiquement. ↑/↓ : historique.",
+  "noReplies": "Réponses de la machine indisponibles.",
+  "invalid": "Commande invalide : une seule ligne ASCII de 256 caractères au maximum.",
+  "needsConfirm": "Impression en cours : confirmation requise. Commande non envoyée.",
+  "confirmText": "Envoyer « {command} » pendant l’impression ?",
+  "confirmSend": "Envoyer quand même",
+  "cancel": "Annuler",
+  "outcomes": {
+    "pending": "envoi en cours…",
+    "executed": "exécutée par la machine",
+    "accepted": "acceptée · exécution et réponse non visibles ici",
+    "rejected": "refusée",
+    "unconfirmed": "résultat inconnu · vérifiez la machine avant de renvoyer",
+    "failed": "non envoyée"
+  },
+  "errors": {
+    "terminal-offline": "La machine est hors ligne. Commande non envoyée.",
+    "command-busy": "Une commande est déjà en cours sur cette machine.",
+    "rate": "Commandes trop rapprochées. Patientez un instant.",
+    "invalid": "Commande invalide : une seule ligne ASCII de 256 caractères au maximum.",
+    "command-unconfirmed": "Résultat inconnu. Vérifiez la machine avant de renvoyer.",
+    "network": "Connexion perdue : résultat inconnu.",
+    "missing": "Console indisponible pour cette machine.",
+    "forbidden": "Réservé aux administrateurs.",
+    "sign-in": "Session expirée.",
+    "failed": "La requête a échoué."
+  }
+}

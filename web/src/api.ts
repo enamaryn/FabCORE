@@ -46,6 +46,10 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
     return payload;
   }
   return {
+    /** Une ligne de G-code ; résultat inconnu jamais renvoyé automatiquement (attente côté machine jusqu'à 60 s). */
+    async gcode(id: string, command: string, confirm = false, signal?: AbortSignal): Promise<{ outcome: 'executed' | 'accepted' | 'rejected'; responses?: string[] | null; message?: string }> {
+      return await request('machines/' + encodeURIComponent(id) + '/gcode', { command, ...(confirm ? { confirm: true } : {}) }, signal, 70000) as { outcome: 'executed' | 'accepted' | 'rejected'; responses?: string[] | null; message?: string };
+    },
     async tramming(id: string, signal?: AbortSignal): Promise<TrammingGeometry> { return await request('machines/' + encodeURIComponent(id) + '/tramming', undefined, signal, 15000) as TrammingGeometry; },
     /** Un point de palpage (origine éventuelle comprise) : jusqu'à 3 minutes, jamais renvoyé automatiquement. */
     async trammingPoint(id: string, point: number, signal?: AbortSignal): Promise<{ measure: TrammingMeasure; result?: TrammingResult | null }> { return await request('machines/' + encodeURIComponent(id) + '/tramming', { point, confirm: true }, signal, 200000) as { measure: TrammingMeasure; result?: TrammingResult | null }; },

@@ -1,0 +1,8 @@
+.console-log{min-height:14rem;max-height:min(60vh,36rem);overflow:auto;display:grid;gap:.6rem;align-content:start;padding:.8rem;border:1px solid var(--line);border-radius:10px;background:#0c0e0f;color:#e8eaec;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+.console-entry{display:grid;gap:.2rem;padding-bottom:.5rem;border-bottom:1px solid #ffffff12}
+.console-entry small{color:#9aa0a4}.console-command{color:#7ee2a8;font-weight:700}
+.console-entry pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
+.console-entry[data-outcome=rejected] .console-message,.console-entry[data-outcome=failed] .console-message{color:#ff8a80}.console-entry[data-outcome=unconfirmed] .console-message{color:#ffcc66}
+.console-message{margin:0}
+.console-form input{flex:1 1 14rem;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.console-quick{align-items:center;gap:6px}.console-quick button{min-height:32px;padding:4px 10px;font-family:ui-monospace,monospace;font-size:12px}

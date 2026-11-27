@@ -149,6 +149,8 @@ export function createMoonrakerServices({ encodePath, filePath, validOrigin: moo
   }
 
   // Terminal : Moonraker répond une fois le script exécuté par Klipper. Les réponses sont relues dans gcode_store.
+  /** Réponses du terminal : 100 messages, 8 000 caractères chacun, 64 000 au total. */
+  const terminalLimits = { responses: 100, length: 8000, total: 64000 };
   async function sendMoonrakerGcode(machine: MoonrakerConnection, script: string, fetcher: MoonrakerFetch = fetch): Promise<MoonrakerGcodeResult> {
     if (moonrakerOrigin(machine.origin) !== machine.origin) return { outcome: 'rejected', message: '' };
     const headers = machine.apiKey ? { 'X-Api-Key': machine.apiKey } : {};
@@ -171,7 +173,7 @@ export function createMoonrakerServices({ encodePath, filePath, validOrigin: moo
     if ((await decode<unknown>(response))?.result !== 'ok') throw new Error('Moonraker gcode outcome unknown');
     let responses: string[] | null = null;
     try {
-      const store = await fetcher(machine.origin + '/server/gcode_store?count=50', {
+      const store = await fetcher(machine.origin + '/server/gcode_store?count=200', {
         method: 'GET', redirect: 'error', signal: AbortSignal.timeout(2500), headers
       });
       if (store.ok) {
@@ -182,7 +184,10 @@ export function createMoonrakerServices({ encodePath, filePath, validOrigin: moo
           if (sent !== -1) {
             responses = lines.slice(sent + 1)
               .filter((entry): entry is GcodeEntry & { message: string } => entry?.type === 'response' && typeof entry.message === 'string')
-              .slice(0, 30).map(entry => entry.message.slice(0, 500));
+              .slice(0, terminalLimits.responses).map(entry => entry.message.slice(0, terminalLimits.length));
+            // Plafond global : les réponses longues (HELP, listes de macros) restent lisibles sans réponse géante.
+            let total = 0;
+            responses = responses.filter(message => (total += message.length) <= terminalLimits.total);
           }
         }
       } else await store.body?.cancel();

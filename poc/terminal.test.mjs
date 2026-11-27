@@ -26,7 +26,7 @@ test('Moonraker exécute le script puis relit les réponses qui suivent la comma
   });
   assert.deepEqual(requests, [
     [klipper.origin + '/printer/gcode/script', 'POST', JSON.stringify({ script: 'M105' })],
-    [klipper.origin + '/server/gcode_store?count=50', 'GET', undefined]
+    [klipper.origin + '/server/gcode_store?count=200', 'GET', undefined]
   ]);
   assert.deepEqual(result, { outcome: 'executed', responses: ['ok T:21.3 /0.0 B:21.0 /0.0'] });
 });

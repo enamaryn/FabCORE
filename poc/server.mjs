@@ -254,7 +254,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
       ['cloud', 'diagnostics', 'notifications', 'observer', 'add'].includes(url.searchParams.get('screen'))));
     // One fleet/cockpit UI. Keep only unmigrated administration and console on the legacy shell.
     let destination = path === '/' ? '/app' : path === '/?auth=oidc-failed' ? '/app#oidc-failed' : null;
-    if (deepLink && machineLink && !['console', 'settings'].includes(url.searchParams.get('tab'))) {
+    if (deepLink && machineLink && url.searchParams.get('tab') !== 'settings') {
       destination = '/app#machine/' + url.searchParams.get('machine');
       if (url.searchParams.has('view')) destination += '/view/' + encodeURIComponent(url.searchParams.get('view')) + (url.searchParams.get('follow') === '1' ? '/follow' : '');
       else if (url.searchParams.has('tab')) destination += '/' + url.searchParams.get('tab');

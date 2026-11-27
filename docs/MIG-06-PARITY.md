@@ -95,3 +95,9 @@ Recette après fusion : liste native CC2/P2S, envoi puis relecture et téléchar
 - Réglages en lignes alignées (nom | état | commande) ; éclairage en interrupteur, vert quand allumé ; libellés de saisie portés par `aria-label`. Chauffes : mesure, consigne remontée et saisie sur la même ligne.
 - Caméra : clic sur l'image pour agrandir/réduire dans la page ; « Pleine page » occupe la fenêtre du navigateur (pas le plein écran système), Échap pour revenir. Un seul flux à la fois.
 - Correctif : la politique de sécurité autorise désormais les images `blob:` (`img-src 'self' blob:`), nécessaires à l'aperçu caméra React, qui échouait jusque-là.
+
+## Console G-code
+
+- `#machine/<id>/console` (administrateur, machines avec terminal) : une ligne par envoi, réponses affichées en entier en texte brut (Moonraker : 100 messages, 8 000 caractères chacun, 64 000 au total, au lieu de 30 × 500), historique ↑/↓, lectures rapides selon le connecteur, journal conservé pendant la session du navigateur.
+- Pendant une impression, le serveur exige une confirmation explicite pour toute commande autre qu'une lecture d'état ; un résultat inconnu n'est jamais renvoyé automatiquement.
+- L'ancien lien `/?machine=<id>&tab=console` redirige vers cet écran.
