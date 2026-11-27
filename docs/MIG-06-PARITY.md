@@ -95,3 +95,9 @@ Recette après fusion : liste native CC2/P2S, envoi puis relecture et téléchar
 - Réglages en lignes alignées (nom | état | commande) ; éclairage en interrupteur, vert quand allumé ; libellés de saisie portés par `aria-label`. Chauffes : mesure, consigne remontée et saisie sur la même ligne.
 - Caméra : clic sur l'image pour agrandir/réduire dans la page ; « Pleine page » occupe la fenêtre du navigateur (pas le plein écran système), Échap pour revenir. Un seul flux à la fois.
 - Correctif : la politique de sécurité autorise désormais les images `blob:` (`img-src 'self' blob:`), nécessaires à l'aperçu caméra React, qui échouait jusque-là.
+
+## Ajout, scan et paramètres de machine
+
+- `#machines/add` : scan d'un réseau local (appareils reconnus, déjà ajoutés signalés), formulaire prérempli ; ou saisie manuelle par type (catalogue `GET /api/connectors`, administrateur). Test de connexion sans enregistrement, appairage M2, enregistrement vérifié par le serveur, puis ouverture de la fiche.
+- `#machine/<id>/settings` : connexion modifiable (secrets jamais relus, vide = conservé), « Détecter à nouveau » sur le réseau de la machine (adresse, mode et ports repris, enregistrement explicite), suppression confirmée. Les machines Bambu Cloud renvoient vers les comptes cloud.
+- Anciens liens `/?screen=add` et `/?machine=<id>&tab=settings` redirigés vers ces écrans. Restent dans l'interface conservée : comptes cloud et console.

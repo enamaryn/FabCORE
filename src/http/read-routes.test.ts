@@ -20,7 +20,7 @@ function build(overrides: Partial<RouteDependencies> = {}) {
     accounts: { installed: () => true, setup: async () => { throw new Error('unused'); }, login: async () => { throw new Error('unused'); }, logout: () => ({ body: { authenticated: false as const }, cookie: '' }), addObserver: async () => ({ username: 'x' }) },
     session: { installed: () => true, oidcEnabled: () => false, viewer },
     diagnostics: { view: () => ({}), fleet: () => [] },
-    machines: { write: async () => null, spool: () => ({ manualSpool: null }), networks: () => ({ networks: [] }), discover: async () => null },
+    machines: { write: async () => null, spool: () => ({ manualSpool: null }), networks: () => ({ networks: [] }), catalog: () => ({ connectors: [] }), discover: async () => null },
     fleet: { list: async current => { sessions.push(current.session); return [{ id, name: 'P2S', kind: 'bambu', status: 'printing', cameraOpen: false, nozzle: null, filaments: [{ slots: [] }] }]; } },
     notifications: { view: () => ({ ntfy: { mode: 'external', url: 'https://ntfy.example.test', topic: 'fabcore' }, smtp: { enabled: false }, internal: null }), save: () => { throw new Error('unused'); }, test: async () => ({ accepted: true as const }) },
     events: { stream: () => undefined },

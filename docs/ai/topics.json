@@ -896,5 +896,34 @@
       "web/test/tramming.test.mjs"
     ],
     "docs": []
+  },
+  {
+    "id": "machine-admin-react",
+    "title": "Ajout, scan, paramètres et suppression de machine (React)",
+    "files": [
+      "web/src/components/machines/AddMachinePage.tsx",
+      "web/src/components/machines/MachineSettings.tsx",
+      "web/src/components/machines/MachineForm.tsx",
+      "src/http/routes/machines.ts",
+      "poc/server.mjs"
+    ],
+    "symbols": [
+      "AddMachinePage",
+      "MachineSettings",
+      "MachineForm",
+      "initialDraft",
+      "payload",
+      "networkFor",
+      "machineRoutes"
+    ],
+    "tests": [
+      "web/test/machine-admin.test.mjs",
+      "poc/connector-catalog-http.test.mjs",
+      "poc/machine-writes.test.mjs",
+      "poc/react-pages.test.mjs"
+    ],
+    "docs": [
+      "docs/MIG-06-PARITY.md"
+    ]
   }
 ]
