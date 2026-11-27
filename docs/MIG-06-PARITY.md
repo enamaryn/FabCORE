@@ -96,6 +96,11 @@ Recette après fusion : liste native CC2/P2S, envoi puis relecture et téléchar
 - Caméra : clic sur l'image pour agrandir/réduire dans la page ; « Pleine page » occupe la fenêtre du navigateur (pas le plein écran système), Échap pour revenir. Un seul flux à la fois.
 - Correctif : la politique de sécurité autorise désormais les images `blob:` (`img-src 'self' blob:`), nécessaires à l'aperçu caméra React, qui échouait jusque-là.
 
+## Ajout, scan et paramètres de machine
+
+- `#machines/add` : scan d'un réseau local (appareils reconnus, déjà ajoutés signalés), formulaire prérempli ; ou saisie manuelle par type (catalogue `GET /api/connectors`, administrateur). Test de connexion sans enregistrement, appairage M2, enregistrement vérifié par le serveur, puis ouverture de la fiche.
+- `#machine/<id>/settings` : connexion modifiable (secrets jamais relus, vide = conservé), « Détecter à nouveau » sur le réseau de la machine (adresse, mode et ports repris, enregistrement explicite), suppression confirmée. Les machines Bambu Cloud renvoient vers les comptes cloud.
+- Anciens liens `/?screen=add` et `/?machine=<id>&tab=settings` redirigés vers ces écrans. Reste dans l'interface conservée : comptes cloud.
 ## Console G-code
 
 - `#machine/<id>/console` (administrateur, machines avec terminal) : une ligne par envoi, réponses affichées en entier en texte brut (Moonraker : 100 messages, 8 000 caractères chacun, 64 000 au total, au lieu de 30 × 500), historique ↑/↓, lectures rapides selon le connecteur, journal conservé pendant la session du navigateur.
