@@ -24,5 +24,6 @@ export function executionMetrics(work: ProductionWork, now = Date.now()) {
   const elapsedMinutes = execution?.outcome === 'active' && start !== null ? Math.max(0, (now - start) / 60000) : null;
   const plannedMinutes = execution?.plannedMinutes ?? null;
   return { actualMinutes, elapsedMinutes, deltaMinutes: actualMinutes !== null && plannedMinutes !== null ? actualMinutes - plannedMinutes : null,
+    scheduleOverrun: execution?.outcome === 'active' && !!execution.plannedStart && plannedMinutes !== null && now > Date.parse(execution.plannedStart) + plannedMinutes * 60000,
     overrun: elapsedMinutes !== null && plannedMinutes !== null && elapsedMinutes > plannedMinutes };
 }

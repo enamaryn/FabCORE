@@ -124,5 +124,6 @@
     "project-conflict": "Data changed. Your input is kept: return to the details and reopen the action to use the latest revision.",
     "storage-unavailable": "Saving failed. Refresh and check the state before retrying.",
     "internal": "Operation failed. Refresh and check the state before retrying."
-  }
+  },
+  "slotOverrun": "The planned slot has elapsed. Confirm the actual state before proposing a reschedule; an unknown start does not establish the actual duration."
 }

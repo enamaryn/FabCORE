@@ -9,7 +9,7 @@ test('Réel : l’association en cours ne déduit aucun début ni durée réelle
   const job = work(); const metrics = executionMetrics(job, Date.parse('2026-11-27T11:00:00Z'));
   assert.equal(executionPhase(job), 'running');
   assert.equal(executionPhase(work({ mode: 'manual', observation: 'unknown' })), 'running', 'une déclaration opérateur active n’exige pas une observation native');
-  assert.equal(metrics.actualMinutes, null); assert.equal(metrics.elapsedMinutes, null); assert.equal(metrics.deltaMinutes, null); assert.equal(metrics.overrun, false);
+  assert.equal(metrics.actualMinutes, null); assert.equal(metrics.elapsedMinutes, null); assert.equal(metrics.deltaMinutes, null); assert.equal(metrics.overrun, false); assert.equal(metrics.scheduleOverrun, true, 'le créneau dépassé reste signalé sans inventer la durée réelle');
 });
 test('Réel : une fin annoncée, une perte de liaison ou un autre fichier demandent confirmation sans succès automatique', () => {
   for (const observation of ['finish-reported', 'unknown', 'different-job'] as const) assert.equal(executionPhase(work({ observation })), 'confirm');

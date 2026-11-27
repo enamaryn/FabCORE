@@ -124,5 +124,6 @@
     "project-conflict": "Les données ont changé. Votre saisie est conservée : revenez à la fiche puis rouvrez l’action pour utiliser la dernière version.",
     "storage-unavailable": "Enregistrement impossible. Vérifiez l’état après actualisation avant de recommencer.",
     "internal": "Opération impossible. Actualisez et vérifiez l’état avant de réessayer."
-  }
+  },
+  "slotOverrun": "Le créneau prévu est dépassé. Confirmez l’état réel avant de proposer un recalage ; le début inconnu ne permet pas de calculer la durée réelle."
 }
