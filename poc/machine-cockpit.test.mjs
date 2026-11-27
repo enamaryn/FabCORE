@@ -7,8 +7,8 @@ const source = readFileSync(new URL('./live.js', import.meta.url), 'utf8');
 
 test('cockpit : onglets isolés et mémorisés par machine, console limitée aux capacités', () => {
   const machines = [{ id: 'one', kind: 'bambu', name: 'P2S', model: 'Bambu Lab', status: 'ready' }, { id: 'two', kind: 'klipper', name: 'Ender', model: 'Klipper', status: 'ready' }, { id: 'three', kind: 'prusalink', name: 'MK4', model: 'PrusaLink', status: 'ready' }];
-  let renders = 0;
-  const sandbox = { state: { machine: 'one', role: 'admin' }, machine: id => machines.find(m => m.id === id), machineConnectors: connectorCatalog,
+  let renders = 0; const destinations = [];
+  const sandbox = { location: { assign: value => destinations.push(value) }, state: { machine: 'one', role: 'admin' }, machine: id => machines.find(m => m.id === id), machineConnectors: connectorCatalog,
     t: fr => fr, esc: String, icon: () => '', badge: () => '', btn: (action, label) => `<button data-action="${action}">${label}</button>`,
     liveFabrication: () => '<section>Fabrication</section>', liveFilaments: () => '<section>Filaments</section>',
     manualControlsPanel: (_m, part) => `<section data-control-test="${part}"></section>`, liveTemperatures: () => '',
@@ -30,7 +30,13 @@ test('cockpit : onglets isolés et mémorisés par machine, console limitée aux
   sandbox.state.machine = 'two'; sandbox.select('console'); html = sandbox.render();
   assert.match(html, /data-terminal/); assert.doesNotMatch(html, /data-files|data-camera-panel/);
   assert.doesNotMatch(html, /id="machine-tab-console"[^>]*aria-disabled/, 'console active pour Klipper');
-  sandbox.state.machine = 'one'; assert.match(sandbox.render(), /data-files/, 'onglet conservé par machine');
+  assert.match(html, /id="machine-tab-config"/, 'configuration accessible depuis le cockpit historique Klipper');
+  sandbox.select('config'); assert.equal(destinations.at(-1), '/app#machine/two/config');
+  sandbox.state.role = 'observer'; assert.doesNotMatch(sandbox.render(), /id="machine-tab-config"/);
+  const count = destinations.length; sandbox.select('config'); assert.equal(destinations.length, count);
+  sandbox.state.role = 'admin'; sandbox.state.machine = 'one'; assert.doesNotMatch(sandbox.render(), /id="machine-tab-config"/);
+  sandbox.select('config'); assert.equal(destinations.length, count, 'aucun éditeur de configuration pour Bambu');
+  assert.match(sandbox.render(), /data-files/, 'onglet conservé par machine');
 });
 
 test('cockpit : quatre modules réels, seize bobines étroites, modules absents sans faux panneau', () => {
