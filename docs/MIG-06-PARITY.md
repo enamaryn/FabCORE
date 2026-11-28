@@ -100,9 +100,15 @@ Recette après fusion : liste native CC2/P2S, envoi puis relecture et téléchar
 
 - `#machines/add` : scan d'un réseau local (appareils reconnus, déjà ajoutés signalés), formulaire prérempli ; ou saisie manuelle par type (catalogue `GET /api/connectors`, administrateur). Test de connexion sans enregistrement, appairage M2, enregistrement vérifié par le serveur, puis ouverture de la fiche.
 - `#machine/<id>/settings` : connexion modifiable (secrets jamais relus, vide = conservé), « Détecter à nouveau » sur le réseau de la machine (adresse, mode et ports repris, enregistrement explicite), suppression confirmée. Les machines Bambu Cloud renvoient vers les comptes cloud.
-- Anciens liens `/?screen=add` et `/?machine=<id>&tab=settings` redirigés vers ces écrans. Reste dans l'interface conservée : comptes cloud.
+- Anciens liens `/?screen=add` et `/?machine=<id>&tab=settings` redirigés vers ces écrans.
 ## Console G-code
 
 - `#machine/<id>/console` (administrateur, machines avec terminal) : une ligne par envoi, réponses affichées en entier en texte brut (Moonraker : 100 messages, 8 000 caractères chacun, 64 000 au total, au lieu de 30 × 500), historique ↑/↓, lectures rapides selon le connecteur, journal conservé pendant la session du navigateur.
 - Pendant une impression, le serveur exige une confirmation explicite pour toute commande autre qu'une lecture d'état ; un résultat inconnu n'est jamais renvoyé automatiquement.
 - L'ancien lien `/?machine=<id>&tab=console` redirige vers cet écran.
+
+## Comptes cloud (MIG-06.2.3 lot B)
+
+- `#cloud` (menu Compte, administrateur) : certificats applicatifs Bambu (import des 3 PEM, URL de renouvellement, renouvellement immédiat, échéances), comptes constructeur (ajout, connexion mot de passe puis code, déconnexion, suppression confirmée), inventaire des machines (ajout automatique au parc, retrait confirmé), suivi cloud (températures, AMS, modules ; relecture locale toutes les 5 s, jamais de requête Bambu) et journal du compte (300 lignes, téléchargement).
+- Les secrets (mot de passe, code, URL de renouvellement) sont lus une fois dans le champ puis effacés ; jamais placés dans l'état React ni le stockage du navigateur.
+- L'ancien lien `/?screen=cloud` redirige vers cet écran. **Plus aucun parcours ne dépend de l'interface conservée (`poc/live.js`).**

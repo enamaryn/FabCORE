@@ -27,7 +27,7 @@ export function MachineSettings({ machine, api }: { machine: MachineData; api: A
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
   useEffect(() => { if (connector) setDraft(initialDraft(connector.kind, connector.form, machine)); }, [connector, machine.id]);
-  if (machine.kind === 'bambu-cloud') return <section className="panel stack"><h2>{t('settingsTitle')}</h2><p>{t('cloudSettings')}</p><div><a className="button" href="/?screen=cloud">{t('cloudAccounts')}</a></div></section>;
+  if (machine.kind === 'bambu-cloud') return <section className="panel stack"><h2>{t('settingsTitle')}</h2><p>{t('cloudSettings')}</p><div><a className="button" href="#cloud">{t('cloudAccounts')}</a></div></section>;
   if (!connector) return <section className="panel"><p role="status">{catalog.isError ? t('errors.network') : t('loading')}</p></section>;
 
   async function rediscover() {

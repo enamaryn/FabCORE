@@ -948,5 +948,28 @@
     "docs": [
       "docs/MIG-06-PARITY.md"
     ]
+  },
+  {
+    "id": "cloud-accounts-react",
+    "title": "Comptes cloud, certificats Bambu et journaux (React)",
+    "files": [
+      "web/src/components/cloud/CloudAccountsPage.tsx",
+      "src/http/routes/operations.ts",
+      "src/http/routes/logs.ts",
+      "poc/cloud-accounts.mjs"
+    ],
+    "symbols": [
+      "CloudAccountsPage",
+      "logLabel",
+      "createCloudAccounts"
+    ],
+    "tests": [
+      "web/test/cloud.test.mjs",
+      "poc/cloud-accounts.test.mjs",
+      "poc/react-pages.test.mjs"
+    ],
+    "docs": [
+      "docs/MIG-06-PARITY.md"
+    ]
   }
 ]
