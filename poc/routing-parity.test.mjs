@@ -47,8 +47,8 @@ test('routage : chaînes de requête, pages statiques, HEAD et routes inconnues'
   assert.match(page.headers['content-security-policy'], /default-src 'self'/);
   const oidc = await send('/?auth=oidc-failed'); assert.equal(oidc.status, 303); assert.equal(oidc.headers.location, '/app#oidc-failed');
   assert.deepEqual(result(await send('/?x=1')), [404, { error: 'missing' }]);
-  assert.equal((await send('/live.js')).status, 200);
-  assert.deepEqual(result(await send('/live.js?v=2')), [404, { error: 'missing' }]);
+  // Ancienne interface retirée : ses scripts ne sont plus servis.
+  for (const path of ['/live.js', '/shared.js', '/cloud.js', '/gcode.mjs']) assert.equal((await send(path)).status, 404, path);
   assert.equal((await send('/', { method: 'HEAD' })).status, 404);
   assert.deepEqual(result(await send('/api/session?x=1')), [404, { error: 'missing' }]);
   assert.deepEqual(result(await send('/api/machines?x=1', { cookie: admin })), [404, { error: 'missing' }]);

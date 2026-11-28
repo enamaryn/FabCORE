@@ -141,8 +141,7 @@ test('parcours HTTP : activation unique, session, registre, télémétrie et rec
   assert.equal(page.status, 303);
   assert.equal(page.headers.get('location'), '/app');
   assert.equal(await page.text(), '');
-  assert.equal((await call('/shared.js')).status, 200);
-  assert.equal((await call('/live.js')).status, 200);
+  assert.equal((await call('/live.js')).status, 404, 'ancienne interface retirée');
   assert.equal((await call('/api/session', { host: 'unexpected.test' })).status, 421);
   assert.deepEqual(await (await call('/api/session')).json(), { installed: false, authenticated: false, username: null });
   assert.equal((await call('/api/machines')).status, 401);

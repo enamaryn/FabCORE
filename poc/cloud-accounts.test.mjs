@@ -5,8 +5,6 @@ import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request as httpRequest } from 'node:http';
-import { readFileSync } from 'node:fs';
-import { runInNewContext } from 'node:vm';
 import { createCloudAccounts } from './cloud-accounts.mjs';
 import { openStore } from './store.mjs';
 import { createFabCore } from './server.mjs';
@@ -185,29 +183,6 @@ test('cloud HTTP : droits, origine, inventaire et téléchargement du journal pr
   assert.equal((await call('/api/cloud-accounts', { cookie: observer })).status, 403);
   assert.equal((await call(`/api/cloud-accounts/${id}/logs-download`, { cookie: observer })).status, 403);
   assert.equal((await call(`/api/cloud-accounts/${id}/login`, { cookie: observer, body: { password: 'x' } })).status, 403);
-});
-
-test('cloud UI : inventaire réel échappé, plusieurs comptes, marques planifiées et parcours Google explicite', () => {
-  const source = readFileSync(new URL('./cloud.js', import.meta.url), 'utf8');
-  const escape = value => String(value).replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
-  const sandbox = { setInterval() {}, state: { role: 'admin', machines: [], lang: 'fr' }, live: { phase: 'workshop', page: 'cloud' }, t: fr => fr,
-    esc: escape, title: (a, b, c) => a + b + c, btn: (action, label) => `<button data-action="${action}">${label}</button>`,
-    app: { addEventListener() {} }, dialog: { addEventListener() {}, showModal() {}, open: false } };
-  runInNewContext(source + '\nthis.renderCloud=cloudPage;this.ui=cloudUI;this.form=cloudAccountForm;', sandbox);
-  sandbox.ui.data = { providers: [{ id: 'bambu', name: 'Bambu', available: true }, { id: 'creality', name: 'Creality', available: false }],
-    accounts: [{ id: 'one', provider: 'bambu', name: '<script>bad</script>', email: 'x@example.com', region: 'global', status: 'connected', checkedAt: '2026-11-19', devices: [{ name: 'Printer', model: 'P2S', serial: 'SERIAL', status: 'IDLE' }] },
-      { id: 'two', provider: 'creality', name: 'Planned', devices: [], status: 'disconnected', region: 'global' }] };
-  sandbox.ui.data.accounts[0].telemetryEnabled = true;
-  sandbox.ui.data.accounts[0].telemetry = { status: 'connected', devices: [{ serial: 'SERIAL', stale: false, checkedAt: '2026-11-19',
-    heaters: [{ id: 'bed', current: 20, target: 0 }], modules: [{ model: '<script>bad</script>', serial: 'AMS_SERIAL', firmware: '1' }],
-    filaments: [{ id: 0, humidity: 28, slots: [{ id: 0, occupied: true, material: 'PETG', color: '#FFFFFF' }] }] }] };
-  const html = sandbox.renderCloud(); assert.doesNotMatch(html, /<script>/); assert.match(html, /Journal du compte/); assert.match(html, /20 °C/); assert.match(html, /PETG/); assert.match(html, /AMS_SERIAL/); assert.match(html, /Ajout automatique/);
-  sandbox.ui.data.accounts[0].devices[0].fleetId = 'fleet-device';
-  assert.match(sandbox.renderCloud(), /Supprimer de FabCore/);
-  assert.match(html, /non encore intégré/); assert.doesNotMatch(html, /cloud-login:two/);
-  sandbox.form(); assert.match(sandbox.dialog.innerHTML, /Adresse email cloud/); assert.doesNotMatch(sandbox.dialog.innerHTML, /Adresse email du compte constructeur/);
-  sandbox.form(sandbox.ui.data.accounts[0]); assert.match(sandbox.dialog.innerHTML, /Google/); assert.match(sandbox.dialog.innerHTML, /jamais celui de Google/);
-  assert.doesNotMatch(sandbox.dialog.innerHTML, /value=".*password/);
 });
 
 test('cloud : déconnexion FabCore pendant le login empêche la conservation tardive du jeton', async ctx => {
