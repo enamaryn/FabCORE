@@ -64,6 +64,10 @@ export function createApi(fetcher: typeof fetch = fetch, signedOut: () => void =
       const path = { add: 'machines', edit: 'machines/edit', test: 'machines/test', pair: 'machines/pair', delete: 'machines/delete' }[action];
       return await request(path, data, signal, action === 'pair' ? 90000 : 60000) as { id?: string; ok?: boolean; issue?: string | null; serial?: string };
     },
+    /** Une ligne de G-code ; résultat inconnu jamais renvoyé automatiquement (attente côté machine jusqu'à 60 s). */
+    async gcode(id: string, command: string, confirm = false, signal?: AbortSignal): Promise<{ outcome: 'executed' | 'accepted' | 'rejected'; responses?: string[] | null; message?: string }> {
+      return await request('machines/' + encodeURIComponent(id) + '/gcode', { command, ...(confirm ? { confirm: true } : {}) }, signal, 70000) as { outcome: 'executed' | 'accepted' | 'rejected'; responses?: string[] | null; message?: string };
+    },
     async cloudAccounts(signal?: AbortSignal): Promise<CloudOverview> { return await request('cloud-accounts', undefined, signal, 15000) as CloudOverview; },
     async cloudCertificates(signal?: AbortSignal): Promise<CloudCertificates> { return await request('cloud-certificates', undefined, signal, 15000) as CloudCertificates; },
     /** Import des PEM, URL de renouvellement ou renouvellement immédiat ; jamais de commande machine. */

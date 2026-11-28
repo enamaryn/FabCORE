@@ -1,0 +1,38 @@
+{
+  "title": "G-code console",
+  "target": "Target:",
+  "log": "Console log",
+  "empty": "No command sent since the session started.",
+  "command": "G-code command",
+  "send": "Send",
+  "sending": "Sending…",
+  "quick": "Quick read:",
+  "clear": "Clear log",
+  "help": "One command per send, replies shown in full. During a print, any command other than a status query asks for confirmation. An unknown outcome is never resent automatically. ↑/↓: history.",
+  "noReplies": "Machine replies unavailable.",
+  "invalid": "Invalid command: a single ASCII line of up to 256 characters.",
+  "needsConfirm": "Print in progress: confirmation required. Command not sent.",
+  "confirmText": "Send “{command}” during the print?",
+  "confirmSend": "Send anyway",
+  "cancel": "Cancel",
+  "outcomes": {
+    "pending": "sending…",
+    "executed": "executed by the machine",
+    "accepted": "accepted · execution and reply not visible here",
+    "rejected": "rejected",
+    "unconfirmed": "unknown outcome · check the machine before resending",
+    "failed": "not sent"
+  },
+  "errors": {
+    "terminal-offline": "The machine is offline. Command not sent.",
+    "command-busy": "A command is already running on this machine.",
+    "rate": "Commands too close together. Wait a moment.",
+    "invalid": "Invalid command: a single ASCII line of up to 256 characters.",
+    "command-unconfirmed": "Unknown outcome. Check the machine before resending.",
+    "network": "Connection lost: unknown outcome.",
+    "missing": "Console unavailable for this machine.",
+    "forbidden": "Administrators only.",
+    "sign-in": "Session expired.",
+    "failed": "The request failed."
+  }
+}

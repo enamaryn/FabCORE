@@ -927,6 +927,29 @@
     ]
   },
   {
+    "id": "console-react",
+    "title": "Console G-code React",
+    "files": [
+      "web/src/components/console/ConsolePanel.tsx",
+      "connectors/moonraker/src/index.ts",
+      "poc/server.mjs"
+    ],
+    "symbols": [
+      "ConsolePanel",
+      "quickCommands",
+      "sendMoonrakerGcode",
+      "handleTerminal"
+    ],
+    "tests": [
+      "web/test/console.test.mjs",
+      "connectors/moonraker/test/connector.test.ts",
+      "poc/terminal.test.mjs"
+    ],
+    "docs": [
+      "docs/MIG-06-PARITY.md"
+    ]
+  },
+  {
     "id": "cloud-accounts-react",
     "title": "Comptes cloud, certificats Bambu et journaux (React)",
     "files": [
