@@ -95,7 +95,15 @@ test('Moonraker typé : terminal exécuté, seules les réponses après le derni
     ] } }));
   });
   assert.equal(result.outcome, 'executed'); assert.equal(posts, 1);
-  if (result.outcome === 'executed') { assert.equal(result.responses?.length, 30); assert.equal(result.responses?.[0]?.length, 500); }
+  // 40 réponses de 600 caractères : toutes conservées en entier (HELP, listes de macros).
+  if (result.outcome === 'executed') { assert.equal(result.responses?.length, 40); assert.equal(result.responses?.[0]?.length, 600); }
+  const huge = await api.sendMoonrakerGcode(one, 'HELP', url => url.endsWith('/script') ? Promise.resolve(Response.json({ result: 'ok' })) : Promise.resolve(Response.json({ result: { gcode_store: [
+    { type: 'command', message: 'HELP' }, ...Array.from({ length: 150 }, () => ({ type: 'response', message: 'y'.repeat(9000) })),
+  ] } })));
+  if (huge.outcome === 'executed') {
+    assert.equal(huge.responses?.[0]?.length, 8000, 'message plafonné à 8 000 caractères');
+    assert.ok((huge.responses ?? []).reduce((total, message) => total + message.length, 0) <= 64000, 'total plafonné');
+  }
   const withoutStore = await api.sendMoonrakerGcode(one, 'M105', url => url.endsWith('/script') ? Promise.resolve(Response.json({ result: 'ok' })) : Promise.reject(new Error('lost read')));
   assert.deepEqual(withoutStore, { outcome: 'executed', responses: null });
 });
