@@ -9,7 +9,7 @@ export interface PageHandlers {
 /** Interface web et connexion OIDC, publiques ; chemin exact comme le POC. */
 export const pageRoutes = (handlers: PageHandlers): RouteModule => (app, guards) => {
   const none = async () => undefined;
-  for (const path of ['/', '/shared.js', '/live.js', '/cloud.js', '/gcode.mjs', '/favicon.svg', '/app', '/app/', '/app/assets/*']) {
+  for (const path of ['/', '/favicon.svg', '/app', '/app/', '/app/assets/*']) {
     app.get(path, { config: { query: path === '/' }, onRequest: guards.raw(handlers.asset), schema: { hide: true } }, none);
   }
   app.get('/api/oidc/start', {

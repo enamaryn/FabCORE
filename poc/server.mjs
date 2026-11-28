@@ -48,19 +48,9 @@ const sessionAge = 8 * 60 * 60 * 1000;
 const activationAge = 15 * 60 * 1000;
 const minute = 60_000;
 const fileLimit = 512 * 1024 * 1024;
-const shared = readFileSync(new URL('../design/prototype.html', import.meta.url), 'utf8');
-const sharedScript = shared.match(/<script>([\s\S]+)<\/script>/)[1];
-const liveHtml = shared
-  .replace('<html lang="fr">', '<html lang="fr" data-live>')
-  .replace('href="brand/favicon.svg"', 'href="/favicon.svg"')
-  .replace(/<script>[\s\S]+<\/script>/, '<script src="/shared.js"></script><script src="/cloud.js"></script><script src="/live.js"></script>');
 let reactAssets;
+// L'interface est servie par /app (React) ; seule l'icône reste à la racine.
 const assets = new Map([
-  ['/', ['text/html; charset=utf-8', liveHtml]],
-  ['/shared.js', ['text/javascript; charset=utf-8', sharedScript]],
-  ['/live.js', ['text/javascript; charset=utf-8', `const machineConnectors = ${JSON.stringify(connectorCatalog)};\n` + readFileSync(new URL('./live.js', import.meta.url), 'utf8')]],
-  ['/cloud.js', ['text/javascript; charset=utf-8', readFileSync(new URL('./cloud.js', import.meta.url), 'utf8')]],
-  ['/gcode.mjs', ['text/javascript; charset=utf-8', readFileSync(new URL('./gcode.mjs', import.meta.url), 'utf8')]],
   ['/favicon.svg', ['image/svg+xml', readFileSync(new URL('../design/brand/favicon.svg', import.meta.url))]]
 ]);
 
@@ -238,7 +228,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
         reactAssets = null;
         console.error(`FabCore · interface /app indisponible : ${failure?.code ?? ''} ${String(failure?.message ?? failure).split('\n')[0]}`.trim());
         res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': '60' });
-        return res.end('<!doctype html><meta charset="utf-8"><title>FabCore</title><p>La nouvelle interface n’a pas pu être préparée (voir <code>journalctl -u fabcore</code>). Lancer <code>npm run build:web</code> dans le dossier de FabCore puis réessayer. <a href="/">Interface actuelle</a></p>');
+        return res.end('<!doctype html><meta charset="utf-8"><title>FabCore</title><p>La nouvelle interface n’a pas pu être préparée (voir <code>journalctl -u fabcore</code>). Lancer <code>npm run build:web</code> dans le dossier de FabCore puis réessayer.</p>');
       }
       const asset = assets.get(path);
       if (!asset) return error(res, 404, 'missing');
@@ -252,7 +242,7 @@ export function createFabCore({ directory, store: storage = openStore(directory)
         ((keys.length === 2 || (keys.length === 3 && keys.includes('follow') && url.searchParams.get('follow') === '1')) && keys.includes('view') && Boolean(productionPath(url.searchParams.get('view')) || ray5Path(url.searchParams.get('view')))));
     const deepLink = url.pathname === '/' && (machineLink || (keys.length === 1 &&
       ['cloud', 'diagnostics', 'notifications', 'observer', 'add'].includes(url.searchParams.get('screen'))));
-    // One fleet/cockpit UI. Keep only unmigrated administration and console on the legacy shell.
+    // Interface unique /app : les anciens liens de l'interface historique y sont redirigés.
     let destination = path === '/' ? '/app' : path === '/?auth=oidc-failed' ? '/app#oidc-failed' : null;
     if (deepLink && machineLink) {
       destination = '/app#machine/' + url.searchParams.get('machine');
@@ -261,9 +251,8 @@ export function createFabCore({ directory, store: storage = openStore(directory)
     }
     if (deepLink && !machineLink) destination = { diagnostics: '/app#diagnostics', notifications: '/app#notifications', observer: '/app#access', add: '/app#machines/add', cloud: '/app#cloud' }[url.searchParams.get('screen')] ?? null;
     if (destination) { res.writeHead(303, { Location: destination }); return res.end(); }
-    const asset = deepLink ? '/' : path;
-    if (req.method === 'GET' && assets.has(asset)) {
-      const [type, body] = assets.get(asset);
+    if (req.method === 'GET' && assets.has(path)) {
+      const [type, body] = assets.get(path);
       res.writeHead(200, { 'Content-Type': type });
       return res.end(body);
     }

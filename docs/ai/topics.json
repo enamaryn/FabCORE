@@ -294,20 +294,19 @@
     "id": "cockpit",
     "title": "Fiche machine et parc",
     "files": [
-      "poc/live.js",
       "design/prototype.html",
       "poc/filaments.mjs",
-      "poc/manual-spool.mjs"
+      "poc/manual-spool.mjs",
+      "web/src/components/machine/MachineDetail.tsx",
+      "web/src/components/FleetPage.tsx"
     ],
     "symbols": [
-      "liveDetail",
-      "liveFleet",
-      "fleetFilamentDots",
-      "filesPanel"
+      "MachineDetail",
+      "FleetPage"
     ],
     "tests": [
-      "poc/machine-cockpit.test.mjs",
-      "poc/manual-spool.test.mjs"
+      "poc/manual-spool.test.mjs",
+      "web/test/cockpit.test.mjs"
     ],
     "docs": [
       "docs/PRODUCT.md"
@@ -319,7 +318,6 @@
     "files": [
       "poc/manual-controls.mjs",
       "poc/server.mjs",
-      "poc/live.js",
       "src/domain/control.ts",
       "web/src/components/controls/shared.tsx",
       "web/src/components/controls/HeaterControls.tsx",
@@ -328,8 +326,7 @@
     ],
     "symbols": [
       "createManualControls",
-      "validateControl",
-      "manualControlsPanel"
+      "validateControl"
     ],
     "tests": [
       "poc/manual-controls.test.mjs",
@@ -370,8 +367,7 @@
       "connectors/bambu/src/cloud-http.ts",
       "connectors/bambu/src/cloud-monitor.ts",
       "poc/cloud-accounts.mjs",
-      "poc/bambu-cloud-monitor.mjs",
-      "poc/cloud.js"
+      "poc/bambu-cloud-monitor.mjs"
     ],
     "symbols": [
       "createCloudAccounts",
@@ -395,7 +391,6 @@
       "poc/production-files.mjs",
       "poc/file-transfer.mjs",
       "poc/gcode.mjs",
-      "poc/live.js",
       "web/src/components/files/FilesPanel.tsx",
       "web/src/components/files/TransferDialog.tsx",
       "web/src/components/files/PrintFileDialog.tsx",
@@ -407,17 +402,13 @@
       "retainedFiles",
       "transferMachineFile",
       "createGcodeParser",
-      "filesPanel",
       "FilesPanel",
       "TransferDialog",
       "PrintFileDialog",
-      "filePage",
-      "runFileBatch"
+      "filePage"
     ],
     "tests": [
       "poc/file-transfer.test.mjs",
-      "poc/viewer.test.mjs",
-      "poc/transfer-ui.test.mjs",
       "web/test/files-data.test.ts",
       "web/test/files-api.test.ts",
       "web/test/files-components.test.mjs",
@@ -598,8 +589,7 @@
       "src/application/fleet-events.ts",
       "src/http/routes/events.ts",
       "src/domain/event.ts",
-      "poc/server.mjs",
-      "poc/live.js"
+      "poc/server.mjs"
     ],
     "symbols": [
       "createEventHub",

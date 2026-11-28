@@ -6,8 +6,6 @@ import { validateControl } from './manual-controls.mjs';
 import { detectRay5 } from './discovery.mjs';
 import { createRay5Files, ray5Path } from './longer-ray5-files.mjs';
 import { Readable } from 'node:stream';
-import { readFileSync } from 'node:fs';
-import { runInNewContext } from 'node:vm';
 const machine={id:'test-ray5',kind:'longer-ray5',origin:'tcp://192.168.1.60:8080',wsPort:8849};
 const turn=()=>new Promise(r=>setImmediate(r));
 class Socket extends EventEmitter {
@@ -101,13 +99,4 @@ test('Ray5 SD : inventaire /upload, lecture SD native, upload exact sans lanceme
  const html=createRay5Files({read:()=>({nativeState:'Idle'}),fetcher:async()=>new Response('<html>oops</html>')});
  await assert.rejects(()=>html.download(machine,'a.gc'),/files-unavailable/);
  const busy=createRay5Files({read:()=>({nativeState:'Run'}),fetcher:assert.fail});await assert.rejects(()=>busy.list(machine),/files-unavailable/);
-});
-test('Ray5 interface : XY sans Z, impulsion bornée, observateur sans actions et transferts laser isolés',()=>{
- const source=readFileSync(new URL('./live.js',import.meta.url),'utf8');
- const sandbox={state:{role:'admin',lang:'fr',machines:[{id:'laser',kind:'longer-ray5'},{id:'fdm',kind:'klipper'},{id:'laser2',kind:'longer-ray5'}]},manualState:()=>({data:{laser:{writable:true,nativeState:'Idle',mode:true,max:1000},motion:{home:false}}}),t:fr=>fr,esc:String,btn:(action,label)=>`<button data-action="${action}">${label}</button>`,unavailableContent:m=>m,unavailablePanel:(t,m)=>m,machineConnectors:{'longer-ray5':{files:true,fileFamily:'laser'},klipper:{files:true,fileFamily:'fdm'}}};
- runInNewContext(source.slice(source.indexOf('function ray5ControlsPanel('),source.indexOf('function manualControlsPanel('))+source.slice(source.indexOf('function fileTransferCandidates('),source.indexOf('// Sequential copies'))+';this.panel=ray5ControlsPanel;this.candidates=fileTransferCandidates;',sandbox);
- const motion=sandbox.panel({id:'laser'},'motion');assert.match(motion,/manual-jog:X/);assert.doesNotMatch(motion,/manual-jog:Z|ray5-control:home/);
- assert.match(sandbox.panel({id:'laser'},'quick'),/data-ray5-pulse/);
- sandbox.state.role='viewer';assert.doesNotMatch(sandbox.panel({id:'laser'},'quick'),/ray5-control:|data-ray5-pulse/);
- assert.deepEqual(Array.from(sandbox.candidates('laser','a.gc'),m=>m.id),['laser2']);
 });
